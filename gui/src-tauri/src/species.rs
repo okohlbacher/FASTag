@@ -43,7 +43,9 @@ fn read_taxdb_info(path: &str) -> Option<TaxdbInfo> {
 pub(crate) fn taxonomy_dirs(app: &AppHandle) -> Vec<PathBuf> {
     let r = crate::fastag::resolve_binary(app);
     let mut dirs: Vec<PathBuf> = Vec::new();
-    if let Some(t) = crate::fastag::taxonomy_dir(&r) {
+    // The folder a run's child gets (data.rs, the fetched index of a debug
+    // build included), so the panel describes the index the run loads.
+    if let Some(t) = crate::data::taxonomy_dir_for_child(&r) {
         dirs.push(t);
     }
     if let Some(bin_dir) = r.bin.parent() {
@@ -141,9 +143,9 @@ fn taxonomy_status_of(explicit: Option<&str>, env: Option<&str>, bin: &Path) -> 
 #[tauri::command]
 pub fn taxonomy_status(app: AppHandle, explicit: Option<String>) -> TaxonomyStatus {
     let r = crate::fastag::resolve_binary(&app);
-    // The GUI passes its taxonomy folder (fastag::taxonomy_dir) to the CLI as
+    // The GUI passes its taxonomy folder (data.rs taxonomy_dir_for_child) to the CLI as
     // FASTAG_TAXONOMY_DIR, so that is the folder the CLI sees first.
-    let env = crate::fastag::taxonomy_dir(&r).map(|p| p.display().to_string());
+    let env = crate::data::taxonomy_dir_for_child(&r).map(|p| p.display().to_string());
     taxonomy_status_of(explicit.as_deref(), env.as_deref(), &r.bin)
 }
 

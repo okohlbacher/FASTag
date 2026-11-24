@@ -1,6 +1,7 @@
 // The Mass gaps & recon tab (GUI-DESIGN S7): the mass-gap chart with the
 // Unimod deltas marked, and one shared table for -recon_out (placements),
-// -delta_out (gap peaks) and -recon_id_out (the placements as PSMs, mzTab).
+// -delta_out (gap peaks) and -recon_id_out (the placements as PSMs, mzTab;
+// an idXML or mzid one is listed as a file to reveal or open).
 // A warning when too few spectra are placed for any conclusion, and an empty
 // state that offers the FASTA and the run. It reports what the CLI wrote and
 // adds no judgement of its own: every gap is a candidate.
@@ -13,12 +14,13 @@ import { HelpLink } from '../help/HelpLink'
 import { IconWarning } from '../icons'
 import DataTable, { type Column } from './DataTable'
 import MassGapChart, { type GapBin } from './MassGapChart'
-import { filterRecon, type DeltaTable, type ReconFilter, type ReconIdTable, type ReconTable, type TableGen, type TablePaths } from './tables'
+import { filterRecon, idFormat, type DeltaTable, type ReconFilter, type ReconIdTable, type ReconTable, type TableGen, type TablePaths } from './tables'
 import { useTable } from './useTable'
 import { useSticky } from './tableStore'
 import { FASTA_EXTENSION, SHIFT_MIN_DA, type TileAction } from './overview'
 import { longestSeed, shortestSeed } from '../paramLayout'
 import ReportHeader from './ReportHeader'
+import ProductFiles, { type ProductFile } from './ProductFiles'
 import './viewers.css'
 
 /// Below this many placed spectra the gap distribution supports no
@@ -170,8 +172,33 @@ const signed = (v: number, d = 4): string => (Number.isNaN(v) ? '' : v > 0 ? `+$
 export default function ReconView({ massgap, tables, gen = {}, notice, action, extend, onOpen }: ReconViewProps): JSX.Element {
   const recon = useTable(tables.recon, 'recon', gen.recon)
   const delta = useTable(tables.delta, 'delta', gen.delta)
-  const ids = useTable(tables.reconIds, 'reconIds', gen.reconIds)
-  const errors = [recon.error, delta.error, ids.error].filter((e): e is string => !!e)
+  // Only an mzTab -recon_id_out is read here. An idXML or mzid one (the
+  // user's choice, an older preset, a dropped file) is listed as a file, as
+  // is a .mzTab that holds XML: never a red error for a file written on purpose.
+  const idPath = tables.reconIds
+  const idFmt = idPath ? idFormat(idPath) : null
+  const ids = useTable(idFmt === 'mzTab' ? idPath : undefined, 'reconIds', gen.reconIds)
+  // An mzTab that cannot be shown (over the viewer's size limit, or a read
+  // that failed) keeps its Open and Reveal: it is a valid export all the same.
+  const idFiles: ProductFile[] =
+    idPath && (idFmt !== 'mzTab' || ids.notShown || ids.tooLarge || !!ids.error)
+      ? [
+          {
+            label: 'placements as identifications',
+            path: idPath,
+            note:
+              idFmt !== 'mzTab'
+                ? `${idFmt}, for identification tools. Only the mzTab form is shown here.`
+                : ids.notShown
+                  ? 'Not an mzTab file: open it in an identification tool.'
+                  : ids.tooLarge
+                    ? 'mzTab larger than the 128 MB viewer limit: open it in an identification tool or a spreadsheet.'
+                    : 'This mzTab could not be read here: open it in an identification tool or a spreadsheet.'
+          }
+        ]
+      : []
+  // The size limit is the file row's note, not a second error in red.
+  const errors = [recon.error, delta.error, ids.tooLarge ? null : ids.error].filter((e): e is string => !!e)
   const loading = recon.loading || delta.loading || ids.loading
 
   // The bins: -delta_out (with its interpretations), else the hist rows of
@@ -222,7 +249,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
   const sources = [...new Set(files)]
   return (
     <div className="recon-view">
-      <ReportHeader id="recon-title" title="Mass shifts" paths={sources} help={{ to: 'workflow-reconciliation', label: 'How to read these reports' }} />
+      <ReportHeader id="recon-title" title="Mass shifts" paths={sources} />
       {notice && (
         <p className="caveat" role="status">
           {notice}
@@ -233,6 +260,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
           {e}
         </p>
       ))}
+      <ProductFiles files={idFiles} label="Identification files" />
       {[recon.table, delta.table, ids.table].flatMap((t) => t?.warnings ?? []).map((w) => (
         <div className="caveat" key={w}>
           {w}
@@ -357,7 +385,7 @@ function PlacementTable({ t }: { t: ReconTable }): JSX.Element {
   const key = JSON.stringify(f)
   const rows = useMemo(() => filterRecon(t, JSON.parse(key) as ReconFilter), [t, key])
   const cols: Column[] = [
-    { id: 'spectrum', label: 'Spectrum', mono: true, text: (i) => t.spectra[t.spectrum[i]] },
+    { id: 'spectrum', label: 'Spectrum', mono: true, text: (i) => t.spectra[t.spectrum[i]], spectrum: (i) => t.spectra[t.spectrum[i]] },
     { id: 'tag', label: 'Tag', mono: true, text: (i) => t.tag[i] },
     { id: 'protein', label: 'Protein', text: (i) => t.protein[i] },
     { id: 'peptide', label: 'Peptide', mono: true, text: (i) => t.peptide[i] },
@@ -494,7 +522,7 @@ function IdTable({ t }: { t: ReconIdTable }): JSX.Element {
     return out.slice(0, k)
   }, [t, text])
   const cols: Column[] = [
-    { id: 'spectrum', label: 'Spectrum', mono: true, text: (i) => t.spectrum[i] },
+    { id: 'spectrum', label: 'Spectrum', mono: true, text: (i) => t.spectrum[i], spectrum: (i) => t.spectrum[i] },
     { id: 'sequence', label: 'Peptide', mono: true, text: (i) => t.sequence[i] },
     { id: 'accession', label: 'Protein', text: (i) => t.accession[i] },
     { id: 'score', label: 'E-value', num: true, text: (i) => (Number.isNaN(t.score[i]) ? '' : t.score[i].toExponential(2)), key: (i) => t.score[i] },

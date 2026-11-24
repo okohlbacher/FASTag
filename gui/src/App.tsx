@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import type { BinaryInfo } from './types'
-import { inertDependency } from './paramLayout'
+import { inertDependency, type Conflict } from './paramLayout'
 import HelpView from './help/HelpView'
 import { closeHelp, openHelp, useHelp } from './help/link'
 import ParamSearch from './setup/ParamSearch'
@@ -10,7 +10,9 @@ import { useKeys } from './shell/useKeys'
 import { useSession } from './setup/useSession'
 import SetupForm, { ownerOf } from './setup/SetupForm'
 import { useRun } from './run/useRun'
-import RunBar from './run/RunBar'
+import RunBar, { NavBar, Preflight, type ActionNav } from './run/RunBar'
+import PageHeader from './shell/PageHeader'
+import EmptyState from './shell/EmptyState'
 import LogDrawer from './run/LogDrawer'
 import BatchList from './run/BatchList'
 import SummaryTable from './run/SummaryTable'
@@ -33,7 +35,7 @@ import { useDrops } from './shell/useDrops'
 import { CloseQuestion, OverwriteQuestion } from './shell/Questions'
 import Notices, { type Toast } from './shell/Notices'
 import { useFinish } from './shell/useFinish'
-import { LANDING, taskById, type Origin, type TaskId } from './setup/tasks'
+import { LANDING, runValues, taskById, type Origin, type TaskId } from './setup/tasks'
 import PlanFooter from './setup/PlanFooter'
 import { INPUTS, aboutParams, inputParams, taskInputs, type Step } from './setup/inputs'
 import { usePathStatus } from './setup/usePathStatus'
@@ -44,8 +46,8 @@ import RunningPanel from './results/RunningPanel'
 import { buildOverview, type TileAction } from './results/overview'
 import { reconExtend, reconRerun } from './results/ReconView'
 import { useInspector } from './inspector/useInspector'
-import { AfterRunPanel, PreStartPanel } from './inspector/InspectorPanel'
-import { postRunChecks, type CheckFix } from './inspector/checks'
+import { AfterRunPanel, PreStartPanel, focusHeldCheck } from './inspector/InspectorPanel'
+import { NOT_CHECKED_NO_PROBE, postRunChecks, type CheckFix } from './inspector/checks'
 import { INSTRUMENTS, matchesInstrument, presetText, shownInstrument } from './setup/presets'
 
 // The tab a workflow's run lands on (doc/GUI-WORKFLOWS.md 3): its own view.
@@ -57,20 +59,39 @@ const notSpectraZip = (p: string): boolean => /\.zip$/i.test(p) && !/\.d\.zip$/i
 const FASTA_FORMATS = ['fasta', 'fa', 'faa']
 
 /// The input files step 2 shows that hold a path: the ones checked on disk.
+/// The Help page of each Results tab: the app bar's Help opens the page of
+/// the screen shown (doc/GUI-SETUP-WIZARD.md 1).
+const TAB_HELP: Record<Tab, string> = {
+  overview: 'workflow-overview',
+  results: 'results',
+  spectrum: 'results-spectrum',
+  qc: 'workflow-run-qc',
+  recon: 'workflow-reconciliation',
+  species: 'species-reading',
+  shortlist: 'workflow-db-reduction',
+  triage: 'workflow-triage',
+  digest: 'digest',
+  glyco: 'files-glyco'
+}
+
 function stepTwoPaths(task: import('./setup/tasks').Task | null, values: Record<string, ParamValue>): string[] {
   return [...inputParams(task, values)].map((n) => String(values[n] ?? '').trim()).filter(Boolean)
 }
-/// The step whose control a refusal names first, for @p task: the step
-/// whose body holds its field (all four are mounted), else, for a field not
-/// built (a closed group), 2 for an input or about field step 2 shows for
-/// the task (or a file not found) and 3 for the rest; null for a product.
-/// Never INPUTS.place alone: most tasks keep the databases under Advanced.
+/// The step whose control a refusal names first, for @p task: 2 for an input
+/// or about field step 2 shows for the task with @p values (or a file not
+/// found), else the step whose body holds its field (all four are mounted),
+/// else (a field not built: a closed group) 3; null for a product. Step 2's
+/// fields come first from @p values, not the page: this runs while the
+/// change renders, and the page still has the field where it was before (the
+/// Protein database under Advanced while the alkylation report is on, moving
+/// to Inputs as Tag placements turn on). Never INPUTS.place alone: most tasks
+/// keep the databases under Advanced.
 function stepOfParam(name: string, task: import('./setup/tasks').Task | null, values: Record<string, ParamValue>): Step | null {
   if (name === 'in_file') return 2
   if (name === 'in' || name === 'out') return null
+  if (inputParams(task, values).has(name) || aboutParams(task).includes(name)) return 2
   const at = Number(document.getElementById(`p-${name}`)?.closest<HTMLElement>('[data-step]')?.dataset.step ?? 0)
   if (at >= 2 && at <= 4) return at as Step
-  if (inputParams(task, values).has(name) || aboutParams(task).includes(name)) return 2
   return 3
 }
 
@@ -110,6 +131,8 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
   // Parameter search (Cmd+K, "/"): the dialog is open.
   const [searchOpen, setSearchOpen] = useState(false)
   const searchBtnRef = useRef<HTMLButtonElement>(null)
+  // The Results tab shown (ResultTabs), for Help's page.
+  const shownTabRef = useRef<Tab | null>(null)
   const logRef = useRef<HTMLPreElement>(null)
   const [viewStore] = useState(() => createViewStore())
   // Export jobs outlive the tags table (it unmounts on a tab switch).
@@ -124,7 +147,8 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
   taskRef.current = session.task
   const run = useRun(session, viewStore, {
     onStart: () => setView('results'),
-    landing: (wf) => (wf ? (LANDING_TAB[wf as TaskId] ?? null) : null),
+    // A Mass-shift survey without a database wrote the tags only: no Mass shifts tab to land on.
+    landing: (wf, params) => (wf === 'mass-shift' && params && !params['recon_out'] ? null : wf ? (LANDING_TAB[wf as TaskId] ?? null) : null),
     workflow: () => taskRef.current ?? null
   })
   const { running, batchRunning, busy, jobs } = run
@@ -144,7 +168,11 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
   const writeProtect = useMemo(() => (sdrfPath ? [sdrfPath] : []), [sdrfPath])
   // The checks before a run (GUI-DESIGN 3 S1, P2b): from the CLI's metadata
   // probe when it has one, and the form.
-  const inspector = useInspector({ input, values, binOk: !!bin?.ok })
+  // The values the run is sent (tasks.ts runValues, as useRun's toRun):
+  // Mass-shift survey's shift reports off without a database, so no check
+  // holds a run on a file it would not read (Codex finding 5).
+  const runForm = useMemo(() => runValues(taskById(session.task ?? ''), values), [session.task, values])
+  const inspector = useInspector({ input, values: runForm, binOk: !!bin?.ok })
   // Re-run with this fix (an instrument preset, its parameters) once the
   // form holds its values.
   const [rerunWith, setRerunWith] = useState<CheckFix | null>(null)
@@ -173,7 +201,7 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
   )
   const feedbackOpen = !!feedback.session || feedback.reportsOnly
   // F1, ?, Esc, the Cmd/Ctrl shortcuts and the native menus (shell/useKeys.ts).
-  useKeys(help.open, (a) => actRef.current(a), () => escRef.current())
+  useKeys(help.open, (a) => actRef.current(a), () => escRef.current(), () => topicRef.current())
 
   useEffect(() => {
     window.fastag.probe().then(setBin)
@@ -226,10 +254,11 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
     viewsRef.current?.querySelector<HTMLElement>(`.view[data-view="${view}"]`)?.focus()
   }, [view])
 
-  // The running state goes away when the run ends or is cancelled; focus
-  // that was on its Cancel or Show log would fall to the page body. After a
-  // finished run it moves to the selected results tab (the Overview of a
-  // characterizing run), after a cancel or a failure to the Results view.
+  // The running state, and the pill's Cancel, go away when the run ends or
+  // is cancelled; focus that was on Cancel or Show log would fall to the
+  // page body. After a finished run it moves to the selected results tab
+  // (the Overview of a characterizing run), after a cancel or a failure to
+  // the Results view; on another view to that view.
   const lastRunRef = useRef(run.lastRun)
   lastRunRef.current = run.lastRun
   function runStateGone(): void {
@@ -237,7 +266,7 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
       const a = document.activeElement
       if (a && a !== document.body) return null
       const results = viewsRef.current?.querySelector<HTMLElement>('.view[data-view="results"]')
-      if (!results || results.hidden) return null
+      if (!results || results.hidden) return viewsRef.current?.querySelector<HTMLElement>('.view:not([hidden])') ?? null
       const lr = lastRunRef.current
       const tab = lr?.ok && !lr.cancelled ? results.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') : null
       return tab ?? results
@@ -327,9 +356,10 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
 
   // Esc outside a field: dismisses a shown notice (the drop note, then the
   // toast) first, so dismissing one never kills a run; else cancels a run
-  // when no question or dialog is open.
+  // when no question or dialog is open. The Feedback panel is not modal:
+  // Esc inside it is its own (FeedbackDialog), outside it is the app's.
   const escape = (): boolean => {
-    if (closeAsk || run.overwriteAsk || aboutOpen || searchOpen || feedbackOpen) return false
+    if (closeAsk || run.overwriteAsk || aboutOpen || searchOpen) return false
     if (dropNote) {
       dismissNote()
       return true
@@ -538,13 +568,36 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
     })
   }
 
+  // The Help page of the screen shown: Help in the app bar, Cmd/Ctrl+?, the
+  // menu, F1 and ? all open it. Results: the tab ResultTabs shows, not a
+  // stored one that is gone.
+  function helpTopic(): string {
+    if (view === 'results') return TAB_HELP[shownTabRef.current ?? tab] ?? 'results'
+    if (view === 'batch') return 'workflow-batch'
+    if (view === 'history') return 'workflow-history'
+    if (busy) return 'start'
+    const t = session.task ? taskById(session.task) : undefined
+    return session.step === 2 ? 'files-inputs' : session.step === 3 ? (t?.docs.to ?? 'start-presets') : session.step === 4 ? 'files-outputs' : 'start'
+  }
+  // Search settings in the app bar: from every view, it switches to Setup
+  // (Help gives way to it).
+  function searchSettings(): void {
+    if (busy) return
+    // Focus goes to the palette's input, and back to the Search button on
+    // Escape, not to Help's opener.
+    if (help.open) closeHelp({ restoreFocus: false })
+    setView('setup')
+    setSearchOpen(true)
+  }
+
   // Shortcuts and native menus run the same actions (setup/shortcuts.ts).
   const act = (a: Action): void => {
     const v = viewOfAction(a)
     // A question or About is open: shortcuts and native menu items reach
     // here past its inert background; only a view change goes through (Run
-    // would ask the overwrite question again over the pending one).
-    if (!v && (closeAsk || run.overwriteAsk || aboutOpen || feedbackOpen)) return
+    // would ask the overwrite question again over the pending one). The
+    // Feedback panel is not modal: the app behind it keeps its shortcuts.
+    if (!v && (closeAsk || run.overwriteAsk || aboutOpen)) return
     // The parameter search closes for any other action.
     if (searchOpen && a !== 'search-params') setSearchOpen(false)
     if (v) {
@@ -588,13 +641,11 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
         void run.reveal(false)
         break
       case 'help':
-        if (!help.open) openHelp()
+        if (!help.open) openHelp(helpTopic())
         break
       case 'search-params':
-        if (!busy && !help.open) {
-          setView('setup')
-          setSearchOpen(true)
-        }
+        // One path with the app bar's Search button.
+        searchSettings()
         break
       case 'faq':
         openHelp('troubleshooting')
@@ -614,6 +665,8 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
   }
   const actRef = useRef(act)
   actRef.current = act
+  const topicRef = useRef(helpTopic)
+  topicRef.current = helpTopic
 
   // A done batch job's results, in Results.
   function showBatchJob(j: (typeof jobs)[number]): void {
@@ -627,7 +680,9 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
   // The run bar and the log drawer sit with the queue while there is one.
   const runBarView: View = jobs.length > 0 ? 'batch' : 'setup'
   const runningJob = jobs.findIndex((j) => j.status === 'running')
-  const activeInput = runningJob >= 0 ? jobs[runningJob].input : running ? input : null
+  // The job in flight's own input (useRun), never the form's: a History
+  // Re-run of A while Setup holds B names A.
+  const activeInput = run.activeInput ?? (runningJob >= 0 ? jobs[runningJob].input : null)
   const batchAt = batchRunning && runningJob >= 0 ? { at: runningJob + 1, of: jobs.length } : null
   const drawer = (
     <LogDrawer
@@ -640,23 +695,20 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
       logRef={logRef}
     />
   )
-  const runBar = (
+  const runBarWith = (nav?: ActionNav): JSX.Element => (
     <RunBar
+      nav={nav}
       announce={run.announce}
       announceElsewhere
       running={running}
       busy={busy}
       batchRunning={batchRunning}
-      cancelling={run.cancelling}
       progress={run.progress}
       phase={run.phase}
       startedAt={run.startedAt}
       invalid={session.invalid}
       refused={refused}
-      goTo={(c) => {
-        const st = stepOfParam(c.params[0], session.task ? (taskById(session.task) ?? null) : null, values)
-        return st ? { label: st === 2 ? 'Go to Inputs' : 'Go to Settings', go: () => session.setStep(st) } : null
-      }}
+      goTo={goTo}
       fixes={session.fixes}
       onFix={session.applyFix}
       input={input}
@@ -669,12 +721,78 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
       canRun={canRun}
       inspectorHeld={inspector.held}
       inspectorChecking={inspector.checking}
+      inspectorBlocks={inspector.blocks.length}
+      step={session.step}
+      onReviewChecks={() => {
+        setView('setup')
+        session.setStep(2)
+        focusHeldCheck()
+      }}
       onRun={run.run}
       onRunBatch={(only) => run.runBatch(only)}
-      onCancel={run.cancelRun}
       plan={<PlanFooter session={session} run={run} />}
     />
   )
+  // The one Go to Inputs / Go to Settings of a refusal, for both bars.
+  function goTo(c: Conflict): { label: string; go(): void } | null {
+    const st = stepOfParam(c.params[0], session.task ? (taskById(session.task) ?? null) : null, values)
+    return st
+      ? {
+          label: st === 2 ? 'Go to Inputs' : 'Go to Settings',
+          go: () => {
+            // In Batch the run bar is there: Setup is shown first, then
+            // the step's heading takes focus (SetupForm).
+            setView('setup')
+            session.goStep(st)
+          }
+        }
+      : null
+  }
+  const runBar = runBarWith()
+  // Setup while the Batch view holds the queue: the bar still runs it, in
+  // the slot Run has elsewhere; filled on Outputs, the wizard's last step
+  // (doc/GUI-SETUP-WIZARD.md 2.3). After a failed batch with nothing left,
+  // Retry failed takes the slot.
+  const queueDisabled = batchRunning || running || !bin?.ok || !!blocked || notFound.length > 0
+  // Why the queue's Run is disabled, said beside it (as in the run bar).
+  const queueBlocked = !busy && (Object.keys(session.invalid).length > 0 || refused.length > 0)
+  const queuePreflight = queueBlocked ? (
+    <Preflight id="queue-preflight" invalid={session.invalid} refused={refused} fixes={session.fixes} onFix={session.applyFix} goTo={goTo} />
+  ) : null
+  const queueRun = (nav: ActionNav): JSX.Element | null => {
+    const cls = nav.next ? 'secondary' : 'primary'
+    if (run.remaining > 0)
+      return (
+        <button
+          type="button"
+          className={cls}
+          disabled={queueDisabled}
+          aria-describedby={queueBlocked ? 'queue-preflight' : undefined}
+          onClick={() => {
+            void run.runBatch()
+            setView('batch')
+          }}
+        >
+          Run {run.remaining} {run.remaining === 1 ? 'file' : 'files'}
+        </button>
+      )
+    if (run.failedJobs > 0)
+      return (
+        <button
+          type="button"
+          className={cls}
+          disabled={queueDisabled}
+          aria-describedby={queueBlocked ? 'queue-preflight' : undefined}
+          onClick={() => {
+            void run.runBatch('failed')
+            setView('batch')
+          }}
+        >
+          Retry failed
+        </button>
+      )
+    return null
+  }
 
   return (
     <div className="app">
@@ -710,7 +828,18 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
         />
       )}
       {feedbackOpen && (
-        <FeedbackDialog session={feedback.session} text={feedback.text} setText={feedback.setText} onSaved={feedback.saved} onClose={feedback.close} />
+        <FeedbackDialog
+          session={feedback.session}
+          text={feedback.text}
+          setText={feedback.setText}
+          onSaved={feedback.saved}
+          onClose={feedback.close}
+          onRetake={feedback.retake}
+          retaking={feedback.retaking}
+          raised={feedback.raised}
+          layouts={feedback.layouts}
+          setLayout={feedback.setLayout}
+        />
       )}
       <TopBar
         bin={bin}
@@ -725,20 +854,25 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
           batch: batchAt,
           phase: run.phase,
           progress: run.progress,
-          // The run bar, or the Results pane's running state, shows it.
+          // The run bar, or the Results pane's running state, shows the
+          // progress; Cancel is the pill's on every view.
           runBarShown: view === runBarView || (view === 'results' && running && jobs.length === 0),
           onShow: () => setView(jobs.length > 0 ? 'batch' : 'results'),
-          onCancel: run.cancelRun
+          onCancel: run.cancelRun,
+          onFocusLost: runStateGone
         }}
         theme={theme}
         onTheme={setTheme}
         helpOpen={help.open}
-        onHelp={() => (help.open ? closeHelp() : openHelp())}
+        onHelp={() => (help.open ? closeHelp() : openHelp(helpTopic()))}
         onFeedback={() => actRef.current('feedback')}
         feedbackBusy={feedback.capturing}
+        onSearch={searchSettings}
+        searchDisabled={busy}
+        searchRef={searchBtnRef}
       />
       {/* The run's live region: always in the page, whichever view is shown. */}
-      <p className="sr-only" role="status">
+      <p className="sr-only" role="status" id="run-status">
         {announce}
       </p>
       <p className="sr-only feedback-status" role="status">
@@ -763,8 +897,11 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
                 session={session}
                 run={run}
                 onPickInput={pickInput}
-                onSearch={() => setSearchOpen(true)}
-                searchBtnRef={searchBtnRef}
+                actionBar={(nav?: ActionNav) =>
+                  runBarView === 'setup' ? runBarWith(nav) : nav ? (
+                    <NavBar nav={nav} run={queueRun(nav)} preflight={queuePreflight} plan={busy ? null : <PlanFooter session={session} run={run} />} />
+                  ) : null
+                }
                 onOpenBatch={() => setView('batch')}
                 onAddFolder={() => void addFolder('setup')}
                 folderNote={folderNoteAt('setup')}
@@ -773,8 +910,8 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
                 sdrf={sdrf}
                 detectedInstrument={detectedPreset}
                 notFound={notFound}
-                onRunBatch={() => void run.runBatch()}
-                runBatchDisabled={batchRunning || running || !bin?.ok || blocked || notFound.length > 0}
+                notCheckedNote={inspector.pre.notChecked === NOT_CHECKED_NO_PROBE ? inspector.pre.notChecked : null}
+                legacyAuto={inspector.legacyAuto}
                 inspector={
                   <PreStartPanel
                     checks={inspector.pre.checks}
@@ -792,31 +929,15 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
                   />
                 }
               />
-              {runBarView === 'setup' && session.step !== 1 && runBar}
             </aside>
           </section>
 
           <section className="view view-results" data-view="results" hidden={view !== 'results'} tabIndex={-1} aria-label="Results">
-            {!running && jobs.length === 0 && (
-              <AfterRunPanel
-                checks={after.checks}
-                detected={after.detected}
-                input={afterInput}
-                onRerun={
-                  canRerun
-                    ? (fix) => {
-                        if (fix.params) session.setValues((v) => ({ ...v, ...fix.params }))
-                        if (fix.instrument) session.chooseInstrument(fix.instrument)
-                        setRerunWith(fix)
-                      }
-                    : null
-                }
-              />
-            )}
             <ExportJobsContext.Provider value={exportJobs}>
               <ResultTabs
                 tab={tab}
                 setTab={viewStore.setTab}
+                shownTab={shownTabRef}
                 species={run.species}
                 speciesRun={run.speciesRun}
                 speciesOn={session.speciesOn}
@@ -841,6 +962,7 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
                 spectrumSupport={spectrumSupport}
                 spectrumRun={spectrumRun}
                 workflow={shown?.workflow ?? null}
+                activeInput={activeInput}
                 rerunResConf={
                   // Only for the output of the run the form would repeat
                   // (shownRerunnable: the run on screen, sent what the form sends).
@@ -870,15 +992,30 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
                       })()
                     : null
                 }
+                afterRun={!running && jobs.length === 0 && (
+                <AfterRunPanel
+                  checks={after.checks}
+                  detected={after.detected}
+                  input={afterInput}
+                  onRerun={
+                    canRerun
+                      ? (fix) => {
+                          if (fix.params) session.setValues((v) => ({ ...v, ...fix.params }))
+                          if (fix.instrument) session.chooseInstrument(fix.instrument)
+                          setRerunWith(fix)
+                        }
+                      : null
+                  }
+                />
+              )}
                 runningState={
                   running && jobs.length === 0 ? (
                     <RunningPanel
-                      input={input}
+                      input={run.activeInput ?? input}
                       phase={run.phase}
                       progress={run.progress}
                       startedAt={run.startedAt}
                       cancelling={run.cancelling}
-                      onCancel={run.cancelRun}
                       onShowLog={() => openLog(null)}
                       onFocusLost={runStateGone}
                     />
@@ -891,91 +1028,114 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
           </section>
 
           <section className="view view-batch" data-view="batch" hidden={view !== 'batch'} tabIndex={-1} aria-label="Batch">
-            {jobs.length > 0 ? (
-              <div className="batchview">
-                <div className="batch-main">
-                  {run.failure && (
-                    <FailureBanner
-                      failure={run.failure}
-                      copied={run.copied}
-                      setFailure={run.setFailure}
-                      setCopied={run.setCopied}
-                      openLog={openLog}
-                      focusAfter={() => document.getElementById('batch-label')}
-                    />
+            <div className="page">
+              <div className="page-scroll">
+                <div className="page-col">
+                  <PageHeader
+                    title="Batch"
+                    context={
+                      jobs.length > 0
+                        ? `${jobs.length} ${jobs.length === 1 ? 'file' : 'files'}, each run in turn with the same settings`
+                        : 'Several spectra files, run in turn with the same settings.'
+                    }
+                  />
+                  {jobs.length > 0 ? (
+                    <div className="batchview page-body">
+                      {/* The queue first, so it stays above the fold; the
+                          failure banner (an alert, announced wherever it is)
+                          under it. */}
+                      <div className="batch-main">
+                        <BatchList
+                          jobs={jobs}
+                          busy={busy}
+                          results={run.results}
+                          logJob={logJob}
+                          logOpen={logOpen}
+                          onAdd={run.addBatchFiles}
+                          onAddFolder={() => void addFolder('batch')}
+                          outDir={run.outDir}
+                          onChooseOutDir={() => void run.chooseOutDir()}
+                          onClearOutDir={() => run.setOutDir(null)}
+                          onClear={() => run.removeJobs(jobs.map((j) => j.input))}
+                          onRemove={(i) => run.removeJobs([jobs[i].input])}
+                          onShow={showBatchJob}
+                          onLog={openLog}
+                          addBatchRef={emptyBatchRef}
+                          addRef={queueAddRef}
+                        />
+                        {folderNoteAt('batch')}
+                        {run.failure && (
+                          <FailureBanner
+                            failure={run.failure}
+                            copied={run.copied}
+                            setFailure={run.setFailure}
+                            setCopied={run.setCopied}
+                            openLog={openLog}
+                            focusAfter={() => document.getElementById('batch-label')}
+                          />
+                        )}
+                      </div>
+                      <div className="batch-side">
+                        <SummaryTable
+                          summary={run.summary}
+                          busy={busy}
+                          outDir={run.outDir}
+                          sdrf={sdrf.comparison}
+                          protect={writeProtect}
+                          onShow={(input) => {
+                            const j = jobs.find((x) => x.input === input)
+                            if (j) showBatchJob(j)
+                          }}
+                        />
+                        <SdrfPanel
+                          sdrf={sdrf}
+                          protect={writeProtect}
+                          busy={busy}
+                          outDir={run.outDir}
+                          onShow={(input) => {
+                            const j = jobs.find((x) => x.input === input)
+                            if (j) showBatchJob(j)
+                          }}
+                        />
+                        {drawer}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="page-body">
+                    <EmptyState
+                      className="batch-empty"
+                      title="No batch yet"
+                      actions={
+                        <>
+                          <button type="button" className="secondary" ref={emptyBatchRef} onClick={run.addBatchFiles} disabled={busy}>
+                            Add files for a batch…
+                          </button>
+                          <button type="button" className="secondary" onClick={() => void addFolder('batch')} disabled={busy}>
+                            Add folder…
+                          </button>
+                        </>
+                      }
+                    >
+                      Queue several spectra files to run them in turn with the same parameters.
+                    </EmptyState>
+                    </div>
                   )}
-                  <BatchList
-                    jobs={jobs}
-                    busy={busy}
-                    results={run.results}
-                    logJob={logJob}
-                    logOpen={logOpen}
-                    onAdd={run.addBatchFiles}
-                    onAddFolder={() => void addFolder('batch')}
-                    outDir={run.outDir}
-                    onChooseOutDir={() => void run.chooseOutDir()}
-                    onClearOutDir={() => run.setOutDir(null)}
-                    onClear={() => run.removeJobs(jobs.map((j) => j.input))}
-                    onRemove={(i) => run.removeJobs([jobs[i].input])}
-                    onShow={showBatchJob}
-                    onLog={openLog}
-                    addBatchRef={emptyBatchRef}
-                    addRef={queueAddRef}
-                  />
-                  {folderNoteAt('batch')}
-                  {runBar}
-                </div>
-                <div className="batch-side">
-                  <SummaryTable
-                    summary={run.summary}
-                    busy={busy}
-                    outDir={run.outDir}
-                    sdrf={sdrf.comparison}
-                    protect={writeProtect}
-                    onShow={(input) => {
-                      const j = jobs.find((x) => x.input === input)
-                      if (j) showBatchJob(j)
-                    }}
-                  />
-                  <SdrfPanel
-                    sdrf={sdrf}
-                    protect={writeProtect}
-                    busy={busy}
-                    outDir={run.outDir}
-                    onShow={(input) => {
-                      const j = jobs.find((x) => x.input === input)
-                      if (j) showBatchJob(j)
-                    }}
-                  />
-                  {drawer}
+                  {jobs.length === 0 && folderNoteAt('batch')}
+                  {/* An SDRF dropped before any file: kept for the batch. */}
+                  {jobs.length === 0 && sdrf.file && (
+                    <p className="hint" role="status">
+                      SDRF {sdrf.file.path} loaded ({sdrf.file.rows} rows): add the batch's files to compare them with it.
+                    </p>
+                  )}
+                  {jobs.length === 0 && sdrf.error && (
+                    <p className="hint note-flag" role="alert">
+                      {sdrf.error}
+                    </p>
+                  )}
                 </div>
               </div>
-            ) : (
-              <div className="empty batch-empty">
-                <h2>No batch yet</h2>
-                <p className="muted">Queue several spectra files to run them in turn with the same parameters.</p>
-                <div className="actions">
-                  <button type="button" className="secondary" ref={emptyBatchRef} onClick={run.addBatchFiles} disabled={busy}>
-                    Add files for a batch…
-                  </button>
-                  <button type="button" className="secondary" onClick={() => void addFolder('batch')} disabled={busy}>
-                    Add folder…
-                  </button>
-                </div>
-                {folderNoteAt('batch')}
-                {/* An SDRF dropped before any file: kept for the batch. */}
-                {sdrf.file && (
-                  <p className="hint" role="status">
-                    SDRF {sdrf.file.path} loaded ({sdrf.file.rows} rows): add the batch's files to compare them with it.
-                  </p>
-                )}
-                {sdrf.error && (
-                  <p className="hint note-flag" role="alert">
-                    {sdrf.error}
-                  </p>
-                )}
-              </div>
-            )}
+              {jobs.length > 0 && runBar}
+            </div>
           </section>
 
           <section className="view view-history" data-view="history" hidden={view !== 'history'} tabIndex={-1} aria-label="History">

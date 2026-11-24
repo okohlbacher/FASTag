@@ -463,7 +463,15 @@ jobs:
 
       - name: Test
         shell: bash
+        env:
+          FASTAG_PYTHON: ${{ steps.validator-python.outputs.python-path }}
         run: |
+          # An explicit `shell: bash` runs as bash -eo pipefail: a failing ctest
+          # fails the step through the tee below.
+          set -o pipefail
+          # The setup-python interpreter, so gui_cli_test and shipped_data_test
+          # (which skip without a Python 3) run: python3 may be missing here.
+          FASTAG_PYTHON="${FASTAG_PYTHON//\\//}"; export FASTAG_PYTHON
           # OpenMS resolves share/OpenMS (ResidueDB, ModificationsDB, unimod)
           # via OPENMS_DATA_PATH, then a compiled-in path, then exe-relative.
           # A unit-test binary in the build tree is not FASTag.exe and must not
@@ -481,7 +489,9 @@ jobs:
           # decoder's spectrum-by-spectrum check against OpenMS, and for
           # mimalloc_redirect_test.
           # bruker_cli_test and thermo_cli_test: the vendor readers (1.15.2).
-          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test indexed_mzml_test mimalloc_redirect_test bruker_cli_test thermo_cli_test; do
+          # gui_cli_test and shipped_data_test: the shipped data in every
+          # layout and the build tree's copy staging (they skip without Python).
+          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test indexed_mzml_test mimalloc_redirect_test bruker_cli_test thermo_cli_test gui_cli_test shipped_data_test; do
             grep -E "Test +#[0-9]+: $t " ctest.log | grep -q 'Passed' \
               || { echo "::error::$t did not pass (skipped, not run or missing)"; grep -E "$t" ctest.log || true; exit 1; }
           done
@@ -943,16 +953,23 @@ jobs:
             || { cat "$BW/digest.log"; echo "::error::the shipped bundle cannot write -digest_out"; exit 1; }
           grep -q $'^run\tbackground\tshipped_human\t' "$BW/digest.tsv" \
             || { cat "$BW/digest.log"; echo "::error::-digest_out did not find the shipped digest data"; exit 1; }
-          # ...and its shipped proteomes (1.13 #24): -alkylation_out with the
-          # default -alkylation_proteome auto resolves the shipped human
-          # proteome; at the default -tag_length nothing places (tags_too_short).
+          # ...and its shipped proteomes (1.13 #24). The default auto needs no
+          # proteome (feedback 202dbcf4): the call is read off the tags.
           PATH="$CLEAN_PATH" "$GITHUB_WORKSPACE/dist/FASTag/FASTag.bat" \
             -in "$MZ" -out "$BW/al.tsv" -alkylation_out "$BW/alk.tsv" -threads 2 > "$BW/alk.log" 2>&1 \
-            || { cat "$BW/alk.log"; echo "::error::the shipped bundle cannot write -alkylation_out with the shipped proteome"; exit 1; }
-          tr -d '\r' < "$BW/alk.tsv" | grep -q $'^alk_run\tdatabase_source\tbundled:human\t' \
-            && tr -d '\r' < "$BW/alk.tsv" | grep -q $'^alk_run\tdatabase_release\tUniProt ' \
-            && tr -d '\r' < "$BW/alk.tsv" | grep -q $'^alkylation_call\treason\ttags_too_short\t' \
-            || { cat "$BW/alk.log"; echo "::error::-alkylation_out did not find the shipped human proteome"; exit 1; }
+            || { cat "$BW/alk.log"; echo "::error::the shipped bundle cannot write -alkylation_out without a database"; exit 1; }
+          tr -d '\r' < "$BW/alk.tsv" | grep -q $'^alk_run\tdatabase_source\tnone\t' \
+            && tr -d '\r' < "$BW/alk.tsv" | grep -q $'^alkylation_call\tsource\ttags\t' \
+            || { cat "$BW/alk.log"; echo "::error::-alkylation_out at auto is not a tag-only report"; exit 1; }
+          # -alkylation_proteome human resolves the shipped human proteome; at
+          # the default -tag_length nothing places (tags_too_short).
+          PATH="$CLEAN_PATH" "$GITHUB_WORKSPACE/dist/FASTag/FASTag.bat" \
+            -in "$MZ" -out "$BW/alh.tsv" -alkylation_out "$BW/alkh.tsv" -alkylation_proteome human -threads 2 > "$BW/alkh.log" 2>&1 \
+            || { cat "$BW/alkh.log"; echo "::error::the shipped bundle cannot write -alkylation_out with the shipped proteome"; exit 1; }
+          tr -d '\r' < "$BW/alkh.tsv" | grep -q $'^alk_run\tdatabase_source\tbundled:human\t' \
+            && tr -d '\r' < "$BW/alkh.tsv" | grep -q $'^alk_run\tdatabase_release\tUniProt ' \
+            && tr -d '\r' < "$BW/alkh.tsv" | grep -q $'^alkylation_placement_call\treason\ttags_too_short\t' \
+            || { cat "$BW/alkh.log"; echo "::error::-alkylation_out did not find the shipped human proteome"; exit 1; }
           # Placement on a shipped file: E. coli data on the shipped ecoli
           # proteome at -tag_length 8 must place tags (the placements the
           # alk_cys excluded.* rows count; the example is too small for
@@ -962,7 +979,7 @@ jobs:
             -fragment_tolerance 0.5 -fragment_tolerance_unit Da -threads 2 > "$BW/alk8.log" 2>&1 \
             || { cat "$BW/alk8.log"; echo "::error::-alkylation_out on the shipped ecoli proteome failed"; exit 1; }
           alk8=$(tr -d '\r' < "$BW/alk8.tsv" | awk -F'\t' '$1 == "alk_cys" && $2 == "excluded.no_cys" { print $4 }')
-          [ "${alk8:-0}" -gt 0 ] && ! grep -q $'^alkylation_call\treason\ttags_too_short' "$BW/alk8.tsv" \
+          [ "${alk8:-0}" -gt 0 ] && ! grep -q $'^alkylation_placement_call\treason\ttags_too_short' "$BW/alk8.tsv" \
             || { cat "$BW/alk8.log" "$BW/alk8.tsv"; echo "::error::no tag placed on the shipped ecoli proteome at -tag_length 8"; exit 1; }
           # ...and allocates from mimalloc in the shipped layout, for every
           # module: mi_is_redirected() via FASTAG_TIMING, and mimalloc's own
@@ -1114,6 +1131,12 @@ jobs:
           cp dist/FASTag/*.dll "$R/bin/"
           cp -r dist/FASTag/share-OpenMS "$R/share/OpenMS"
           cp -r dist/FASTag/share-FASTag-taxonomy "$R/share/FASTag/taxonomy"
+          # A release carries the k-mer index (embedded above), as the macOS
+          # and Linux staging steps require.
+          if [ "${{ (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') }}" = "true" ]; then
+            python fastag/tools/check_taxonomy_manifest.py --pinned "fastag/data/taxonomy/manifests/$TAXDB_TAG.json" "$R/share/FASTag/taxonomy" \
+              || { echo "::error::the Windows app bundle does not carry the pinned taxonomy index -- -species would fail in the shipped app"; exit 1; }
+          fi
           cp -r dist/FASTag/share-FASTag-digest "$R/share/FASTag/digest"
           cp -r dist/FASTag/share-FASTag-alkylation "$R/share/FASTag/alkylation"
           cp dist/FASTag/LICENSE dist/FASTag/THIRD-PARTY-NOTICES.txt "$R/"
@@ -1232,7 +1255,7 @@ jobs:
         run: |
           $i = Get-ChildItem fastag/gui/src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1
           if (-not $i) { Write-Host "::error::no NSIS installer was built"; exit 1 }
-          ./fastag/tools/windows_installed_check.ps1 -Installer $i.FullName -Scope AllUsers -Out "$env:RUNNER_TEMP\installed-check" -ThermoRaw "$env:GITHUB_WORKSPACE\ci-data\thermo-smoke.raw"
+          ./fastag/tools/windows_installed_check.ps1 -Installer $i.FullName -Scope AllUsers -Out "$env:RUNNER_TEMP\installed-check" -ThermoRaw "$env:GITHUB_WORKSPACE\ci-data\thermo-smoke.raw" -RequireTaxonomyIndex:$${{ (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') }}
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       # The release zip, packed here so that job installed-app checks the
@@ -1243,7 +1266,30 @@ jobs:
       - name: Pack the release zip
         if: (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') || inputs.gui_dry_run
         shell: pwsh
-        run: Compress-Archive -Path dist/FASTag -DestinationPath "FASTag-$($env:ASSET_VERSION)-windows-x64.zip" -Force
+        run: |
+          $zip = "FASTag-$($env:ASSET_VERSION)-windows-x64.zip"
+          Compress-Archive -Path dist/FASTag -DestinationPath $zip -Force
+          # A release zip carries the pinned k-mer index: each file the
+          # manifest pins, checked in the zip itself by size and sha256.
+          if ('${{ (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') }}' -eq 'true') {
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            $pin = Get-Content -Raw "fastag/data/taxonomy/manifests/$($env:TAXDB_TAG).json" | ConvertFrom-Json
+            $z = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip))
+            try {
+              foreach ($f in $pin.files.PSObject.Properties) {
+                $want = [regex]::Escape($f.Name)
+                $e = @($z.Entries | Where-Object { ($_.FullName -replace '\\', '/') -match "(^|/)share-FASTag-taxonomy/$want$" })
+                if ($e.Count -ne 1) { Write-Host "::error::$zip carries $($e.Count) share-FASTag-taxonomy/$($f.Name), expected one"; exit 1 }
+                if ($e[0].Length -ne [int64]$f.Value.bytes) { Write-Host "::error::${zip}: $($f.Name) is $($e[0].Length) bytes, the manifest pins $($f.Value.bytes)"; exit 1 }
+                $sha = [System.Security.Cryptography.SHA256]::Create()
+                $st = $e[0].Open()
+                try { $got = -join ($sha.ComputeHash($st) | ForEach-Object { $_.ToString('x2') }) } finally { $st.Dispose(); $sha.Dispose() }
+                if ($got -ne $f.Value.sha256) { Write-Host "::error::${zip}: $($f.Name) has sha256 $got, the manifest pins $($f.Value.sha256)"; exit 1 }
+                Write-Host "taxonomy in the zip: $($e[0].FullName), $($e[0].Length) bytes, sha256 as pinned"
+              }
+            }
+            finally { $z.Dispose() }
+          }
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') || inputs.gui_dry_run
@@ -1347,6 +1393,7 @@ jobs:
             test/fixtures
             gui/e2e-tauri
             CMakeLists.txt
+            data/taxonomy/manifests
           sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
@@ -1386,14 +1433,14 @@ jobs:
         shell: pwsh
         run: |
           $i = Get-ChildItem installer -Recurse -Filter *-setup.exe | Select-Object -First 1
-          ./tools/windows_installed_check.ps1 -Installer $i.FullName -Scope CurrentUser -Out "$env:RUNNER_TEMP\installed-check\per-user"
+          ./tools/windows_installed_check.ps1 -Installer $i.FullName -Scope CurrentUser -Out "$env:RUNNER_TEMP\installed-check\per-user" -RequireTaxonomyIndex:$${{ (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') }}
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       # Kept installed for the end-to-end specs.
       - name: Installed-app check (all users)
         shell: pwsh
         run: |
           $i = Get-ChildItem installer -Recurse -Filter *-setup.exe | Select-Object -First 1
-          ./tools/windows_installed_check.ps1 -Installer $i.FullName -Scope AllUsers -Out "$env:RUNNER_TEMP\installed-check\all-users" -Keep -DirOut "$env:RUNNER_TEMP\fastag-app-dir.txt"
+          ./tools/windows_installed_check.ps1 -Installer $i.FullName -Scope AllUsers -Out "$env:RUNNER_TEMP\installed-check\all-users" -Keep -DirOut "$env:RUNNER_TEMP\fastag-app-dir.txt" -RequireTaxonomyIndex:$${{ (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') }}
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           "FASTAG_APP_DIR=$((Get-Content "$env:RUNNER_TEMP\fastag-app-dir.txt" -Raw).Trim())" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       # The release zip as a zip user runs it: unpacked, FASTag.bat --help

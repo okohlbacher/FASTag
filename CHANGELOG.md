@@ -1,76 +1,433 @@
 # Changelog
 
-## Unreleased
+## 1.16.0 (2026-11-24)
 
-- **Resolved tags are ranked by `-resolve_score cstar` (the default).** Each step a resolved tag adds is worth its C*
-  log-odds (mass error in tolerance units at a Da tolerance, rivals, support, complements at any charge) less
-  `-resolve_threshold` (3), and rank 1 is the first resolved tag without a peak and its own complement. `steplogodds`
-  (the same sum with the simpler 1.15 step model and no rank-1 rule), `evidence` (summed E-value evidence) and
-  `anchor` (the resolved tag of the best single tag first, the rest by `steplogodds`) can be chosen instead. Both
-  `-resolved_out` and the GUI, when it resolves itself, use this ranking.
-- **Held-out result behind it (preregistration amendment 3):** the first resolved tag was right in 84.9% of scans
-  against 81.5% under `steplogodds` on PXD020401 (20 ppm), and in 59.8% against 48.0% on PXD031975 (0.5 Da).
+- **Alkylation report: the tags alone never call a reagent whose cysteine has the mass of two residues.**
+  C[Carbamidomethyl] = C + G and C[Propionamide] = A + C exactly, and the immonium rule below cannot tell them
+  apart (the pair's internal a-type ion has the reagent's immonium m/z; the missing 76.022 ion of unmodified C is
+  weak evidence). A tag call whose winner has such an alias (one that puts an ion within the tolerance of the
+  form's C immonium ion: CAM and Propionamide at any tolerance, Nethylmaleimide (N + N 0.029, M + P 0.036 Da) and
+  Carboxymethyl (CAM + 13C 0.019 Da) at 0.02 Da but not at 20 ppm; new rows `alkt_form needs_database.<form>`) is
+  now `no_call` with the new reason `alias_needs_database`; the votes and share are reported as before and the new
+  row `candidate` names the form. With a database (`-fasta`, `-recon_fasta`, `-recon_proteome` or
+  `-alkylation_proteome`) whose placement call calls the same class, `alkylation_call` names it (`source
+  tags+placement`). The vote counting is unchanged; Methylthio has no alias and still calls from the tags:
+  PXD000001 (Characterize) Methylthio, 52 of 69 votes (0.754). The desktop app's Overview tile and Digest tab show
+  "Candidate: Carbamidomethyl — needs a protein database to confirm" with a hint to run again with a FASTA or a
+  shipped proteome. Report format 4 (unreleased) is amended, not bumped (doc/ALKYLATION-REPORT.md).
+- **Taxonomy fetch: a destination whose fetch-named entry is a directory is refused.** `tools/fetch_taxonomy_index.py`
+  replaced a destination folder holding only a fetch's names, so a directory named `tax_k7.taxdb` (or
+  `MANIFEST.json`) passed and was deleted recursively once the new fetch was published. Every entry under a
+  fetch's name must now be what a fetch writes (by `lstat`): a regular file, or for a pinned file a link to one;
+  anything else refuses the fetch and is left intact.
+- **Desktop app, Windows CI: the browser tests are required.** The export test that rewrites its source while it is
+  read now asserts, on Windows, that the writer is refused (the read handle shares no write) and the unchanged
+  export is committed, instead of panicking; a new required step runs the `browser::` tests and checks the two
+  share-mode tests by name, so a failure there fails the job.
+- **Alkylation report format 4: a vote that an alias reads as well needs evidence that tells the readings apart.** A C edge
+  with the mass of two residues (C[Carbamidomethyl] = G + C, C[Propionamide] = A + C, C[Nethylmaleimide] ~ N + N)
+  whose spectrum lost both middle peaks (in b and y, or in the peak selection) has nothing in the ladders to tell
+  the readings apart; it counted for the reagent, so an unmodified GC peptide could vote Carbamidomethyl. Such a vote
+  now counts only when the spectrum holds the C immonium ion of its form (133.043 for Carbamidomethyl), resolved from
+  the ion of the reading it competes with, and, for a two-residue alias, none of the immonium ions of the two
+  residues (76.022 for unmodified C, 30.034 for G) where the spectrum could hold them (its scan window, else its
+  peaks' range), one of them at least inside it: the internal a-type ion of an unmodified GC/CG has the CAM
+  immonium's m/z, 133.0430, so that ion alone confirms nothing. Otherwise the vote abstains (new row `alkt_form
+  alias_unconfirmed`). The abstentions count in the share's denominator (`share` n and `voted`, whose description
+  names them; the Overview tile lists them): 27 CAM and 45 Methylthio votes with 28 CAM ones abstaining are no
+  call (Methylthio 0.45), not a Methylthio call at 0.625. On open Sage searches the CAM immonium ion is in 49-61% of
+  CAM peptide spectra and 4-5% of spectra without C. `alk_run format` and `alkt_run format` are 4. Characterize
+  command (`-extension 2`, fixed CAM, all spectra): PXD000001 Methylthio 52 of 69 votes (0.754) -> 52 of 69 (0.754;
+  CAM 0, 11 abstained: its MS2 spectra start at 100 m/z, so no CAM vote against G + C can count). Measured with the
+  first version of this rule (the immonium ion alone, abstentions outside the share), not again: PXD003531 no call,
+  CAM 75 of 164 (0.457) -> 49 of 112 (0.438); PXD020401 no call, CAM 595 / NEM 549 of 1,263 -> 366 / 405 of 865. Both no calls are right: an
+  open Sage search finds PXD003531's cysteines mixed (CAM 62%, free 23%, +58.005 14%) and PXD020401 blocked with
+  N-ethylmaleimide before carbamidomethylation (NEM 2,418, CAM 1,777 residues) (doc/ALKYLATION-REPORT.md,
+  "Independent evidence").
+- **Glyco flag: HexNAc fragment ions count only with HexNAc 204.087.** 126.055, 138.055, 144.066, 168.066 and
+  186.076 are fragments of the HexNAc oxonium ion; without 204.087 they flagged spectra as two species (most often
+  126.055 + 144.066). Fewer rows are flagged (`n_oxonium` and `ions` list only the ions that count): PXD003531
+  13,307 -> 12,533 of 27,345, PXD020401 13,164 -> 12,707 of 49,964, PXD000001 1 -> 0 of 6,103. The high counts on
+  the first two are oxonium ions that are there (1-3 ppm, decoys 0.25 Th off match over 1,000 times less often): a
+  TiO2 phospho enrichment co-enriches sialylated glycopeptides, phagosomes are rich in glycoproteins (README, Glyco
+  flag).
+- **Desktop app: Characterize a run reads all spectra and writes the alkylation report by default.** The workflow
+  no longer samples 10% of the spectra (`subsample_fraction 0.1`): it tags every spectrum (Spectra to read: All
+  spectra; a share is still offered), and the alkylation report (`-alkylation_out`, its call read off the tags, no
+  database) is on, so the workflow writes five reports. On 10% too few cysteines voted for a call (PXD000001: 8
+  votes, no call); on all spectra PXD000001 is called Methylthio (52 of 69 votes, share 0.754, report format 4),
+  and the whole survey with species detection took 0.8 s there and 4.1 s on PXD003531 (27,345 MS2; alkylation no
+  call, ambiguous: Carbamidomethyl 49 of 112 votes) on an Apple M4 Max with 8 threads. Characterize is the only
+  workflow that offers the report, so the only one whose default changed. The Species workflow's notes no longer
+  call 10% enough. The CLI is unchanged: its reports stay opt-in and it reads all spectra by default.
+- **Building: the species detection index for local builds and the debug app, with no variable to set.**
+  `tools/fetch_taxonomy_index.py` downloads the pinned release asset (`FASTag-taxonomy-k7.tar.gz` of the data release
+  of the newest `data/taxonomy/manifests` entry, the one the release workflows embed) once into
+  `~/.cache/fastag/<data release>/share-FASTag-taxonomy`, checks the tarball and every file against the manifest's
+  sha256 and refuses what does not match; `--from` takes a tarball, an unpacked folder or the index file already on
+  disk. Every `cmake --build` then stages it beside the built FASTag (`FASTAG_TAXONOMY_INDEX_AUTO`, on by default,
+  looks in `FASTAG_TAXONOMY_CACHE_DIR`; a removed cache is unstaged again), and `FASTAG_TAXONOMY_INDEX_DIR` also
+  takes the index file itself. A debug build of the desktop app gives a CLI without an index of its own that
+  fetched index (`FASTAG_TAXONOMY_DIR`), and its Species panel and pre-run check report on the same folder;
+  `gui/scripts/bundle-macos.sh` takes the index from the CLI's build tree or the cache too. The 1.1 GB index is
+  never in git. `shipped_data_test` checks the new staging, the fetch script's checks, and that its pin is the
+  workflows' `TAXDB_TAG` and `TAXDB_SHA256`.
+- **Building: a taxonomy fetch is used only when it is complete.** `tools/fetch_taxonomy_index.py` now assembles the
+  folder in a private temporary folder beside the cache (no predictable `.part` paths, nothing written through an
+  existing link), takes each pinned regular file of the tarball exactly once (a link, a second copy, another name or
+  a missing file refuses the tarball), checks the whole set and only then renames the folder into place, with the
+  completion marker `.fastag-fetched` (the pinned manifest's sha256, each file's size and sha256) written last; a
+  failed fetch leaves an earlier complete one as it was. `--check <folder>` tells whether a folder holds a complete
+  fetch. CMake (`stage-data.cmake`, with the new `INDEX_MANIFESTS` beside `INDEX_SEARCH`), the debug desktop app
+  and `gui/scripts/bundle-macos.sh` stage a fetched folder only when its marker names the manifest of these sources
+  and every file has its pinned size; a cache fetched before the marker existed gets it on the next run of the
+  script. On Windows (copy staging) an index file named under another name is copied again whenever another file
+  is named, also one with an older time stamp (it kept the previous index); `file(COPY_FILE ... ONLY_IF_DIFFERENT)`
+  leaves equal bytes alone. `shipped_data_test` tests the copy case of `--from <folder>` always and the link case
+  only with the symlink privilege (Windows runners without it failed), and compares the fetch's default folder with
+  the build's only when `FASTAG_TAXONOMY_CACHE_DIR` is the default. The fetch never deletes a folder of the user's: a
+  `share-FASTag-taxonomy` at the destination holding anything but a fetch's own files is refused and left as it is
+  (before, `--dest` replaced it with its contents). If the new folder cannot be put in place, or is not a complete
+  fetch once there, the earlier one is put back. A `--from` source whose file resolves into the folder being replaced
+  (a link in an import folder elsewhere pointing back into the cache) is copied, not linked, so the published index
+  neither dangles nor points at itself, and links name the file itself, not a chain. A linked file is hashed again
+  each time it is used (`--check`, CMake's `INDEX_SEARCH`, the debug desktop app), so a target changed after the
+  fetch at the same size is no longer staged; copied files are checked by size as before. On Windows staging, an
+  index file named under another name is compared byte for byte on every build (no time-stamp shortcut, which an
+  in-place rewrite of the same size and second passed), and `cmake/stage-data.cmake` sets its policies itself
+  (`cmake_minimum_required(VERSION 3.28)`), so `cmake -P` on CMake 3.28, the minimum, no longer stops at `IN_LIST`.
+- **Release CI: the shipped taxonomy index is checked against the pinned manifest.** The app disk image (mounted),
+  the CLI disk image (staged and, once notarized, mounted), the `.deb`, the AppImage (its taxonomy folder unpacked
+  from the squashfs), the Windows app's resources, the Windows release zip (each entry hashed) and the installed
+  Windows app (`windows_installed_check.ps1 -TaxonomyManifest`, default the newest manifest) now require each pinned
+  file as a regular file with the manifest's size and sha256 (`tools/check_taxonomy_manifest.py --pinned`), where a
+  truncated index passed the size or name checks before. The AppImage goes into the workflow artefact only when its
+  best-effort build passed every check.
+- **CLI: census `res_cover` folds each residue on its own.** With an unresolved orientation, `res_cover` folded each
+  tag as a whole: two overlapping tags whose midpoints lay on either side of the centre folded in opposite
+  directions and their shared residues counted twice (10 residues for tags covering 9). Each residue is now mirrored
+  by its own midpoint, so it has one image in every tag that holds it, and `res_cover` is at least `max_len` (the
+  longest tag, the other lower bound). Runs with every orientation known (`res_cover_exact` 1) are unchanged.
+  A gap's residues no longer count: its mass was split evenly, a boundary no residue has, so an ungapped GWKA and an
+  overlapping S(GW)K counted six residues for five. `res_cover` counts the residues each placed on its own, a
+  spectrum whose tags have a gap gets `res_cover_exact` 0 (a lower bound, also with every orientation known), and
+  `res_cover` is never below the longest tag (`max_len`). The Triage overview's caveat names both causes.
+- **Desktop app: the check before a run follows the command it runs.** The inspector reads the values the run is
+  sent (Mass-shift survey without a database sends the tags run only, and a mass-gap report without placements is not
+  sent), so a missing `massgap_mods.tsv` no longer holds a tags-only run. A FASTag program whose `--helphelp` lacks
+  `-recon_proteome` (an older `FASTAG_BIN`) is held before a shipped proteome is sent to it, with the fix "Use no
+  shipped proteome". An engine without `-data_paths` no longer counts as reading `-alkylation_proteome auto` as the
+  human proteome: how it reads auto is unknown (the CLI of 0dfac519 reads it database-free), so the check only warns
+  and does not ask for `human.fasta.gz`.
+- **Desktop app: feedback exports are built in request order, and the zip revealed is the export shown.** Each export
+  request carries an increasing number; the store refuses one older than the export its zip holds, so a late request
+  with the screenshot ticked can no longer overwrite the zip just built without it. Open issue draft reveals the zip
+  only while it is that very export (else it says so). Each accepted export is a file of its own,
+  `export-<n>/<id>.feedback.zip` in the report's folder (`<n>` the request's number), written once and never again:
+  the path the file manager is handed names that export's bytes, and an export started after that check (a box
+  changed while the handoff runs) removes it rather than writing other bytes under its name. The attachment keeps
+  its name `<id>.feedback.zip`. The screenshot stays included by default.
+- **Desktop app: Open with default app hands off a private copy.** The file is opened once for the identity check and
+  the system opener gets a copy made from that handle, in a private folder of the app's cache (removed after a day),
+  so a file swapped in at that path after the check is never opened; one rewritten while copied is refused. An
+  identification file or hand-off file a run committed is now recorded with its identity in the run record
+  (`openIdentities`), so Open works for an unchanged export reopened from History after the app restarted.
+- **Desktop app: Spectrum navigation reads one file.** The table viewer keeps the handle it indexed a file from (on
+  Unix; on Windows each read must find the same file) and checks it after every read: a TSV renamed over the path
+  during ◀ ▶ is not read, and one rewritten in place is refused and indexed again, never new bytes at old offsets
+  under the old snapshot. On Windows each read (and the index build) opens the file sharing read and delete but not
+  write, for the whole read: a program still holding the file open for writing (whose last-write time Windows may
+  not update until it closes) makes the read refuse it as changed, and no program can open it for writing while it
+  is read; the CLI can still rename a new output over it. A table export checks its source again from the handle it
+  read the rows from before it commits the file, so a source rewritten in place during the export (same size, on
+  any platform) leaves no export behind.
+- **Desktop app: scan links in reports opened on their own.** A Glyco, Mass shifts or spectra-per-shift report opened
+  without its tags table now links its scans too: the Spectrum tab takes the spectra file and the tags from the run
+  record of the report clicked (History), and asks for the input (Locate input…) when there is none.
+- **Release CI: the species detection index is checked in every shipped desktop artefact, not only in the staged
+  resources.** On a tag (and a full-payload dry run) the jobs now fail when `tax_k7.taxdb` is missing from the
+  mounted macOS app disk image, the macOS CLI disk image, the Linux `.deb` (and so its tarball), the Linux
+  AppImage's squashfs, the Windows app's staged resources, the Windows release zip and the installed Windows app
+  (`windows_installed_check.ps1 -RequireTaxonomyIndex`).
 
-- **CLI: tag merging, `-resolved_out` and `-tag_graph_out`.** FASTag merges the tags of each spectrum into resolved
-  tags itself, as the desktop app's Spectrum tab did (src/TagGraph.h, a port of its graph with the same tie-breaks):
-  one row per resolved tag in rank order (sequence N→C, series call, flanks, score, evidence, peaks, steps, the member
-  rows of `-out`, and the ranking it was made with, `scheme` and `threshold`), and the merge graph, one row per
-  placement. Ranked by `-resolve_score` (cstar by default, above) and `-resolve_threshold`; tags with E <= 1
-  (`-resolve_max_evalue`); `-resolve_join` joins tags that only touch. Off unless asked for; not under `-stream`.
-  A two-pass hybrid spectrum (`-ion_series_hybrid both`) is merged on the union of its b/y and c/z• preparations,
-  which `-dump_spectrum` now prints for it, so its c/z rows are no longer left out when the precursor peaks the b/y
-  preparation keeps crowd the peak budget.
-  The GUI takes OpenMS's residue masses, as the CLI does: on PXD003531, PXD000001, PXD076528, PXD020401 and PXD031975
-  the GUI's resolved tags equal the CLI's on every scan and rank, under each of the four rankings.
+- **CLI: `-data_paths` reports where FASTag reads its shipped data.** The new advanced flag prints one JSON line
+  (`digest_dir`, `digest_from_env`, `digest_searched`, `alkylation_dir`, `proteomes`, `alkylation_auto` `none`) and
+  exits 0, with the same lookup and environment as a run; needs no `-in` or `-out`, refused with `-stream`. The
+  desktop app's check before a run now asks the engine through it instead of guessing from the program's path, and
+  an engine whose `--helphelp` does not list it (before 1.16) is taken to read `-alkylation_proteome auto` as the
+  shipped human proteome: the check then asks for `human.fasta.gz`, or says the report will use the human proteome,
+  and Setup no longer promises the call from the tags alone for it. A `FASTAG_BIN` symlink is resolved to its target,
+  and a debug build that finds FASTag on `PATH` uses its absolute path (it stored the bare name, so the check looked
+  for data relative to the app's working folder).
+- **Desktop app: the Spectrum tab's protein alignment is bound to the tags table the run wrote.** When a run ends with
+  exit 0, the identity of its `-out` table (canonical path, device, inode, size, modification time) is recorded, in
+  the session and in the run record (`tagsIdentity`). The alignment reads the run's database only for that very file:
+  a tags table rewritten, copied or renamed onto the run's output path afterwards, a run that failed, was cancelled or
+  is still going, and a record written before this change align nothing ("changed since the run wrote it", "was not
+  written by a run of this app that finished").
+- **Desktop app: Open with default app opens only what the app offers it for.** Open now takes an idXML, mzid or
+  mzTab `-recon_id_out`, a `-fasta_out` FASTA or a `-search_config_out` (JSON or `.params`) that a run of this session
+  committed (ended with exit 0) or that was dropped on the window, while it is still the same regular file (no
+  symlink; same device, inode, size and modification time). A planned output of a run that did not finish, a record
+  of an earlier session, a file replaced or symlinked at that path, and any other file type (for example `.command`)
+  are refused ("not a file this app wrote or you opened"). Reveal is unchanged.
+- **Desktop app: feedback shares only the export that matches the choices shown.** The screenshot and the
+  diagnostics stay included by default; the privacy notice now says so (and that the log is included only when
+  ticked), under notice version `fastag-feedback-privacy-2`. Changing what is included after Save builds the zip
+  again and asks for the public-issue confirmation again; Open issue draft stays off until that zip is there, and
+  after a failed build. A failed build no longer leaves the earlier zip (with a screenshot since unticked) in the
+  report's folder, and an older build that finishes after a newer one is dropped.
+- **Desktop app fixes:** ◀ ▶ in the Spectrum tab read the position and both neighbours from one snapshot of the
+  tags table (a table rewritten by a rerun during the lookup no longer mixes two files or falls back to file
+  order). The Digest tab's alkylation block counts a call from the tags as votes from tags, gives the tag call's
+  held-out result (the placement call stays not validated), and shows the placement call and its reason beside
+  it; the Overview keeps the placements' too-short-tags diagnosis and its Run again with extension when neither
+  call is made. An identifications mzTab over the 128 MB viewer limit (or one that cannot be read) is listed with
+  Open and Reveal. The QC page of an older report (no per-channel counts) shows each reporter channel's share
+  without a made-up count.
 
-- **CLI: `-resolved_out` says whether a resolved tag lies at a peptide terminus.** A new last column, `terminus`:
-  `N` or `C` when a flank is 0 (or a terminal modification of the run) within the tolerance of its side (the
-  fragment tolerance for the side read from the peaks, plus the precursor's for the other, at the `-isotope_error`
-  offsets), else `N+K` / `C+[KQ]` when it is one residue away; `N,C+R` for both, empty for neither. The flanks are
-  tested before the clamp at 0 of `nterm_mass`/`cterm_mass`, so a tag longer than the precursor allows is at no
-  terminus. The other columns, their order and the ranking are unchanged.
+- **CLI: the alkylation call checks its votes (`-alkylation_out` format 3, `-alkylation_tags_out` `alkt_run format`
+  3).** Three changes to the call. (1) Conflicted votes count in the share's denominator: share = class votes /
+  (binned + conflicted), the share row's `n` is that denominator and a new row `voted` (after `share`, in
+  `alkylation_call`, `alkylation_placement_call` and `alkylation_tags_call`) gives it; a heavily conflicted run no
+  longer gets a reagent call (10 CAM and 90 conflicts were share 1.0 and a CAM call, now 0.1 and `ambiguous`).
+  (2) In ppm the twin guard (CAM and Carboxymethyl are 0.984 Da apart) applies per vote with the tagger's windows at
+  the C edge's own m/z, no longer once per run at 1000 m/z: at 400 ppm C edges above 1230 m/z are set aside (they
+  were counted), at 500 ppm edges below 984 m/z are counted (the run got `unresolved_forms`). New rows
+  `alkt_run resolved_below_mz` and `alkt_form unresolved`; `unresolved_forms` now means no vote is left (in Da, as
+  before, any twin). (3) Each voting C edge is checked against the spectrum for its aliases: a GC/CG or AC/CA whose
+  middle peak was lost in one series (the peak is in the other, or at the complementary m/z), or an edge ending on a
+  13C peak (the monoisotopic peak is beside it), no longer votes Carbamidomethyl, Propionamide or Carboxymethyl; such
+  a vote is a conflict (`alkt_form alias_rejected`). On PXD000001 the call is unchanged: Methylthio, 52 of 69 votes
+  with `-extension 2` (1 CAM vote now an alias conflict; format 4, above, gives the same share), no call at the defaults (8
+  votes). The held-out result
+  (40 of 57 runs called, 37 right) was measured without these checks.
 
-- **GUI: FASTag's own resolved tags, and the merge graph.** When the CLI has `-resolved_out` and `-tag_graph_out`,
-  the app writes them beside the tags (`<stem>.resolved.tsv`, `<stem>.taggraph.tsv`) and the Spectrum tab's All tags,
-  resolved shows FASTag's resolution and names its ranking (it says which one is used, and falls back to the GUI's
-  when the tables do not fit the peaks or hold no row of the spectrum). The fallback ranks as the run did: the
-  ranking FASTag wrote on the table's rows, else the run's settings; tables without either are said to be of a
-  ranking not recorded, and the GUI takes the default. The new Merge graph view draws the tag graph around the
-  resolved tag selected, on its residues N to C: its tags as a staircase of bars under a residue ruler with bold
-  joins, conflicting resolved tags above, tags inside it, touching ones and the rest below; a resolved tag that reads
-  it again on its complement peaks (every peak, not just two) is a b+y badge, not a second bar; a related one of the other series is written in the ruler's direction, marked C→N; unused tags behind a toggle; choosing a bar
-  re-anchors on its resolved tag.
-- **GUI: termini of resolved tags.** The resolved tags table, the tag line and the merge graph write N–EPTIDE,
-  EPTIDE–C, and N–(K)… / …(K)–C muted one residue away, from `-resolved_out`'s `terminus` column, or computed alike
-  for older tables and the GUI's own resolution; the plot ticks b0/y0 of the selected one when in view.
+- **Mass-shift survey without a FASTA of your own (feedback 422372a2).** New CLI option `-recon_proteome
+  <human|mouse|yeast|ecoli>`: the shipped UniProt reference proteome is the database of `-recon_out` (and of
+  `-delta_out`, `-massgap_out`, `-recon_id_out`) when `-recon_fasta` is not given; it is used before `-fasta`, and
+  `-alkylation_out` checks its call on its placements. It is ignored with a hand-off (`-shortlist_out`, `-fasta_out`,
+  `-search_config_out` need a FASTA file). The desktop app's check before a run blocks Run when the chosen proteome is
+  not among the engine's shipped data (`-data_paths`), with the fix "Use no shipped proteome".
+  In the GUI, Mass-shift survey no longer blocks Run with "Still missing: Protein database". Inputs offers your
+  FASTA or a shipped proteome, with the organism a species report of the same file names. Without a database
+  the run writes the tags table only: the shift reports are off, marked "needs a protein database", and the plan
+  says so. Every shift report needs a database, the mass-gap report included: its gaps are those of the
+  placements. On PXD003531 (human, Q Exactive) with `-recon_proteome human -extension 3`, 10,309 of 27,223
+  tagged MS2 place; the top mass-gap peak is Phospho (79.975 Da, 551 spectra).
 
-- **GUI: all tags of a spectrum, resolved.** The Spectrum tab's **All tags, resolved** places every tag of the spectrum
-  on its peaks and assembles the tags of one ion series that overlap and agree into longer resolved tags (a tag graph:
-  ions as nodes, steps of tags as edges). Row orders of one gapped tag count once, isobaric readings of a step stay
-  apart ({Q|[AG]}), conflicting and same-series readings are named, with an E-value cutoff (default 1). A double-click
-  on a row in Tags opens its spectrum. Choosing a resolved tag draws the others against it (same step, differing
-  step, elsewhere), shows its mass errors under the axis (each step, summed from the first peak, and the steps that
-  differ) and lists the tags behind it aligned peak by peak. With the run's tag placements (`-recon_out`), the peptide
-  most tags of the spectrum were placed on is named and its fragments are drawn as a ruler; a candidate, not an
-  identification.
+- **GUI: a scan opens its spectrum in every table.** In Glyco, Triage and Mass shifts (placements, identifications,
+  spectra per mass shift), the scan has the spectrum icon, as in Tags: a click on it, or Enter on its row, opens the
+  Spectrum tab at that spectrum; ◀ ▶ then walk the tagged spectra in file order. Where no spectrum can be shown (a
+  FASTag without `-dump_spectrum`, or a report opened without its tags table), the scan is plain text and its
+  tooltip says why.
 
-- **Resolved tags: the `steplogodds` ranking.** It ranks the resolved tags by the log-odds of their steps (E-value,
-  mass error, intensity of both peaks, complement ions, gap steps), less a threshold, instead of by summed E-values
-  (`evidence`). Preregistered held-out test on PXD076528 (Orbitrap Astral, 4,464 scans): the first resolved tag right
-  in 58.7% of scans (best single tag 58.2%, summed E-values 40.3%), with 11% more correct residues than the best
-  single tag. It is no longer the default: `cstar` (above) did better on the later held-out sets.
+- **GUI: Overview tiles open their tab.** A click on an Overview tile, or Enter on its label, opens the tab
+  with its detail, at its section where there is one: Protease, Label and Alkylation open Digest at their section,
+  Top genus opens Species, Glyco opens Glyco, the QC tiles open QC, the Triage tiles open Triage, the mass-shift
+  tiles open Mass shifts. Focus moves to the heading that opens. A linked tile shows a chevron and a pointer; a
+  tile with no tab, or one that only offers to add its report, is no link. On the Run QC page, MS2 spectra and
+  Isobaric kit move to the Spectra and Reporter ions sections.
+
+- **CLI: the alkylation call needs no protein database (`-alkylation_out` format 2).** `-alkylation_out` now
+  reads the cysteine forms in the tags (unmodified, Carbamidomethyl, Propionamide, Nethylmaleimide, Methylthio,
+  Carboxymethyl; the method of `-alkylation_tags_out`) and calls the reagent, or says `no_call` with the reason and
+  the counts. **`-alkylation_proteome auto` (the default) no longer means the shipped human proteome**: it means
+  `-recon_fasta` or `-fasta` when given, else no database. A named proteome (`human`, `mouse`, `yeast`, `ecoli`), a
+  FASTA file, `-recon_fasta` or `-fasta` adds the 1.12 placement call as a check: the report's call takes the one
+  that calls, or both when they agree, and says `no_call` `disagree` when they differ. Before, a run without a
+  database placed on the human proteome, needed tags of 8 residues and stopped with exit code 6 without the shipped
+  file. The C forms are checked against the run's residues (fixed and variable modifications included): a C form
+  that one step of another mass reads (`alkt_form twin.<form>`, new) gives `no_call` `unresolved_forms`; two-step
+  readings such as C + G = C[Carbamidomethyl] stay listed under `alias.<form>`. Report: `alk_run format` 2 with
+  `method`; `alk_cys` and `alkylation_placement_call` only with a database; the tag sections `alkt_run`, `alkt_form`,
+  `alkylation_tags_call` inside; `alkylation_call` gains `source` (doc/ALKYLATION-REPORT.md). `-alkylation_tags_out`
+  is `alkt_run format` 2 (the twin rows; aliases over the run's alphabet). `-alkylation_window` is read only with a
+  database. On PXD000001 (no database, `-extension 2`) the call is Methylthio, 52 of 69 votes (also with format
+  4). The GUI's Characterize task runs the alkylation report without any proteome: the check before the run no
+  longer asks for the human proteome, Extension is not raised, and the Overview tile names the votes.
+
+- **Shipped data found from a build tree, and a missing file named before the run.** The build links `data/digest`,
+  `data/alkylation` and `data/taxonomy` beside the built FASTag (`share-FASTag-*`; copied on Windows;
+  `-DFASTAG_STAGE_DATA_IN_BUILD=OFF` to turn it off), so a build-tree FASTag runs the mass-gap, digest and
+  alkylation reports and the hand-off without `FASTAG_DIGEST_DIR`. When a file is missing, the error names the
+  option, the file, every folder searched and the fixes, on one line (exit 6, before any output). A
+  `FASTAG_DIGEST_DIR` or `FASTAG_ALKYLATION_DIR` that names no folder now finds nothing and is said so, instead of
+  being ignored. The desktop app passes its bundled digest and alkylation folders to the CLI, and its check before
+  the run blocks the Mass-shift survey, Characterize a run or Database reduction when their file is missing, with the
+  reason and a fix ("Run without the mass-gap report"). The build tree restages `data/` on every build (target
+  `fastag_stage_data`), so an edit to `data/` alone and a deleted `share-FASTag-*` folder are restored; a Windows copy
+  follows `data/` exactly (changed files copied again, deleted ones removed). A staged folder carries
+  `.fastag-staged`, listing what the build put there, and only that is ever replaced or removed; a folder without it
+  is the user's and is left alone in both modes (a Windows build tree copy-staged before this change has no marker:
+  delete its `share-FASTag-*` folders once to restage them).
+- **Every shipped data file checked in every layout, and the k-mer index in a build tree.** A new test
+  (`shipped_data_test`) reads from the sources each data file the CLI opens (protease models, calibration,
+  mass-gap modifications, proteomes and their manifest, taxonomy dumps, `species_call.tsv`, the index) and fails
+  when one is missing from `data/`, the `cmake --install` tree, the build tree, a release archive or desktop app,
+  or the local macOS app bundle. `-DFASTAG_TAXONOMY_INDEX_DIR=<folder with tax_k7.taxdb>` puts the index beside a
+  build-tree FASTag, so `-species` runs there too. `gui/scripts/bundle-macos.sh` falls back to `data/taxonomy`,
+  adds `species_call.tsv` beside an index folder, and stops when a file is missing. A debug build of the app gives
+  a `FASTAG_BIN` CLI with no data beside it the source tree's `data/` folders, so the Mass-shift survey,
+  Characterize a run and Database reduction no longer stop with exit 6 there.
+- **GUI: no red error for the placements as identifications.** The app names this product `.recon_id.mzTab`,
+  the form Mass shifts shows (as the "Identifications (mzTab)" table); before, it named it `.idXML` and then
+  could not show its own file. An idXML or mzid file, named so by the user, kept by a preset or dropped on the
+  window, is listed under Mass shifts with **Reveal** and **Open with default app**, not as an error. The
+  Shortlist tab's reduced FASTA and engine configuration use the same row, with Open added.
+- **GUI: the Feedback form no longer blocks the window.** It is a floating panel docked at the bottom right, with no
+  dimmed background: the app behind it stays usable (scroll, switch tabs, open another spectrum) and the form keeps
+  its text. Drag the title bar to move it (keyboard: arrow keys on Move, or Alt+arrow keys on the title bar), drag
+  the corner to resize it (or its arrow keys), collapse it to its title bar; the place is kept for the session.
+  Esc closes it only from inside the panel; F6 goes between the panel and the app. **Retake screenshot** hides the
+  panel and captures the window again, with the view and settings of that moment. The mark-up editor opens in the
+  same panel, wider, and moves and resizes the same way.
+- **GUI: an overview at the top of Results > Triage.** Tiles for the MS2 spectra, the processed ones, the share
+  with a strong tag (best E-value at or below the Triage E-value, the headline), the tagged share (not a quality
+  call) and, with identifications, the identified share. Three charts with a Bins view each: the peptide length the
+  precursor implies (averagine) by charge with the tag lengths on top, tags reported per spectrum by peaks with the
+  `-max_tags` cap, and coverage by estimated length (from `max_len` and `res_cover` of census 2; on an older census
+  from `best_len` and the `tag_cover` m/z span, marked approximate). It counts every row, whatever the table's
+  filter, and can be collapsed.
+- **GUI: a database hit names its protein.** With a filter database the app runs FASTag with `-fasta_proteins 3`
+  (unless the option is given). The Database hit cell of the Tags table and of the Spectrum tab's tags table shows
+  the first protein as accession/gene@range (`P0A6F5/groL@123–131`) and "+n more", in place of "In database"; the
+  tooltip lists every protein named. The columns Proteins (position), Gene and Proteins (n) are under Columns.
+  -fasta_proteins is passed only when the resolved FASTag CLI lists it (FASTAG_BIN with an older CLI): the run, the
+  Setup Copy command and History give that CLI the same command line without it, and its tables have no protein
+  columns.
+- **GUI: the tags of a spectrum aligned on their protein.** In the Spectrum tab, the tags that occur in one protein
+  only are drawn under that protein's residues, one block per protein (most tags first), reversed matches marked,
+  each letter on its own residues also when a tag letter stands for a same-mass residue pair (or a letter pair for
+  one residue), those residues underlined, and the peptide a cut after K or R gives shaded. Which letters stand for
+  which pairs follows the run's own `-fixed_modifications` and `-isobaric_tolerance`, derived as the CLI derives its
+  isobaric rules (with Dimethyl (K) fixed, K stands for GV; at tolerance 0, for nothing); where the run's rules give
+  no reading, or a fixed modification's mass is not known to the app, the tag's residues are only marked as a span,
+  with a note, rather than drawn one letter per residue. The residues
+  are read from the run's `-fasta` (or `-entrapment_fasta` for entrapment matches, marked as known false): only the
+  database of the run that wrote the tags, and only while it is the same file that run read (the same file, size
+  and modification time; a file replaced at that path, or a symlink pointed elsewhere, shows no alignment). Each
+  database is indexed once, in bounded memory also for long lines or very large files, so a protein is a seek and a
+  short read. Tags in several proteins are named, not aligned, and so is a protein whose identifier the database
+  gives to more than one entry (the run's positions may be of any of them): its positions are listed, with a note.
+- **GUI: Run QC shows the isobaric kit call and the reporter channels.** The Isobaric kit tile of the QC page shows
+  the one kit of `qc_version` 3 (`TMT 6-plex`), or "Ambiguous: A or B" when only the reporter channels decide, or, as a
+  warning, "Conflict: TMT label, reporters fit TMTpro 18-plex" when the label mass and the channels disagree, in place
+  of the list of compatible kits; the Reporter ions section repeats it with how it was decided. The Table view of the
+  channel chart gives, per channel, its m/z and the MS2 that show it; channels the report does not call seen are
+  dimmed, in the chart and in the table. The batch summary uses the same call; a conflict, or a kit
+  value the app does not know, is no call and never counts towards or against the kit majority. Older reports still show
+  the compatible kits.
+- **GUI: a short, graphical Run QC page.** Results > QC opens on five tiles (MS2 spectra, tag yield, instrument
+  with its serial number and start time, isobaric kit, redundancy) and small charts: spectra per MS level by analyzer,
+  precursor charges, resolution by m/z band (measured points, a stated value as a dashed line), which MS2 can show
+  reporter ions, and how often each reporter channel is seen (a line at the 20% threshold). Each chart has a tooltip,
+  keyboard steps and a Table view; the channel table is the Table view of the channel chart. Every other value of the
+  report is under one closed **All values**, with a filter and the empty rows on request, in place of the long list
+  of numbers. Older QC reports (`qc_version` 1 and 2) get the same page.
+- **GUI: Edit menu on Windows and Linux.** Cut, Copy, Paste and Select All, as on macOS, for every text field. On
+  Linux a click on them now acts, on X11 and Wayland: they run WebKitGTK's own editing command in the window (the
+  platform items only sent the keys through libxdo, which the app does not ship, so a click did nothing). Their
+  shortcuts are the window's own, as before, and are not shown in the Linux menu.
+- **CLI: Run QC names one isobaric kit, and counts each reporter channel (`qc_version` 3).** `-qc_out` gains
+  `reporter_kit`, `reporter_kit_candidates`, `reporter_family_evidence`, `reporter_label_delta` and, per channel,
+  `reporter_channel_<label>` with its `_share`, after `reporter_compatible_kits`. The label mass on the tag ends (the
+  `-label_out` label call; the tag ends are now also counted for `-qc_out`) decides TMT (229.162932 Da) or TMTpro
+  (304.207146 Da), and the kit is the smallest one of that label that holds every observed channel; larger kits with
+  unseen channels and kits of the other label are not named. TMT 6-plex is recognised in both reagent
+  generations: the current 126/127N/128C/129N/130C/131 and the original 126/127C/128C/129C/130C/131 (Dayon et al.
+  2008, MSnbase TMT6). So `reporter_tmt6plex` is now `present` for runs with the original reagent, and
+  `reporter_compatible_kits` lists `tmt6plex` first. The PXD000001 run used the original reagent. It was "compatible"
+  with `tmt10plex,tmt11plex,tmt16plex,tmt18plex` and is now `tmt6plex` (TMT label on 2251 tag ends); without the
+  original pattern it would have been called `tmt10plex`. Without a label decision (Da tolerance, too few tags) the
+  smallest kit per label is listed, `reporters_only`. When one label passes but none of its kits holds the observed
+  channels (TMT label, 134N seen), no kit is called: `reporter_kit` is `conflict`, `reporter_family_evidence` is
+  `label_conflict` with the label's tag ends, `reporter_label_delta` the label mass, and `reporter_kit_candidates`
+  the kits the channels allow. The channel rows count
+  the assessable MS2 with the reporter above the noise threshold (3x the median peak, 20 ppm); every channel of the
+  family is listed, unused ones with 0. `reporter_compatible_kits` and every other row are unchanged; the tag output
+  is unchanged. `-digest_window` is now also read for `-qc_out`.
+- **CLI: census format 3, `res_cover` no longer counts complementary b and y reads twice.** Format 2 placed every
+  tag as a y (or z•) read, so a b ladder and a y ladder over the same residues landed at mirror positions and
+  `res_cover` could exceed the peptide length (PXD000001: 1705 of 5594 spectra above (M − H2O)/110). Now a tag
+  that matches `-fasta` (or `-entrapment_fasta`) in one orientation only is placed by it, a reverse-only match as a
+  b (or c) read; any other tag (no `-fasta`, or a match both ways) is folded onto the lower half of the peptide, so
+  the two reads of a stretch count once and `res_cover` is a lower bound. When any tag of a spectrum is folded, every
+  tag of it is folded (the placed ones after their placement), so a placed read and a folded read of the same
+  residues count once too (with `-fasta` and `-extension 4` on PXD000001 this lowers `res_cover` in 207 of the 277
+  folded spectra, by 883 residues in all, raises it by 1 or 2 in 7, and the folded spectra above the length estimate fall from 24 to 9; spectra with every
+  orientation known are unchanged). A new column `res_cover_exact` after
+  `res_cover` is 1 when every reported tag of the spectrum was placed by its orientation and 0 when `res_cover` is
+  the folded lower bound; `census_version` is 3. On PXD000001 without `-fasta`, 77 spectra remain above the length
+  estimate. Readers that take columns by name are unaffected; `best_ion_series` and the later columns move one
+  to the right. The GUI's Triage overview marks the cover "approximate: orientation unresolved (folded, lower
+  bound)" for such spectra, and a format 2 census as placed by y reads only.
+- **GUI: the Triage overview reads the seed lengths from the census summary.** A census opened on its own (no
+  parameters of an app run) from `-tag_lengths 3 4 -max_tags 7` showed the cap as 7; the summary's
+  `run/tag_length` (`3,4`) now gives the number of lengths, so the cap is 14, and a multi-length run never takes
+  a single tag length from the parameters.
+- **CLI: census format 2, longest tag and residue cover.** `-census` writes two new columns after `tag_cover`:
+  `max_len`, the longest reported tag (differs from `best_len` under `-tag_lengths` or `-extension`), and `res_cover`,
+  the residues the reported tags cover together, with each tag placed through the precursor mass of the selected
+  hypothesis as the tag TSV writes it (a stretch read on b and y ions counts twice). The census summary gains the run
+  row `max_tags` (the cap of `n_found` and `n_reported`) and `census_version` is 2. Readers that take columns by name
+  are unaffected; `best_ion_series`, the `pre_*` columns, `ident_score`, `identified` and `triage` stay after them.
+  Every other output is unchanged.
+- **CLI: `-fasta_proteins <n>`, the proteins and positions of a database hit.** With `-fasta`, three new last
+  columns (before `q_db`): `db_proteins`, the first n proteins the tag occurs in as `identifier@start-end` (1-based,
+  `;`-separated), `db_genes`, their `GN=` values (`-` without one), and `db_protein_count`, all proteins. Only
+  occurrences in the orientation of `fasta_hit` count; targets come before decoys, each in database order;
+  `efwd`/`erev` rows name entrapment proteins. Off by default (0), so `-out` is unchanged without it; refused without
+  `-fasta`. Uses a suffix-array index over the database (about 6.5 bytes per residue), the `-recon_out` one when that
+  reads the same `-fasta`. A protein is named by its identifier only, so a `-fasta` (or `-entrapment_fasta`) whose
+  entries repeat an identifier gets one warning with their count and the first one.
+- **CLI: subsumed tags are left out of `-out` (`-subsume_tags`, on by default).** A tag whose path peaks are a
+  contiguous run of another tag's of the same spectrum, on which that tag reads exactly its residues (same
+  fragment charge, ion series and precursor hypothesis), is no longer written when that tag is at least as
+  significant (E-value <= its own; a longer tag with a worse E-value keeps the shorter one); of two copies of one tag
+  the lower E-value stays. It happens under several `-tag_lengths` or with `-extension`; at one seed length without
+  extension no row changes. On PXD003531 at `-tag_lengths 3 4 5` it drops 41% of the rows, and 1.3% of the PSM
+  spectra lose their only correct tag (3.2% if every contained tag were dropped); held out on PXD020401, 45% of
+  the rows and 0.85%. Only `-out` and the counts of its rows change: the digest, label, alkylation, census tag statistics,
+  placements, mass-shift and QC reports and the `-species` evidence count every tag as before, and a target tag is
+  never left out for a longer entrapment-only one. The run summary prints `Subsumed tags dropped: n`;
+  `-subsume_tags off` writes every tag. Also under `-stream`.
+- **CLI: `-terminus`, the series of a terminally anchored tag.** Two new last columns, `series` and `terminus`: each
+  tag is read as written (y, or z under c/z) and reversed (b, or c), each reading's flanks tested for a peptide
+  terminus (at it, or one residue away, such as a low peak that is y1 of a C-terminal K); `terminus` lists every
+  token found (`C+K`, `N`, `N+M[Oxidation],C`; `y:…;b:…` when both readings have some, `-` when neither has).
+  `series` is the one reading anchored through a kind that held when measured at 20 ppm (any N-side token, the C
+  terminus, y1 of a C-terminal K or R, a C-terminal set holding K or R such as `C+[KQ]`; not a lone K or R from the
+  precursor, b(n-1), nor another C-terminal residue): 99.8% right on PXD003531 and 99.9% on PXD020401. Above 25 ppm
+  or 0.02 Da, and on c/z rows (c/z anchors were not measured), `series` is `-`; `terminus` still lists the tokens.
+  Off by default; not with `-stream`.
 
 - **GUI: b or y, judged on the peaks.** A tag does not say whether it was read from b or y ions, and the
   Spectrum tab used to call the ladder walked from nterm_mass "b" and the one from cterm_mass "y", which was wrong for
   about a quarter to half of correct tags and showed their sequence reversed. It now judges the series on the peaks
   (a ions beside b ions, a ions beside the complement, a tryptic C-terminal K/R; the database peptide when the run
-  placed the tags), shows the tag N→C under that series, marks likely calls with ? and says "b or y" when the
-  spectrum does not tell; a ladder and its complement are opposite series. Tags on the same peaks are assembled
-  whichever flank they were walked from.
+  placed the tags), shows the tag N→C under that series, marks likely calls with ? and says "b or y?" when the
+  spectrum does not tell; a ladder and its complement are opposite series.
+- **GUI: a terminal anchor settles the series.** Each ladder is also read both ways against the peptide termini, as
+  `-terminus` does: when exactly one reading reaches a terminus through a kind that held when measured at 20 ppm on
+  two data sets (at a terminus, one residue from the N terminus, y1 of a C-terminal K or R, a C-terminal set holding
+  K or R: over 99% right), an open call takes that series, sure; an a-ion call it agrees with becomes sure, one it
+  contradicts becomes "b or y?" with both reasons in the tooltip. The GUI's terminal-anchor decision, before the a
+  ions and the database peptide are weighed, is the `series` column of `-terminus` on every b/y row (parity test on
+  PXD003531); the call the tab shows also weighs those two and can differ from it. A c/z ladder's anchor gives at most "likely" (no c/z data were measured). None is used above
+  25 ppm or 0.02 Da. The terminus of the shown ladder is marked beside the
+  tag and on the plot. The database peptide still outranks both.
+- **GUI: the Spectrum tab shows one view of the chosen tag.** The tags table of the spectrum's `-out` rows, the b and y
+  ladders on their own lines, the peptide ruler, the error strip and the ladder line. Tags whose ions all lie in a longer tag are
+  no longer in new runs' tables (`-subsume_tags`); the Help says so.
+- **GUI: "b or y?" (and "c or z?").** An open series call is labelled with a question mark in the tags table, the
+  ladder line, the plot and Help. The Tag columns and files group offers `-terminus` (Series and
+  terminus columns) and `-subsume_tags` (Drop tags inside longer tags).
 
 - **GUI: Tags table.** Each row has a spectrum icon that opens it in the Spectrum tab. Length, Extended, Gapped and
   Residue conf. are not shown until ticked under Columns…; Min. conf. and Mean conf. stay.
 
+- **GUI: the start page has no Last run block.** Continue last run, Presets and Open earlier results… sit at the right of the step 1 heading; a finished run opens in Results, and History lists every run with its status.
 - **GUI: the task Export tags is now called Generate tags.**
 - **GUI: Setup is a task-first wizard.** Setup asks one thing at a time in four steps, **Task**, **Inputs**,
   **Settings** and **Outputs & run**, instead of five cards on one page. Step 1 shows the seven tasks as tiles in three
@@ -87,12 +444,24 @@
   permission), records the app and engine versions, the system, the view and the settings as typed values (paths only as
   role and extension), and opens a form with a mark-up editor (boxes, arrows, pen, labels, redactions, keyboard-operable).
   **Save** keeps the report on this computer only (`<app data>/feedback/`, 180 days); sharing is a separate, reviewed
-  step that writes `<id>.feedback.zip` and opens a prefilled GitHub issue form. Screenshot and log are off for sharing by
-  default.
+  step that writes `<id>.feedback.zip` and opens a prefilled GitHub issue form. The screenshot is included for sharing by
+  default when there is one (untick it to leave it out); the log is off.
 - **GUI: tag ladders tied to their peaks** ([#127](https://github.com/okohlbacher/FASTag/issues/127)). In the Spectrum
   tab each residue of the tag now spans the two peaks whose mass difference it is, with a dashed line from the tag line
   down to each of those peaks. The b (or c) and y (or z) ladders get separate lines, labelled and in different colours,
   whenever both lie on the peaks; before, only one ladder was drawn.
+- **GUI: ◀ prev and next ▶ in the Spectrum tab work again, in the Tags table's order.** After a normal run both
+  buttons stayed disabled: the panel asked where the spectrum sat in a per-spectrum view that nothing had built, and
+  the backend answers only for built views. They now step to the previous or next spectrum in the Tags table's order
+  as it was sorted and filtered when the spectrum was opened (each tagged spectrum in file order when opened from
+  Triage), opening it on its first row in that order, wait for the E-value order when it is still being built, and
+  show where the spectrum is ("tag 12 of 340"). Alt+← and Alt+→, Page Up and Page Down do the same. An E-value
+  order still being built after the wait, or a lookup that fails, now says so on the buttons (with **Try again**)
+  instead of quietly walking file order or calling the spectrum the last one; only a spectrum that is not in the
+  table's filtered view is walked in file order, and the tooltips say so.
+- **GUI: Spectrum plot labels.** The left margin fits the widest label, so "b or y?" is no longer cut to "or y?".
+  A position with no peak is marked on every ladder line drawn, not only the chosen one. Hovering or focusing a
+  residue shows its two peaks and their drop lines, with both m/z values and the step's error in its tooltip.
 
 ## 1.15.7 (2026-11-21)
 

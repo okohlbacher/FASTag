@@ -91,6 +91,20 @@ export interface ResultsPage {
   pending?: boolean
 }
 
+// results_neighbours (browser.rs NavAnswer): where a spectrum sits in a view
+// and the spectrum either side of it (◀ ▶ of the Spectrum tab), all read
+// from one snapshot of the file (snapshot: its id; a rewritten file is
+// another). pending: the view is not in its final order yet (D5); absent:
+// neither the row nor any row of the spectrum is in the view.
+export interface NavNeighbour {
+  spectrum: string
+  rowId: number
+}
+export type NavAnswer =
+  | { status: 'pending'; snapshot: number }
+  | { status: 'absent'; snapshot: number }
+  | { status: 'at'; snapshot: number; pos: number; matched: number; rowId: number; prev: NavNeighbour | null; next: NavNeighbour | null }
+
 // results_open: the header and first rows from a head read, before the index.
 export interface ResultsHead {
   generation: number
@@ -137,10 +151,6 @@ export interface ResolvedOutputs {
   delta_spectra_out?: string | null
   delta_counts_out?: string | null
   check_header_out?: string | null
-  // The resolved tags and the tag graph of each spectrum, which the
-  // backend adds beside the tags when the CLI has the options (fastag.rs).
-  resolved_out?: string | null
-  tag_graph_out?: string | null
 }
 
 export interface RunResult {
@@ -275,6 +285,30 @@ export interface TaxonomyStatus {
   fromEnv: boolean
 }
 
+/// Where the CLI finds its shipped digest data and alkylation proteomes
+/// (data.rs data_status): the Mass-shift survey, Characterize a run and
+/// Database reduction need them.
+export interface DataStatus {
+  // The digest folder the CLI reads; null when it finds none.
+  digestDir: string | null
+  // Which tables that folder holds.
+  files: { digestModels: boolean; digestModelsV2: boolean; massgapMods: boolean; calibration: boolean }
+  // The alkylation folder the CLI reads; null when it finds none.
+  alkylationDir: string | null
+  // The shipped proteomes there whose file is present (human, mouse, yeast, ecoli).
+  proteomes: string[]
+  // The digest folders looked in: the one FASTAG_DIGEST_DIR names, else the
+  // three beside the FASTag program.
+  searched: string[]
+  // The digest folder comes from FASTAG_DIGEST_DIR.
+  fromEnv: boolean
+  // -alkylation_proteome auto reads no database: true when the engine lists
+  // -data_paths and says so, false when it reports another reading (the
+  // shipped human proteome), null when it has no -data_paths and so does not
+  // say (the CLI of 0dfac519 reads auto database-free, older ones human).
+  autoDbFree: boolean | null
+}
+
 export interface Settings {
   schemaVersion: number
   lastUsed: Record<string, unknown> | null
@@ -329,6 +363,8 @@ export interface FastagApi extends FeedbackApi {
   taxdbInfo: (explicit?: string) => Promise<TaxdbInfo | null>
   // Where a run with -species finds the taxonomy index (@p explicit: -taxdb).
   taxonomyStatus: (explicit?: string) => Promise<TaxonomyStatus>
+  // Where a run finds FASTag's shipped digest data and proteomes.
+  dataStatus: () => Promise<DataStatus>
   // The -species report, parsed in the renderer (results/species.ts); null
   // when it is missing, unreadable or empty.
   species: (path: string) => Promise<SpeciesReport | null>
@@ -337,6 +373,11 @@ export interface FastagApi extends FeedbackApi {
   // `FASTag <the run's argv> -dump_spectrum <nativeId>` on @p input under
   // the run's @p params (null: the CLI's defaults); its JSON lines in stdout.
   spectrumPeaks: (input: string, nativeId: string, params: Record<string, unknown> | null) => Promise<SpectrumDump>
+  // Residues @p start..@p end (1-based) of the entry @p identifier of the
+  // database @p database (its -fasta or -entrapment_fasta) of the run that
+  // wrote the tags table @p tags. fasta.rs reads only the file that run
+  // recorded, while it is still that file.
+  fastaSegment: (tags: string, database: FastaDatabase, identifier: string, start: number, end: number) => Promise<FastaSegment>
   // Text of a digest/label/mass-gap report; null when the file does not exist.
   report: (path: string) => Promise<string | null>
   // The first 64 KiB of the same file (report.rs HEAD_BYTES): enough to tell
@@ -411,16 +452,21 @@ export interface FastagApi extends FeedbackApi {
   keepLeftovers: (paths: string[]) => Promise<void>
   cancel: () => Promise<{ cancelled: boolean }>
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) => Promise<ResultsPage>
-  // A page of a table no Results table opens (the Spectrum tab's resolved
-  // tags and tag graph): read in full order, with snapshots of its own
+  // A page of a table no Results table opens (the Spectrum tab's tag
+  // placements, -recon_out): read in full order, with snapshots of its own
   // (browser.rs SideTables), never refused as not open.
   tableQuery: (path: string, view: ResultsView, offset: number, limit: number) => Promise<ResultsPage>
   // D5: the head rows now; index and E-value order announced through onEvent.
   resultsOpen: (path: string, onEvent: (e: BrowserEvent) => void) => Promise<ResultsHead>
   // Where file row @p row sits in a built view (null: not built).
   resultsPosition: (path: string, view: ResultsView, row: number) => Promise<number | null>
+  // ◀ ▶ of the Spectrum tab: file row @p row (null: none) or else the first
+  // row of @p spectrum in a view, and its neighbours, from one snapshot.
+  resultsNeighbours: (path: string, view: ResultsView, row: number | null, spectrum: string) => Promise<NavAnswer>
   // Reveal an output of a run of this app (folder: open its folder instead).
   revealOutput: (path: string, folder: boolean) => Promise<void>
+  // Open an output of a run of this app in the app the system gives its type.
+  openOutput: (path: string) => Promise<void>
   // A native menu item (menu.rs): its action name.
   onMenu: (cb: (action: string) => void) => () => void
   // Start an export job: the rows of a view, only the named columns, to dest
@@ -472,6 +518,24 @@ export interface SpectrumSupport {
   supported: boolean
   probed: boolean
   detail: string
+}
+
+// The option of a run's database: -fasta or -entrapment_fasta.
+export type FastaDatabase = 'fasta' | 'entrapment_fasta'
+
+// fasta.rs FastaSegment: residues start..end (1-based, inclusive, clipped to
+// the protein) of one entry of a run's database.
+export interface FastaSegment {
+  identifier: string
+  description: string
+  // The protein's length in residues (0 when ambiguous).
+  length: number
+  start: number
+  end: number
+  sequence: string
+  // The entries of the database with this identifier. More than one: the
+  // CLI's positions may be of any of them, so no residues are returned.
+  occurrences: number
 }
 
 // spectrum.rs SpectrumDump: one -dump_spectrum run (or the LRU's copy).

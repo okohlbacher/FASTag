@@ -15,6 +15,7 @@ import {
   inputParams,
   missingInputs,
   requiredBy,
+  requiredInputs,
   stepState,
   taskInputs
 } from './inputs'
@@ -27,10 +28,15 @@ describe('inputs per task', () => {
     expect(Object.keys(INPUTS).filter((n) => !MANIFEST_INPUTS.includes(n))).toEqual([])
   })
 
-  it('needs a FASTA only for Mass-shift survey and Database reduction', () => {
+  it('needs a FASTA only for Database reduction; Mass-shift survey takes a FASTA or a shipped proteome', () => {
     const needs = TASKS.filter((t) => (t.required ?? []).length > 0).map((t) => t.id)
-    expect(needs).toEqual(['mass-shift', 'db-reduction'])
+    expect(needs).toEqual(['db-reduction'])
     for (const id of needs) expect(T(id).required).toEqual(['recon_fasta'])
+    // Feedback 422372a2: the shift reports wait for a database, never block.
+    expect(TASKS.filter((t) => t.dbOptional).map((t) => t.id)).toEqual(['mass-shift'])
+    expect(T('mass-shift').openInputs).toEqual(['recon_fasta'])
+    expect(T('mass-shift').about).toEqual(['recon_proteome'])
+    expect(requiredInputs(T('mass-shift'), baseValues('builtin:mass-shift'))).toEqual([])
   })
 
   it('offers per task what the step-2 table says', () => {
@@ -72,8 +78,11 @@ describe('inputs per task', () => {
   it('the Filter database stands in for the Protein database', () => {
     const v = { ...baseValues('builtin:mass-shift'), fasta: '/d/h.fasta' }
     expect(missingInputs(T('mass-shift'), v, { input: '/d/a.mzML', jobs: 0, mode: 'one' })).toEqual([])
-    expect(taskInputs(T('mass-shift'), v, 'one').shown).toEqual(['fasta'])
-    expect(missingInputs(T('mass-shift'), baseValues('builtin:mass-shift'), { input: '/d/a.mzML', jobs: 0, mode: 'one' })).toEqual(['recon_fasta'])
+    // The Protein database is shown open, the Filter database once set.
+    expect(taskInputs(T('mass-shift'), v, 'one').shown).toEqual(['recon_fasta', 'fasta'])
+    expect(inputLabel('fasta', T('mass-shift'))).toBe('Filter database (also the Protein database while that is empty)')
+    // No database: nothing is missing, the shift reports are off (runValues).
+    expect(missingInputs(T('mass-shift'), baseValues('builtin:mass-shift'), { input: '/d/a.mzML', jobs: 0, mode: 'one' })).toEqual([])
     expect(missingInputs(T('species'), baseValues('builtin:species'), { input: '', jobs: 0, mode: 'one' })).toEqual(['in'])
   })
 
@@ -165,7 +174,8 @@ describe('inputs per task', () => {
       }
     }
     expect(requiredBy(T('characterize'), { ...baseValues('builtin:characterize'), recon_out: '/d/r.tsv' }, 'recon_fasta')).toBe('Tag placements')
-    expect(requiredBy(T('mass-shift'), baseValues('builtin:mass-shift'), 'recon_fasta')).toBe('Mass-shift survey')
+    // Mass-shift survey requires none (dbOptional): its reports wait for one.
+    expect(requiredInputs(T('mass-shift'), { ...baseValues('builtin:mass-shift'), shortlist_out: '/d/s.tsv' })).toEqual([])
   })
 
   it('warns, never blocks, on a file that is not of the formats the CLI lists', () => {

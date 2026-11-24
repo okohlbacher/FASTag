@@ -26,6 +26,7 @@
 #include <cstdlib>
 #include <memory>
 #include <numeric>
+#include <stdexcept>
 #include <utility>
 
 using namespace OpenMS;
@@ -368,6 +369,14 @@ namespace FASTag::RunQC
       Kit kit;
       kit.name = m->getMethodName();
       kit.family = kit.name.rfind("itraq", 0) == 0 ? 1 : 0;
+      // The label: TMT 6/10/11 carry TMT (229.16), TMTpro 16/18 and iTRAQ8
+      // 304.2 (Digest's TMTpro key), iTRAQ4 its own (144.10).
+      const char* lab = kit.name == "itraq4plex"                             ? "iTRAQ4"
+                        : kit.name == "itraq8plex" || kit.name == "tmt16plex" || kit.name == "tmt18plex" ? "TMTpro"
+                                                                                                        : "TMT";
+      const auto& keys = Digest::labelKeys();
+      for (std::size_t l = 0; l < keys.size(); ++l)
+        if (std::string_view(keys[l].name) == lab) kit.label = static_cast<std::uint8_t>(l);
       for (const auto& ch : m->getChannelInformation())
       {
         const double c = ch.center;
@@ -386,7 +395,33 @@ namespace FASTag::RunQC
         family_low[kit.family] = std::min(family_low[kit.family], c);
         family_high[kit.family] = std::max(family_high[kit.family], c);
       }
+      kit.patterns = {kit.channels};
       kits.push_back(std::move(kit));
+    }
+    // TMT 6-plex has two reagent generations with different 127/129 channels.
+    // OpenMS's TMTSixPlexQuantitationMethod has only the current one
+    // (127N 127.124760, 129N 129.131468; MSnbase TMT6b). The original reagent
+    // (Dayon et al., Anal. Chem. 2008; MSnbase TMT6, e.g. PXD000001) carries
+    // 127C and 129C, 13C rather than 15N: 127.131079 and 129.137787 in MSnbase,
+    // 127.131081 and 129.137790 in OpenMS's TMTTenPlexQuantitationMethod. Those
+    // are already channels here (from TMT10), so the second pattern only
+    // reuses existing bits.
+    for (auto& kit : kits)
+    {
+      if (kit.name != "tmt6plex") continue;
+      std::uint32_t orig = 0;
+      for (const double c : {126.127725, 127.131081, 128.134433, 129.137790, 130.141141, 131.138176})
+      {
+        std::size_t k = 0;
+        while (k < mz.size() && std::fabs(mz[k] - c) > 1e-4) ++k;
+        if (k == mz.size()) throw std::logic_error("ReporterTable: original TMT6 channel not in the TMT10 table");
+        orig |= 1u << k;
+        family_low[kit.family] = std::min(family_low[kit.family], c);
+        family_high[kit.family] = std::max(family_high[kit.family], c);
+      }
+      family_mask[kit.family] |= orig;
+      kit.patterns.push_back(orig);
+      kit.channels |= orig;
     }
   }
 
@@ -476,12 +511,103 @@ namespace FASTag::RunQC
       KitCall kc;
       const std::size_t f = kit.family;
       if (state[f] == "not_assessable") kc = {"not_assessable", reason[f]};
-      else if (state[f] == "present" && (call.observed[f] & ~kit.channels) == 0) kc = {"present", "-"};
+      else if (state[f] == "present" && std::any_of(kit.patterns.begin(), kit.patterns.end(), [&](std::uint32_t p) {
+                 return (call.observed[f] & ~p) == 0;
+               }))
+        kc = {"present", "-"};
       else kc = {"absent", "-"};
       if (kc.state == "present") call.compatible.push_back(kit.name);
       call.kits.push_back(kc);
     }
     return call;
+  }
+
+  LabelEvidence labelEvidence(const Digest::TerminusCounter& tc, const Digest::DigestSettings& s)
+  {
+    LabelEvidence ev;
+    ev.counted = true;
+    ev.tags = tc.tags;
+    const Digest::LabelCall c = Digest::labelCall(tc, s);
+    ev.called = c.called;
+    ev.reason = c.reason;
+    const auto& keys = Digest::labelKeys();
+    for (std::size_t l = 0; l < keys.size(); ++l)
+    {
+      ev.ends[l] = tc.lab_n[l] + tc.lab_c[l];
+      ev.background[l] = tc.lab_bg_n[l] + tc.lab_bg_c[l];
+      ev.passed[l] = std::find(c.labels.begin(), c.labels.end(), keys[l].name) != c.labels.end();
+    }
+    return ev;
+  }
+
+  KitDecision decideKit(const ReporterCall& call, const ReporterTable& table, const LabelEvidence& ev)
+  {
+    KitDecision d;
+    std::array<bool, FAMILY_COUNT> present{}, assessed{};
+    for (std::size_t k = 0; k < table.kits.size() && k < call.kits.size(); ++k)
+    {
+      if (call.kits[k].state == "present") present[table.kits[k].family] = true;
+      if (call.kits[k].state != "not_assessable") assessed[table.kits[k].family] = true;
+    }
+    if (std::none_of(present.begin(), present.end(), [](bool b) { return b; }))
+    {
+      // none: a family was assessed and found absent; not_assessable: none could be.
+      d.kit = std::any_of(assessed.begin(), assessed.end(), [](bool b) { return b; }) ? "none" : "not_assessable";
+      return d;
+    }
+    // The smallest compatible kit per (family, label), in table order.
+    std::vector<std::size_t> cand;
+    for (std::size_t k = 0; k < table.kits.size() && k < call.kits.size(); ++k)
+    {
+      if (call.kits[k].state != "present") continue;
+      const auto& kit = table.kits[k];
+      const bool have = std::any_of(cand.begin(), cand.end(), [&](std::size_t j) {
+        return table.kits[j].family == kit.family && table.kits[j].label == kit.label;
+      });
+      if (!have) cand.push_back(k);
+    }
+    // The labels of the present families that passed the label call.
+    std::array<bool, Digest::NUM_LABELS> relevant{};
+    for (const auto& kit : table.kits)
+      if (present[kit.family]) relevant[kit.label] = true;
+    std::vector<std::size_t> passed;
+    if (ev.counted && ev.called)
+      for (std::size_t l = 0; l < relevant.size(); ++l)
+        if (relevant[l] && ev.passed[l]) passed.push_back(l);
+    if (!ev.counted) d.why = "not_counted";
+    else if (!ev.called) d.why = ev.reason.empty() ? "few_tags" : ev.reason;
+    else if (passed.empty()) d.why = "no_label";
+    else if (passed.size() > 1) d.why = "several_labels";
+    else
+    {
+      std::vector<std::size_t> mine;
+      for (const std::size_t k : cand)
+        if (table.kits[k].label == passed.front()) mine.push_back(k);
+      if (mine.size() == 1)
+      {
+        d.kit = table.kits[mine.front()].name;
+        d.evidence = "label_mass";
+        d.candidates = {d.kit};
+        d.label = static_cast<int>(passed.front());
+        return d;
+      }
+      if (mine.empty())
+      {
+        // The label mass and the channels disagree: a run cannot be both, so
+        // report both pieces of evidence and call no kit.
+        d.why = "label_conflict";
+        d.kit = "conflict";
+        d.evidence = "label_conflict";
+        d.label = static_cast<int>(passed.front());
+        for (const std::size_t k : cand) d.candidates.push_back(table.kits[k].name);
+        return d;
+      }
+      d.why = "several_labels";
+    }
+    d.evidence = "reporters_only";
+    for (const std::size_t k : cand) d.candidates.push_back(table.kits[k].name);
+    d.kit = d.candidates.size() == 1 ? d.candidates.front() : "ambiguous";
+    return d;
   }
 
   // ---- redundancy ----------------------------------------------------------
@@ -1016,6 +1142,117 @@ namespace FASTag::RunQC
     for (const auto& c : call.compatible) compat += (compat.empty() ? "" : ",") + c;
     r.push_back({sec, "reporter_compatible_kits", compat.empty() ? "none" : compat, "-",
                  "Kits compatible with the observed reporters, smallest first; several when the channels do not decide."});
+
+    // ---- the kit call (qc_version 3): what was seen, not what it could be ----
+    const KitDecision kd = decideKit(call, table_, label_ev_);
+    const auto& keys = Digest::labelKeys();
+    std::size_t kit_family = FAMILY_COUNT;
+    for (const auto& kit : table_.kits)
+      if (!kd.candidates.empty() && kit.name == kd.candidates.front()) kit_family = kit.family;
+    const std::string kit_n =
+        kit_family < FAMILY_COUNT ? num(reporters_.by_assess[kit_family][static_cast<std::size_t>(Assess::OK)]) : "-";
+    std::string cands;
+    for (const auto& c : kd.candidates) cands += (cands.empty() ? "" : ",") + c;
+    static const std::map<std::string, std::string> WHY = {
+        {"not_counted", "no tag ends were counted"},
+        {"low_resolution", "the fragment tolerance is in Da, so the label windows do not hold"},
+        {"few_tags", "too few tag ends for a label call"},
+        {"no_label", "no label of the family passed the label call"},
+        {"several_labels", "more than one label passed the label call"},
+        {"label_conflict", "the label that passed has no kit with every observed channel"}};
+    const std::string why = WHY.count(kd.why) ? WHY.at(kd.why) : kd.why;
+    // For a conflict: "<label> (<n> tag ends of <m>)" and the kits the channels allow.
+    std::string conflict_label, conflict_kits;
+    if (kd.evidence == "label_conflict")
+    {
+      const std::size_t l = static_cast<std::size_t>(kd.label);
+      conflict_label = std::string(keys[l].name) + " (" + num(label_ev_.ends[l]) + " tag ends of " +
+                       num(label_ev_.tags) + " filtered tags)";
+      for (std::size_t i = 0; i < kd.candidates.size(); ++i)
+        conflict_kits += (i == 0 ? "" : " or ") + kd.candidates[i];
+    }
+    r.push_back({sec, "reporter_kit", kd.kit, kit_n,
+                 kd.evidence == "label_conflict"
+                     ? "Conflict: the label mass says " + conflict_label + ", but the observed channels fit only " +
+                           conflict_kits + "; no kit is called."
+                 : kd.evidence == "label_mass"
+                     ? "The kit: the smallest kit of the " + std::string(keys[static_cast<std::size_t>(kd.label)].name) +
+                           " label that holds every observed channel; larger kits whose extra channels were not seen are not named."
+                 : kd.evidence == "reporters_only"
+                     ? std::string(kd.kit == "ambiguous" ? "Ambiguous: " : "") +
+                           "the family is not decided by label mass (" + why +
+                           "); reporter_kit_candidates lists the smallest kit per label the channels allow."
+                 : kd.kit == "not_assessable" ? "No reporter family could be assessed (see reporter_<kit>)."
+                                              : "No reporter family is present (a family not assessable is marked so in reporter_<kit>)."});
+    r.push_back({sec, "reporter_kit_candidates", cands.empty() ? "none" : cands, "-",
+                 kd.evidence == "label_conflict"
+                     ? "The kits the observed channels allow; they contradict the label mass, so none is called."
+                     : "The smallest kit per label consistent with the observed channels (and with the label mass when "
+                       "it decides); one entry when the kit is called."});
+    std::string ev_desc;
+    if (kd.evidence == "label_mass")
+    {
+      const std::size_t l = static_cast<std::size_t>(kd.label);
+      ev_desc = "The label mass decides: " + std::string(keys[l].name) + " on " + num(label_ev_.ends[l]) +
+                " tag ends of " + num(label_ev_.tags) + " filtered tags (" + num(label_ev_.background[l]) +
+                " at +0.5 Da).";
+    }
+    else if (kd.evidence == "reporters_only")
+      ev_desc = "Reporter channels only: " + why + ".";
+    else if (kd.evidence == "label_conflict")
+      ev_desc = "The label mass and the reporter channels disagree: the label mass says " + conflict_label +
+                ", the observed channels fit only " + conflict_kits + ".";
+    else
+      ev_desc = "No reporter family is present.";
+    r.push_back({sec, "reporter_family_evidence", kd.evidence,
+                 kd.evidence == "label_mass" || kd.evidence == "label_conflict"
+                     ? num(label_ev_.ends[static_cast<std::size_t>(kd.label)])
+                     : "-",
+                 ev_desc});
+    std::string delta = "n/a";
+    if (kd.label >= 0)
+    {
+      char b[32];
+      std::snprintf(b, sizeof b, "%.6f", keys[static_cast<std::size_t>(kd.label)].mass);
+      delta = b;
+    }
+    r.push_back({sec, "reporter_label_delta", delta, label_ev_.counted ? num(label_ev_.tags) : "-",
+                 kd.label >= 0 ? "The label mass found on the tag ends (Da; n = filtered tags)."
+                               : "No label mass decides the family."});
+    // Per channel: the assessable MS2 of the family with the reporter above
+    // the noise threshold. Every channel of the decided label's kits; without
+    // a label decision, every channel of each present family.
+    std::uint32_t mask = 0;
+    for (const auto& kit : table_.kits)
+    {
+      const bool in_family = std::any_of(kd.candidates.begin(), kd.candidates.end(), [&](const std::string& c) {
+        for (const auto& k2 : table_.kits)
+          if (k2.name == c) return k2.family == kit.family && (kd.label < 0 || k2.label == kit.label);
+        return false;
+      });
+      if (in_family) mask |= kit.channels;
+    }
+    std::vector<std::size_t> chans;
+    for (std::size_t c = 0; c < table_.mz.size(); ++c)
+      if (mask & (1u << c)) chans.push_back(c);
+    std::sort(chans.begin(), chans.end(), [&](std::size_t a, std::size_t b) {
+      return table_.family[a] != table_.family[b] ? table_.family[a] < table_.family[b] : table_.mz[a] < table_.mz[b];
+    });
+    for (const std::size_t c : chans)
+    {
+      const std::uint64_t ok = reporters_.by_assess[table_.family[c]][static_cast<std::size_t>(Assess::OK)];
+      const std::uint64_t seen = c < reporters_.seen.size() ? reporters_.seen[c] : 0;
+      char mz[32];
+      std::snprintf(mz, sizeof mz, "%.6f", table_.mz[c]);
+      const std::string key = "reporter_channel_" + table_.label[c];
+      r.push_back({sec, key, num(seen), num(ok),
+                   "Assessable " + std::string(ReporterTable::familyName(table_.family[c])) +
+                       " MS2 with reporter " + table_.label[c] + " (m/z " + mz + ") within " +
+                       whole(REPORTER_TOL_PPM) + " ppm at 3x the median peak or more."});
+      const std::string sh = share(seen, ok);
+      r.push_back({sec, key + "_share", sh.empty() ? "n/a" : sh, num(ok),
+                   "The share of the assessable MS2 with reporter " + table_.label[c] + "."});
+    }
 
     // ---- tag yield ----
     r.push_back({sec, "ms2_tagged_e001", num(ms2_tagged_), num(ms2_read_),

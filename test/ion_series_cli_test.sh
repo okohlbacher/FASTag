@@ -367,7 +367,9 @@ if [ -n "$BUILDTAXDB" ] && [ -n "$TAXDIR" ] && [ -n "$DB" ] && [ -n "$GEN" ]; th
   awk '/^>/ { if (s != "") print s; print; s = ""; next } { s = s $0 } END { if (s != "") print s }' "$DB" > "$TMP/prot/562.fasta"
   "$BUILDTAXDB" "$TMP/prot" "$TMP/toy.taxdb" 7 > "$TMP/buildtaxdb.log" 2>&1 || { cat "$TMP/buildtaxdb.log" >&2; fail "buildtaxdb"; }
   TAX=(-species -taxdb "$TMP/toy.taxdb" -taxonomy_nodes "$TAXDIR/nodes.dmp" -taxonomy_names "$TAXDIR/names.dmp")
-  SP=(-tag_length 5 -extension 1 -fragment_tolerance 20 -fragment_tolerance_unit ppm "${TAX[@]}")
+  # -subsume_tags off: -species counts every row, so the -out rows are the
+  # c/z rows it leaves out only when -out holds every row.
+  SP=(-tag_length 5 -extension 1 -fragment_tolerance 20 -fragment_tolerance_unit ppm -subsume_tags off "${TAX[@]}")
   runb sp_by "$TMP/syn_cid.mzML" 2 "${SP[@]}"
   runb sp_cz "$TMP/syn_etd.mzML" 2 -ion_series cz "${SP[@]}"
   grep -q 'left out of -species' "$TMP/sp_by.err" && fail "by excludes rows from -species"

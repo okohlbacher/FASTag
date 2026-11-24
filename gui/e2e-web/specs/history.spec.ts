@@ -3,7 +3,7 @@
 // with, with no staging or temporary paths; a run that did not finish is
 // marked incomplete and never opens as if complete. The e2e bridge records
 // each run as fastag.rs does (src/testing/e2eBridge.ts).
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 import { test, expect, openApp, goTo, mockState, toStep } from './fixtures'
 import type { RunRecord } from '../../src/types'
 
@@ -36,19 +36,27 @@ const TEMPORARY = /(^|\/)(tmp|temp|staging)\/|\.part$|\.incomplete$|\.tmp$|AppTr
 const historyRow = (page: Page, input: string) =>
   page.getByRole('table', { name: 'Run history' }).getByRole('row').filter({ hasText: input })
 
+/// A row's More button (C12: the actions other than Open are its menu).
+const more = (row: Locator) => row.getByRole('button', { name: /^More actions for / })
+/// The row action @p name: an item of the row's More menu, opened first.
+async function menuAction(row: Locator, name: string): Promise<Locator> {
+  const m = more(row)
+  if ((await m.getAttribute('aria-expanded')) !== 'true') await m.click()
+  return row.getByRole('menuitem', { name })
+}
+
 test('Copy command in History equals the argv the run was started with', async ({ page }) => {
   await recordClipboard(page)
   await openApp(page)
   await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
-  await expect(page.locator('.last-run')).toContainText('run01.mzML')
   await goTo(page, 'History')
   const row = historyRow(page, 'run01.mzML')
   await expect(row).toContainText('Finished')
   await expect(row).not.toContainText('incomplete')
-  await row.getByRole('button', { name: 'Copy command' }).click()
-  await expect(row.getByRole('button', { name: 'Copied' })).toBeVisible()
+  await (await menuAction(row, 'Copy command')).click()
+  await expect(page.getByRole('status', { name: 'History' })).toContainText('Copied the command of run01.mzML.')
   const [rec] = await mockState<RunRecord[]>(page, 'history')
   const calls = await mockState<{ in: string; out: string }[]>(page, 'runCalls')
   expect(rec.argv.slice(0, 5)).toEqual(['/e2e/FASTag', '-in', calls[0].in, '-out', '/data/run01.tags.tsv'])
@@ -76,7 +84,7 @@ test('a failed batch job: the failure banner and History copy the same command l
   await expect(failed).toContainText('Failed (exit 1)')
   await expect(failed).toContainText('incomplete')
   await expect(failed.getByRole('button', { name: 'Open' })).toHaveCount(0)
-  await failed.getByRole('button', { name: 'Copy command' }).click()
+  await (await menuAction(failed, 'Copy command')).click()
   expect((await copied(page))[1]).toBe(fromBanner)
   for (const name of ['run01.mzML', 'run03.mzML']) await expect(historyRow(page, name)).toContainText('Finished')
   const recs = await mockState<RunRecord[]>(page, 'history')
@@ -88,21 +96,25 @@ test('a cancelled run is marked incomplete in History and never opens as if comp
   await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
-  // P2b: Cancel is the Results running state's (GUI-DESIGN 3 S2; was the
-  // pill's, safety.spec). Click it once the run is under way.
+  // Cancel is the run status pill's on every view (safety.spec); the Results
+  // running state shows the progress and has no second Cancel. Click it
+  // once the run is under way.
   const running = page.getByRole('region', { name: 'Running' })
   await expect(running).toContainText(/Tagging spectra.*50%/)
-  await running.getByRole('button', { name: 'Cancel' }).click()
-  await expect(page.locator('.last-run')).toContainText('partial outputs removed')
+  await expect(running.getByRole('button', { name: 'Cancel' })).toHaveCount(0)
+  await page.getByRole('group', { name: 'Run status' }).getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.locator('#run-status')).toContainText('partial outputs removed')
   await goTo(page, 'History')
   const row = historyRow(page, 'run01.mzML')
   await expect(row).toContainText('Cancelled')
   await expect(row).toContainText('incomplete')
   await expect(row.getByRole('button', { name: 'Open' })).toHaveCount(0)
   await expect(row.getByRole('button', { name: 'Reveal' })).toHaveCount(0)
+  await expect(await menuAction(row, 'Reveal')).toHaveCount(0)
+  await expect(row.getByRole('menuitem', { name: 'Copy command' })).toBeVisible()
   // Its tags file, opened from Results, says the run was cancelled.
   await goTo(page, 'Results')
-  await page.getByRole('button', { name: 'Open a tags TSV…' }).click()
+  await page.getByRole('button', { name: 'Open tags…' }).click()
   await expect(page.locator('.tabpanel')).toContainText('The run that wrote /data/run01.tags.tsv was cancelled')
 })
 
@@ -111,13 +123,13 @@ test('Settings into form puts a recorded run back into Setup, and Undo takes it 
   await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
-  await expect(page.locator('.last-run')).toContainText('run01.mzML')
+  await expect(page.locator('#run-status')).toContainText('Finished run01.mzML')
   // The form has moved on since that run.
   await goTo(page, 'Setup')
   await toStep(page, 'Outputs & run')
   await page.locator('#out-name').fill('elsewhere')
   await goTo(page, 'History')
-  await historyRow(page, 'run01.mzML').getByRole('button', { name: 'Settings into form' }).click()
+  await (await menuAction(historyRow(page, 'run01.mzML'), 'Settings into form')).click()
   const note = page.getByRole('status', { name: 'History' })
   await expect(note).toContainText('The settings of run01.mzML are in the form.')
   await note.getByRole('button', { name: 'Go to Setup' }).click()
@@ -135,7 +147,7 @@ test('Delete record asks first, and keeps the record that marks a left-over tags
   await goTo(page, 'History')
   const row = historyRow(page, 'run01.mzML')
   await expect(row).toContainText('Cancelled')
-  await row.getByRole('button', { name: 'Delete record' }).click()
+  await (await menuAction(row, 'Delete record')).click()
   const ask = row.getByRole('group', { name: 'Delete this record?' })
   await expect(ask.getByRole('button', { name: 'Keep' })).toBeFocused()
   await ask.getByRole('button', { name: 'Delete' }).click()
@@ -143,10 +155,10 @@ test('Delete record asks first, and keeps the record that marks a left-over tags
     'The record was kept: it is what marks /data/run01.tags.tsv as incomplete'
   )
   await expect(row).toHaveCount(1)
-  await expect(row.getByRole('button', { name: 'Delete record' })).toBeFocused()
+  await expect(more(row)).toBeFocused()
   expect((await mockState<RunRecord[]>(page, 'history')).map((r) => r.id)).toEqual(['1762419600000-1'])
   await goTo(page, 'Results')
-  await page.getByRole('button', { name: 'Open a tags TSV…' }).click()
+  await page.getByRole('button', { name: 'Open tags…' }).click()
   await expect(page.locator('.tabpanel')).toContainText('The run that wrote /data/run01.tags.tsv was cancelled')
 })
 
@@ -158,15 +170,15 @@ test('Re-run records the same command line; Delete record keeps focus in the lis
   await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
-  await expect(page.locator('.last-run')).toContainText('run01.mzML')
+  await expect(page.locator('#run-status')).toContainText('Finished run01.mzML')
   // The form moves on; the Re-run does not use it.
   await goTo(page, 'Setup')
   await toStep(page, 'Outputs & run')
   await page.locator('#out-name').fill('elsewhere')
   await goTo(page, 'History')
-  await historyRow(page, 'run01.mzML').getByRole('button', { name: 'Re-run' }).click()
+  await (await menuAction(historyRow(page, 'run01.mzML'), 'Re-run')).click()
   await expect(page.locator('nav[aria-label="Views"] [aria-current="page"]')).toHaveAttribute('data-view', 'results')
-  await expect(page.locator('.last-run')).toContainText('run01.mzML')
+  await expect(page.locator('#run-status')).toContainText('Finished run01.mzML')
   await goTo(page, 'History')
   await expect(historyRow(page, 'run01.mzML')).toHaveCount(2)
   const recs = await mockState<RunRecord[]>(page, 'history')
@@ -176,7 +188,7 @@ test('Re-run records the same command line; Delete record keeps focus in the lis
   expect(recs[0].argv).toContain('/data/run01.tags.tsv')
   // Delete the newer record: focus moves to the remaining row.
   const first = page.getByRole('table', { name: 'Run history' }).getByRole('row').nth(1)
-  await first.getByRole('button', { name: 'Delete record' }).click()
+  await (await menuAction(first, 'Delete record')).click()
   await first.getByRole('group', { name: 'Delete this record?' }).getByRole('button', { name: 'Delete' }).click()
   await expect(page.getByRole('status', { name: 'History' })).toContainText('files were kept')
   await expect(historyRow(page, 'run01.mzML')).toHaveCount(1)

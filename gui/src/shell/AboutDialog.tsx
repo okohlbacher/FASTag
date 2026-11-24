@@ -5,6 +5,7 @@
 import { useRef, type JSX } from 'react'
 import { useModal } from './useModal'
 import type { BinaryInfo } from '../types'
+import openmsLogo from '../assets/openms-logo.png'
 
 // RawFileReader distribution licence, section 3.2: shown verbatim in the About
 // box of software that distributes it (the CLI prints it in --version/--help).
@@ -31,6 +32,10 @@ export default function AboutDialog({ bin, onClose, onFeedbackReports }: { bin: 
         <p className="muted">
           An OpenMS TOPP tool. MIT licence. By Oliver Kohlbacher and contributors.
           {bin && !bin.ok ? ` The FASTag command-line tool cannot start: ${bin.detail}.` : ''}
+        </p>
+        <p className="openms">
+          Built on
+          <img src={openmsLogo} alt="OpenMS" />
         </p>
         <p className="muted">
           Thermo .raw input, in the builds that include it: {THERMO_NOTICE}

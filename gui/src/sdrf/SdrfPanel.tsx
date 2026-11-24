@@ -5,7 +5,6 @@
 // the backend (report.rs write_summary's protect list).
 
 import { useState, type JSX } from 'react'
-import { HelpLink } from '../help/HelpLink'
 import { dirName } from '../app/paths'
 import { baseName } from '../digestReport'
 import { folderPath } from '../run/batch'
@@ -143,7 +142,6 @@ export default function SdrfPanel({ sdrf, busy, outDir, onShow, protect }: SdrfP
     <section className="block sdrf-block" aria-labelledby="sdrf-h">
       <div className="block-head">
         <h2 id="sdrf-h">SDRF</h2>
-        <HelpLink to="workflow-sdrf">How to compare annotations</HelpLink>
         <button type="button" className="secondary small" onClick={() => void sdrf.pick()} disabled={busy || sdrf.loading}>
           {file ? 'Replace SDRF…' : 'Load SDRF…'}
         </button>

@@ -50,7 +50,14 @@
 namespace FASTag::Census
 {
   /// Census format version, written as `census_version` in the summary.
-  inline constexpr int TABLE_VERSION = 1;
+  /// 2 (after 1.15.7): the columns max_len and res_cover after tag_cover, and the
+  /// summary row run/max_tags.
+  /// 3: res_cover places b and c reads by their orientation (addResidueSpans),
+  /// and the column res_cover_exact after res_cover says whether every
+  /// orientation was known and every residue placed on its own (1) or
+  /// res_cover is a lower bound (0: a tag folded, or a gap's residues left
+  /// out).
+  inline constexpr int TABLE_VERSION = 3;
 
   /**
     @brief Per-spectrum status.
@@ -317,6 +324,184 @@ namespace FASTag::Census
   }
 
   /**
+    @brief Which way a tag reads along the peptide (res_cover, census 3).
+
+    The tagger writes every tag as if its low peak were a C-terminal ion (y,
+    or z-dot under c/z); a tag read off the N-terminal series (b, or c) reads
+    the peptide backwards. A -fasta match says which: a forward match is a y
+    or z-dot read, a reverse-only match a b or c read. Without one the
+    orientation is not known.
+  */
+  enum class Orientation : std::uint8_t
+  {
+    Forward,    ///< a y or z-dot read (forward database match)
+    Reversed,   ///< a b or c read (reverse-only database match)
+    Unresolved  ///< no database match to tell (no -fasta)
+  };
+
+  /**
+    @brief Folds residue spans onto the lower half of the peptide, each on its own.
+
+    Each span [a, b] whose midpoint lies above axis / 2 becomes
+    [axis - b, axis - a]. The fold is symmetric about axis / 2 and is decided
+    per residue, so a residue has one image whichever tag holds it: a b read
+    and the complementary y read of the same residues (or an exactly placed
+    read of them) give one image, and so do two overlapping tags whose own
+    midpoints lie on either side of the axis. Folding a folded span again
+    changes nothing. Residues of one tag that mirror each other about the
+    centre then count once, so the count of the folded spans can fall below
+    the tag's length: res_cover takes the longest tag as a second lower bound
+    (resCoverLowerBound).
+
+    @param[in,out] spans Residue intervals.
+    @param[in] first First span to fold.
+    @param[in] last One past the last span to fold.
+    @param[in] axis The mirror axis (Da), see addResidueSpans.
+  */
+  inline void foldResidueSpans(std::vector<std::pair<double, double>>& spans, std::size_t first, std::size_t last,
+                               double axis)
+  {
+    for (std::size_t i = first; i < last && i < spans.size(); ++i)
+      if (0.5 * (spans[i].first + spans[i].second) > 0.5 * axis)
+        spans[i] = {axis - spans[i].second, axis - spans[i].first};
+  }
+
+  /**
+    @brief Appends the residues of one tag to a residue-cover list.
+
+    The spans are first built as the tag TSV writes the tag (the low peak a
+    y ion, or a z-dot ion under c/z): its N-terminal end lies @p nterm_mass
+    of residue mass from the peptide's N-terminus, a position the precursor
+    mass of the tag's hypothesis gives. Walking from that end, each path step
+    (the m/z difference of two path peaks times the fragment charge) holds
+    step_res residues. Each residue a step of one residue resolves is a
+    [start, end] in residue mass from the N-terminus. A gap (a step of two or
+    more residues) does not say where its residues meet: splitting its mass
+    evenly made up a boundary that another tag's resolved residues straddle,
+    and the count then exceeded the residues (an ungapped GWKA and an
+    overlapping S(GW)K gave six for five). Its residues add no span, nor do
+    those of a tag whose path does not describe its residues; the result is
+    false then, res_cover is a lower bound (res_cover_exact 0), and the
+    longest tag is the other one (resCoverLowerBound).
+
+    A b or c read placed so lands at its mirror image about @p axis: residues
+    i..j of the peptide come out at [axis - P(j), axis - P(i-1)], P the
+    prefix residue sum, with axis = M - H2O + IonSeries::IonPair::
+    reversedOffset() (for b/y the precursor's neutral mass M, for c/z-dot
+    M - H2O + offC - offN). Then, by @p orient:
+    - Forward: the spans are kept.
+    - Reversed: each span [a, b] becomes [axis - b, axis - a], the exact
+      placement of the b or c read.
+    - Unresolved: the tag is folded onto the lower half, each residue on
+      its own (foldResidueSpans): a residue whose midpoint lies above
+      axis / 2 is mirrored. A b read and the complementary y read of the
+      same residues then land on one interval, and a residue has the same
+      image in every tag that holds it, so res_cover is a lower bound
+      (residues that mirror each other about the centre count once; the
+      longest tag is the other lower bound, resCoverLowerBound).
+
+    When any tag of a spectrum is Unresolved, the caller folds the known
+    (Forward and Reversed) tags too, after their exact placement, with
+    foldResidueSpans: a known read and an unresolved read of the same
+    residues then share one lower-half image and count once, and res_cover
+    is the lower bound. When every orientation is known nothing is folded.
+
+    @param[in,out] spans Residue intervals appended to.
+    @param[in] nterm_mass The tag's nterm_mass (Da).
+    @param[in] path_mz The path peaks' m/z, ascending.
+    @param[in] step_res Residues per path step, ascending m/z like @p path_mz
+      (empty: one residue per step when that gives @p n_res).
+    @param[in] charge Fragment charge of the tag.
+    @param[in] n_res Tag length (residues).
+    @param[in] res_mass Summed residue mass of the tag (Da); unused (a tag
+      whose path does not describe its residues adds no span).
+    @param[in] orient The tag's orientation (Forward: the 1.15 placement).
+    @param[in] axis The mirror axis (Da); unused for Forward.
+    @return Whether every residue of the tag got a span of its own.
+  */
+  inline bool addResidueSpans(std::vector<std::pair<double, double>>& spans, double nterm_mass,
+                              const std::vector<double>& path_mz, const std::vector<std::uint8_t>& step_res,
+                              int charge, std::size_t n_res, double res_mass,
+                              Orientation orient = Orientation::Forward, double axis = 0.0)
+  {
+    if (n_res == 0) return true;
+    const std::size_t first = spans.size();
+    const std::size_t steps = path_mz.size() > 1 ? path_mz.size() - 1 : 0;
+    std::size_t total = 0;
+    if (step_res.size() == steps)
+      for (const std::uint8_t k : step_res) total += k;
+    const bool by_steps = steps > 0 && charge > 0 &&
+        ((step_res.size() == steps && total == n_res) || (step_res.empty() && steps == n_res));
+    (void)res_mass;  // the residues of a tag without a path have no boundaries to place
+    bool resolved = by_steps;
+    if (by_steps)
+    {
+      const double z = static_cast<double>(charge);
+      const double high = path_mz.back();
+      for (std::size_t k = steps; k-- > 0;)  // from the high-m/z (N-terminal) end
+      {
+        const std::size_t r = step_res.empty() ? 1 : step_res[k];
+        if (r != 1)
+        {
+          resolved = false;  // a gap: where its residues meet is not known
+          continue;
+        }
+        spans.emplace_back(nterm_mass + (high - path_mz[k + 1]) * z, nterm_mass + (high - path_mz[k]) * z);
+      }
+    }
+    if (orient == Orientation::Reversed)
+      for (std::size_t i = first; i < spans.size(); ++i)
+        spans[i] = {axis - spans[i].second, axis - spans[i].first};
+    else if (orient == Orientation::Unresolved)
+      foldResidueSpans(spans, first, spans.size(), axis);
+    return resolved;
+  }
+
+  /**
+    @brief Number of distinct residues among residue intervals (res_cover).
+
+    A residue whose midpoint lies inside a residue already counted is that
+    residue (residues of one peptide never overlap); the intervals are taken
+    in midpoint order.
+
+    @param[in,out] spans Residue intervals [start, end]; sorted in place.
+    @return The number of distinct residues.
+  */
+  inline std::size_t residueCover(std::vector<std::pair<double, double>>& spans)
+  {
+    const auto mid = [](const std::pair<double, double>& s) { return 0.5 * (s.first + s.second); };
+    std::sort(spans.begin(), spans.end(),
+              [&](const auto& x, const auto& y) { return mid(x) < mid(y) || (mid(x) == mid(y) && x < y); });
+    std::size_t n = 0;
+    double reach = -std::numeric_limits<double>::infinity();
+    for (const auto& s : spans)
+    {
+      if (mid(s) < reach) continue;
+      ++n;
+      reach = std::max(reach, s.second);
+    }
+    return n;
+  }
+
+  /**
+    @brief res_cover: the distinct residues of a spectrum's tags (residueCover),
+    and never fewer than its longest tag.
+
+    Both are lower bounds on the residues the tags cover: folded spans
+    (foldResidueSpans) count residues that mirror each other about the centre
+    once, and a gap's residues add no span (addResidueSpans), either of which
+    can fall below one tag's own length; @p max_len is that tag's length.
+
+    @param[in,out] spans Residue intervals; sorted in place.
+    @param[in] max_len The longest reported tag (residues).
+    @return max(residueCover(spans), max_len).
+  */
+  inline std::size_t resCoverLowerBound(std::vector<std::pair<double, double>>& spans, std::size_t max_len)
+  {
+    return std::max(residueCover(spans), max_len);
+  }
+
+  /**
     @brief One census row.
 
     Fields that were not computed for a spectrum are written empty (see
@@ -340,6 +525,9 @@ namespace FASTag::Census
     bool has_best = false;      ///< best and tag_cover are valid
     TagView best;               ///< the best reported tag
     double tag_cover = 0;       ///< tag_cover of the reported rows
+    std::size_t max_len = 0;    ///< the longest reported tag (residues; census 2)
+    std::size_t res_cover = 0;  ///< residues the reported tags cover (residueCover; census 2)
+    bool res_cover_exact = true;  ///< every reported tag's orientation was known and every residue placed on its own (census 3)
     /// -census_score (1.16 item 4): the best of ALL tags of the selected
     /// hypothesis, before any database filter (-fasta), and their tag_cover.
     bool has_pre = false;       ///< pre_best and pre_tag_cover are valid
@@ -358,7 +546,7 @@ namespace FASTag::Census
   {
     return std::string("index\tspectrum\trt\tprecursor_mz\tcharge_given\tcharge_used\tn_peaks\tn_peaks_kept"
                        "\tn_edges\tn_compl\tint_gini\tstatus\tn_found\tn_reported\tbest_evalue\tbest_len"
-                       "\tbest_min_conf\tbest_mean_conf\tbest_tic\ttag_cover")
+                       "\tbest_min_conf\tbest_mean_conf\tbest_tic\ttag_cover\tmax_len\tres_cover\tres_cover_exact")
          + (ion_series ? "\tbest_ion_series" : "")
          + (score ? "\tpre_best_evalue\tpre_best_len\tpre_best_mean_conf\tpre_tag_cover" : "") + "\n";
   }
@@ -413,7 +601,7 @@ namespace FASTag::Census
   /**
     @brief Appends one census row.
 
-    20 fields, one more with @p ion_series, four more with @p score, and a newline.
+    23 fields, one more with @p ion_series, four more with @p score, and a newline.
 
     @param[in,out] buf Buffer appended to.
     @param[in] r The row.
@@ -461,9 +649,12 @@ namespace FASTag::Census
       appendNum(buf, r.best.min_conf, fixed, 3); buf += '\t';
       appendNum(buf, r.best.mean_conf, fixed, 3); buf += '\t';
       appendNum(buf, r.best.peak_tic, general, 6); buf += '\t';
-      appendNum(buf, r.tag_cover, fixed, 4);
+      appendNum(buf, r.tag_cover, fixed, 4); buf += '\t';
+      appendNum(buf, r.max_len); buf += '\t';
+      appendNum(buf, r.res_cover); buf += '\t';
+      buf += r.res_cover_exact ? '1' : '0';
     }
-    else buf += "\t\t\t\t\t";
+    else buf += "\t\t\t\t\t\t\t\t";
     if (ion_series)
     {
       buf += '\t';
@@ -552,6 +743,26 @@ namespace FASTag::Census
       return n;
     }
   };
+
+  /**
+    @brief The run row `max_tags` of -census_summary_out (census 2).
+
+    Written after the run rows: the cap n_found and n_reported stop at.
+
+    @param[in] max_tags -max_tags (0 = no cap).
+    @param[in] n_lengths Number of seed lengths (the cap applies per length).
+    @return The row.
+  */
+  inline Digest::Row maxTagsRow(int max_tags, std::size_t n_lengths)
+  {
+    const std::string v = std::to_string(max_tags);
+    if (max_tags <= 0)
+      return {"run", "max_tags", v, "-", "No cap on the tags reported per spectrum (-max_tags 0)."};
+    const std::string cap = std::to_string(static_cast<std::uint64_t>(max_tags) * n_lengths);
+    return {"run", "max_tags", v, "-",
+            "At most " + v + " tags per spectrum and seed length were kept (-max_tags), so n_found and "
+            "n_reported are at most " + cap + "."};
+  }
 
   /**
     @brief The `census` section of -census_summary_out (after the run rows).

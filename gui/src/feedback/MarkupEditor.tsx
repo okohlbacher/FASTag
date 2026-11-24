@@ -312,7 +312,7 @@ export default function MarkupEditor({ image, numberBase, onDone, onCancel }: Pr
         <button type="button" className="secondary" onClick={onCancel}>
           Cancel
         </button>
-        <button type="button" onClick={done}>
+        <button type="button" className="primary" onClick={done}>
           Done
         </button>
       </div>

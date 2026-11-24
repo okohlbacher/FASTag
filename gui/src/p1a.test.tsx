@@ -99,8 +99,7 @@ describe('the run bar', () => {
     expect(mock.cancelCalls).toBe(1)
     // Windows: TerminateProcess leaves exit code 1, the flag lost the race.
     await act(async () => mock.emitDone({ ok: false, code: 1, cancelled: false, runId: mock.lastRunId }))
-    await waitFor(() => expect(c.querySelector('.last-run-name')?.className).toContain('cancelled'))
-    expect(c.querySelector('.log')?.textContent).toContain('— cancelled (stopped before it finished) —')
+    await waitFor(() => expect(c.querySelector('.log')?.textContent).toContain('— cancelled (stopped before it finished) —'))
     expect(screen.queryByText(/failed \(exit code 1\)/)).toBeNull()
   })
 })

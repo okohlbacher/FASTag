@@ -6,9 +6,6 @@
 // cterm_match delta_mass region delta_interp" plus "loc_site loc_score
 // loc_ties" with -recon_localize; delta: "delta spectra top_interps"; glyco:
 // "spectrum n_oxonium oxonium_frac glyco ions"). Columns are found by name.
-// The resolved tags and the tag graph (-resolved_out, -tag_graph_out) are
-// registered here too, but read per spectrum through resultsQuery by the
-// Spectrum tab (spectrum/cliGraph.ts), not parsed whole.
 //
 // Numbers go into typed arrays and the filters run over them, returning row
 // ids as a Uint32Array in file order: a proteome-scale recon table keeps one
@@ -17,9 +14,8 @@
 
 import type { ResolvedOutputs } from '../types'
 import { baseName } from '../digestReport'
-import { RESOLVED_COLUMNS, TAG_GRAPH_COLUMNS } from '../spectrum/cliGraph'
 
-export type TableKind = 'recon' | 'delta' | 'glyco' | 'reconIds' | 'resolved' | 'tagGraph'
+export type TableKind = 'recon' | 'delta' | 'glyco' | 'reconIds'
 
 /// The table files of one run (or opened by the user), by kind.
 export type TablePaths = Partial<Record<TableKind, string>>
@@ -128,17 +124,42 @@ export function sniffTable(text: string): TableKind | null {
   // reads the first three by name either way.
   if (has(head, DELTA) && (head.length === 3 || has(head, DELTA_SURVEY))) return 'delta'
   if (has(head, GLYCO)) return 'glyco'
-  if (has(head, RESOLVED_COLUMNS)) return 'resolved'
-  if (has(head, TAG_GRAPH_COLUMNS)) return 'tagGraph'
   return null
 }
 
-/// Parse a table of any of the four kinds. Throws with a readable message.
-export function parseTable(text: string, path: string): AnyTable {
-  if (/^\s*<\?xml|^\s*</.test(text)) {
-    const what = /<MzIdentML/i.test(text.slice(0, 4096)) || /\.mzid$/i.test(path) ? 'mzIdentML' : 'idXML'
-    throw new Error(`${baseName(path)} is ${what}; this viewer reads the mzTab form of -recon_id_out (name the file .mzTab), or open it in an identification tool`)
+/// A file in a format this viewer does not show (an idXML or mzIdentML
+/// -recon_id_out): the view lists it as a file to reveal or open, never as
+/// a read error (the user, or an older GUI, chose that format on purpose).
+export class NotShownFormat extends Error {
+  readonly format: string
+  constructor(path: string, format: string) {
+    super(`${baseName(path)} is ${format}; this viewer reads the mzTab form of -recon_id_out (name the file .mzTab), or open it in an identification tool`)
+    this.name = 'NotShownFormat'
+    this.format = format
   }
+}
+
+/// The format of a -recon_id_out by its name: mzTab is shown in Mass
+/// shifts; idXML and mzid (the CLI's other two) are listed as files.
+export function idFormat(path: string): 'mzTab' | 'idXML' | 'mzIdentML' {
+  if (/\.idxml$/i.test(path)) return 'idXML'
+  if (/\.mzid$/i.test(path)) return 'mzIdentML'
+  return 'mzTab'
+}
+
+/// The identification format of an XML file @p text at @p path, by its root
+/// element or its name; null for another XML (an mzML picked as a report).
+export function xmlIdFormat(text: string, path: string): 'idXML' | 'mzIdentML' | null {
+  const head = text.slice(0, 4096)
+  if (/<MzIdentML\b/i.test(head) || /\.mzid$/i.test(path)) return 'mzIdentML'
+  if (/<IdXML\b/i.test(head) || /\.idxml$/i.test(path)) return 'idXML'
+  return null
+}
+
+/// Parse a table of any of the four kinds. Throws with a readable message;
+/// an XML identification file throws NotShownFormat.
+export function parseTable(text: string, path: string): AnyTable {
+  if (/^\s*<\?xml|^\s*</.test(text)) throw new NotShownFormat(path, xmlIdFormat(text, path) ?? 'XML')
   switch (sniffTable(text)) {
     case 'recon':
       return parseRecon(text, path)
@@ -148,9 +169,6 @@ export function parseTable(text: string, path: string): AnyTable {
       return parseGlyco(text, path)
     case 'reconIds':
       return parseReconIds(text, path)
-    case 'resolved':
-    case 'tagGraph':
-      throw new Error(`${baseName(path)} is read per spectrum by the Spectrum tab`)
     default:
       throw new Error(`${baseName(path)} is not a recon, delta, glyco or mzTab table: its header names none of their columns`)
   }
@@ -415,7 +433,5 @@ export function tablePaths(o: ResolvedOutputs): TablePaths {
   if (o.delta_out) p.delta = o.delta_out
   if (o.recon_id_out) p.reconIds = o.recon_id_out
   if (o.glyco_out) p.glyco = o.glyco_out
-  if (o.resolved_out) p.resolved = o.resolved_out
-  if (o.tag_graph_out) p.tagGraph = o.tag_graph_out
   return p
 }

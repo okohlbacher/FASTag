@@ -138,12 +138,12 @@ describe('live: failure and stale results', () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await goTo('results') // the empty Tags pane
-    expect(screen.getByRole('button', { name: /Open a tags TSV/ })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'No results yet' })).toBeTruthy()
     await pick(mock, '/r/A.mzML')
     await click(runButton())
     await done(mock)
     await waitFor(() => expect(mock.resultsQueryCalls.length).toBeGreaterThan(0))
-    expect(screen.queryByRole('button', { name: /Open a tags TSV/ })).toBeNull() // the empty-pane link
+    expect(screen.queryByRole('heading', { name: 'No results yet' })).toBeNull() // the empty pane
     mock.nextPickResults = '/r/other.tags.tsv'
     await click(screen.getByRole('button', { name: 'Open tags…' }))
     await waitFor(() => expect(mock.resultsQueryCalls.at(-1)!.path).toBe('/r/other.tags.tsv'))

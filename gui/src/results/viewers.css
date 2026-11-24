@@ -8,7 +8,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-4) 0;
   min-width: 0;
 }
 .recon-view .headline,
@@ -74,9 +74,13 @@ table.dt thead th { position: sticky; top: 0; background: var(--panel); z-index:
 table.dt .th-sort { all: unset; cursor: pointer; font: inherit; font-weight: 600; }
 table.dt .th-sort:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 table.dt tr.active td { background: var(--primary-soft); }
+/* A scan that opens the Spectrum tab: the Tags table's icon (.rt-spec) and the scan as a link. */
+table.dt .dt-spec { all: unset; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: inherit; border-radius: 3px; }
+table.dt .dt-spec svg { color: var(--primary-text); flex: none; }
+table.dt .dt-spec:hover span { color: var(--primary-text); text-decoration: underline; }
+table.dt .dt-spec:hover svg { color: var(--foreground); }
 table.taxa.dt td.mono { font-family: var(--font-seq); font-size: var(--text-xs); white-space: nowrap; }
 .dt-empty { padding: var(--space-3); color: var(--muted-foreground); font-size: var(--text-sm); }
-.dt-help { margin: 0; font-size: var(--text-xs); color: var(--muted-foreground); }
 .dt-filters { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); align-items: flex-end; font-size: var(--text-sm); }
 .dt-filters label { display: flex; flex-direction: column; gap: 2px; }
 .dt-filters label.check { flex-direction: row; align-items: center; gap: 6px; }
@@ -93,3 +97,9 @@ table.taxa.dt td.mono { font-family: var(--font-seq); font-size: var(--text-xs);
   .mg-mark { stroke: GrayText; opacity: 1; }
   table.dt tr.active td { background: Highlight; color: HighlightText; }
 }
+
+/* Files a run wrote that no viewer here shows (ProductFiles.tsx): Reveal, Open, a note. */
+.written-files { display: flex; flex-direction: column; gap: var(--space-1); margin: var(--space-2) 0; }
+.written-file { flex-wrap: wrap; gap: var(--space-2); }
+.written-file .muted { font-size: var(--text-sm); }
+.written-file button { max-width: 100%; overflow-wrap: anywhere; white-space: normal; height: auto; }

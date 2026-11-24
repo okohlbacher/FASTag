@@ -1,12 +1,65 @@
 /* In-app feedback (feedback/): the dialog, the mark-up editor and the share
    preview, on the D9 tokens (light, dark and system follow them). */
 
-.modal.fb-dialog {
-  max-width: min(1180px, calc(100vw - 2 * var(--space-4)));
-  width: 100%;
-  max-height: calc(100vh - 2 * var(--space-4));
-  overflow: auto;
+/* The panel floats over the app (no scrim; the app stays usable): fixed,
+   placed by FeedbackDialog's left/top/width/height (floating.ts), under the
+   modal questions and About (z-index 10), which make it inert. */
+.fb-panel {
+  position: fixed;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-width: 0;
+  background: var(--card);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+  container-type: inline-size;
 }
+.fb-panel[hidden] { display: none; }
+.fb-panel:focus { outline: none; }
+.fb-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: none;
+  min-height: 44px;
+  padding: 0 var(--space-2) 0 var(--space-1);
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+.fb-panel.collapsed .fb-bar { border-bottom: 0; border-radius: var(--radius-md); }
+.fb-bar h2 { flex: 1; margin: 0; font-size: var(--text-md, 1rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fb-bar button.icon-btn { display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--muted-foreground); flex: none; }
+.fb-bar button.icon-btn:hover:not(:disabled) { background: var(--card); color: var(--foreground); opacity: 1; }
+.fb-bar button.fb-grip { cursor: move; font-size: 14px; }
+.fb-body { flex: 1; min-height: 0; overflow: auto; padding: var(--space-3) var(--space-4) var(--space-4); }
+.fb-body[hidden] { display: none; }
+.fb-body p { margin: 0 0 var(--space-3); }
+.fb-body .row.actions > button { height: 40px; border-radius: var(--radius-md); }
+.fb-body .row.actions { flex-wrap: wrap; }
+.fb-shot-actions { flex-wrap: wrap; }
+.fb-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 0 0 var(--radius-md) 0;
+  background: linear-gradient(135deg, transparent 50%, var(--border) 50%, var(--border) 60%, transparent 60%, transparent 70%, var(--border) 70%, var(--border) 80%, transparent 80%);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+.fb-resize:hover:not(:disabled) { background-color: transparent; border: 0; }
+.fb-resize:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .fb-dialog h3 { margin: 0 0 var(--space-2); font-size: var(--text-md, 1rem); }
 .fb-dialog h3:focus { outline: none; }
 .fb-error:empty { display: none; }
@@ -55,7 +108,8 @@
 .fb-report-list { list-style: none; margin: 0 0 var(--space-3); padding: 0; }
 .fb-report-list li { display: flex; justify-content: space-between; gap: var(--space-2); padding: var(--space-1) 0; border-bottom: 1px solid var(--row-rule); }
 
-@media (max-width: 1000px) {
+/* The panel's own width decides (it is resizable), not the window's. */
+@container (max-width: 760px) {
   .fb-cols { grid-template-columns: minmax(0, 1fr); }
   .fb-markup-body { flex-direction: column; }
 }

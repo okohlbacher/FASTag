@@ -4,7 +4,7 @@
 // read once is kept (tableStore.ts): showing its tab again reads nothing.
 
 import { useEffect, useState } from 'react'
-import { parseTable, type AnyTable, type TableKind } from './tables'
+import { NotShownFormat, parseTable, type AnyTable, type TableKind } from './tables'
 import { keepTable, keptTable } from './tableStore'
 
 export interface TableState<T extends AnyTable = AnyTable> {
@@ -13,9 +13,18 @@ export interface TableState<T extends AnyTable = AnyTable> {
   loading: boolean
   /// The path was given, but the file does not exist.
   missing: boolean
+  /// An identifications file in a format this viewer does not show
+  /// (NotShownFormat): listed as a file, not an error.
+  notShown: boolean
+  /// The file is over the viewer's size limit (report.rs read_report,
+  /// TOO_LARGE_PREFIX): an identifications file is then listed as a file.
+  tooLarge: boolean
 }
 
-const NONE: TableState<never> = { table: null, error: null, loading: false, missing: false }
+// report.rs TOO_LARGE_PREFIX: the start of the error for a file over its limit.
+export const TOO_LARGE_PREFIX = 'too large to show'
+
+const NONE: TableState<never> = { table: null, error: null, loading: false, missing: false, notShown: false, tooLarge: false }
 
 /// @p gen: how often the table was opened (Reports.gen); a new value reads
 /// the file again at the same path, as a rerun or a reopened file needs.
@@ -50,7 +59,13 @@ export function useTable<K extends TableKind>(path: string | undefined, kind: K,
         setState({ at, s: { ...NONE, table: t as T } })
       })
       .catch((e: unknown) => {
-        if (live) setState({ at, s: { ...NONE, error: `Cannot read ${path}: ${e instanceof Error ? e.message : String(e)}` } })
+        if (!live) return
+        // Only the identifications have a format not shown (idXML, mzid); XML
+        // in a recon, delta or glyco table is a broken file, named in red.
+        const m = e instanceof Error ? e.message : String(e)
+        if (e instanceof NotShownFormat && kind === 'reconIds') setState({ at, s: { ...NONE, notShown: true } })
+        else if (m.startsWith(TOO_LARGE_PREFIX)) setState({ at, s: { ...NONE, tooLarge: true, error: `Cannot show ${path} here: ${m}` } })
+        else setState({ at, s: { ...NONE, error: `Cannot read ${path}: ${m}` } })
       })
     return () => {
       live = false

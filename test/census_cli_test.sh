@@ -18,6 +18,12 @@
 #       --sampled-ms2: FASTag's sampleByCount over OpenMS's MS levels)
 #   (i) diatracer_like.mzML (precursor only as the isolation target) runs and
 #       gets no acquisition-related status
+#   (j) census 2: max_len is the longest tag TSV row of the spectrum,
+#       best_len <= max_len <= res_cover, both empty iff best_evalue is, and
+#       the summary's run row max_tags is the run's -max_tags
+#   (k) census 3: res_cover_exact is empty iff best_evalue is, 0 on every
+#       row without a -fasta filter (folded lower bound), 0 or 1 with one
+#       and 1 on some row (a tag matching one orientation only)
 #   -out_spectra lists -census only when it is set (the 1.11 parameter list
 #   of the compatibility shim holds at defaults)
 # and the expected status of every census_edge spectrum.
@@ -72,10 +78,19 @@ for mode in fasta recon_fasta; do
 done
 
 # ---- (b) rows, (c) tagged set, (e) n_ms2, (f) summary -------------------------
-check_run() {  # census summary tags log mzML_for_count subsampled
-  local c="$1" s="$2" t="$3" l="$4" src="$5" sub="$6"
-  [ "$(head -1 "$c" | awk -F'\t' '{ print NF }')" = 20 ] || fail "$c: header has not 20 fields"
-  awk -F'\t' 'NF != 20 { exit 1 }' "$c" || fail "$c: a row has not 20 fields"
+check_run() {  # census summary tags log mzML_for_count subsampled [max_tags [res_cover_exact]]
+  local c="$1" s="$2" t="$3" l="$4" src="$5" sub="$6" mt="${7:-50}" ex="${8:-0}"
+  [ "$(head -1 "$c" | awk -F'\t' '{ print NF }')" = 23 ] || fail "$c: header has not 23 fields"
+  awk -F'\t' 'NF != 23 { exit 1 }' "$c" || fail "$c: a row has not 23 fields"
+  [ "$(head -1 "$c" | cut -f20-23)" = "$(printf 'tag_cover\tmax_len\tres_cover\tres_cover_exact')" ] \
+    || fail "(j) $c: census 2/3 columns"
+  # (k) census 3
+  awk -F'\t' -v ex="$ex" 'NR > 1 && (($15 == "") != ($23 == "") \
+               || ($23 != "" && (ex == "0" ? $23 != "0" : ($23 != "0" && $23 != "1")))) { exit 1 }' "$c" \
+    || fail "(k) $c: res_cover_exact is not $ex on a row with a best tag (or is set without one)"
+  if [ "$ex" = any ]; then
+    [ "$(col "$c" 23 | grep -cx 1)" -gt 0 ] || fail "(k) $c: -fasta resolved no orientation"
+  fi
   if [ -n "$src" ]; then
     [ "$(rows "$c")" = "$(ms2_in "$src")" ] || fail "(b) $c: $(rows "$c") rows for $(ms2_in "$src") MS2 spectra"
   fi
@@ -93,7 +108,16 @@ check_run() {  # census summary tags log mzML_for_count subsampled
   awk -F'\t' 'NF != 5 { exit 1 }' "$s" || fail "(f) $s: a line has not five fields"
   [ "$(head -1 "$s")" = "$(printf 'section\tkey\tvalue\tn\tdescription')" ] || fail "(f) $s: header"
   [ "$(sed -n 2p "$s" | cut -f1,2)" = "$(printf 'run\tversion')" ] || fail "(f) $s: does not start with the run rows"
-  [ "$(summary "$s" census_version)" = 1 ] || fail "(f) $s: census_version"
+  [ "$(summary "$s" census_version)" = 3 ] || fail "(f) $s: census_version"
+  # (j) census 2
+  cmp -s <(awk -F'\t' 'NR > 1 && $3 > m[$1] { m[$1] = $3 } END { for (k in m) print k "\t" m[k] }' "$t" | sort) \
+         <(awk -F'\t' 'NR > 1 && $21 != "" { print $2 "\t" $21 }' "$c" | sort) \
+    || fail "(j) $c: max_len is not the longest tag TSV row of the spectrum"
+  awk -F'\t' 'NR > 1 && (($15 == "") != ($21 == "") || ($15 == "") != ($22 == "") \
+               || ($21 != "" && ($21 + 0 < $16 + 0 || $22 + 0 < $21 + 0))) { exit 1 }' "$c" \
+    || fail "(j) $c: best_len <= max_len <= res_cover, or the empty fields, do not hold"
+  [ "$(awk -F'\t' '$1 == "run" && $2 == "max_tags" { print $3 }' "$s")" = "$mt" ] \
+    || fail "(j) $s: run row max_tags is not $mt"
   local sum=0
   for st in $STATUSES; do
     local n; n=$(summary "$s" "count_$st")
@@ -111,8 +135,18 @@ check_run "$C" "$S" "$TMP/on/tags.tsv" "$TMP/on/log" "$IN" 0
 [ "$(col "$C" 12 | grep -cx tagged)" -gt 0 ] || fail "no tagged spectrum in the fixture; the checks prove nothing"
 for mode in fasta recon_fasta; do
   d="$TMP/r_$mode/on"
-  check_run "$d/census.tsv" "$d/summary.tsv" "$d/tags.tsv" "$d/log" "$IN" 0
+  ex=0; [ $mode = fasta ] && ex=any
+  check_run "$d/census.tsv" "$d/summary.tsv" "$d/tags.tsv" "$d/log" "$IN" 0 50 $ex
 done
+# (j) with several lengths and extension, max_len and best_len part ways.
+mkdir -p "$TMP/ml"
+run "$TMP/ml/log" -in "$IN" -out "$TMP/ml/tags.tsv" -census -tag_lengths 3 4 -extension 2 -max_tags 7 \
+  ${ARGS[@]+"${ARGS[@]}"}
+check_run "$TMP/ml/tags.census.tsv" "$TMP/ml/tags.census_summary.tsv" "$TMP/ml/tags.tsv" "$TMP/ml/log" "$IN" 0 7
+[ "$(awk -F'\t' 'NR > 1 && $21 != "" && $21 + 0 > $16 + 0' "$TMP/ml/tags.census.tsv" | wc -l)" -gt 0 ] \
+  || fail "(j) no spectrum whose longest tag is longer than its best; the max_len check proves nothing"
+grep -q $'^run\tmax_tags\t7\t-\t.*at most 14\\.' "$TMP/ml/tags.census_summary.tsv" \
+  || fail "(j) the max_tags row does not give the cap over two lengths"
 
 # ---- (d) placed = the spectra of recon.tsv; some reported spectrum unplaced ---
 d="$TMP/r_recon_fasta/on"

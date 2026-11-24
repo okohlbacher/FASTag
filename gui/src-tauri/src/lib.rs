@@ -1,10 +1,12 @@
 #[doc(hidden)]
 pub mod browser;
 mod close_guard;
+mod data;
 pub mod denovo;
 mod drop;
 mod events;
 mod examples;
+mod fasta;
 mod fastag;
 mod feedback;
 mod feedback_capture;
@@ -67,6 +69,20 @@ pub fn run() {
             |action| {
                 let _ = app.emit(menu::MENU_EVENT, action);
             },
+            // The Linux Edit items (menu.rs EditEntry::Ours): WebKitGTK's
+            // own editing command on the focused field of the main webview.
+            // No other platform has these ids.
+            |cmd| {
+                #[cfg(target_os = "linux")]
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.with_webview(move |pw| {
+                        use webkit2gtk::WebViewExt;
+                        pw.inner().execute_editing_command(cmd);
+                    });
+                }
+                #[cfg(not(target_os = "linux"))]
+                let _ = cmd;
+            },
         );
     });
     builder
@@ -127,6 +143,7 @@ pub fn run() {
         .manage(browser::BrowserCache::default())
         .manage(browser::SideTables::default())
         .manage(spectrum::SpectrumCache::default())
+        .manage(fasta::FastaCache::default())
         .invoke_handler(tauri::generate_handler![
             fastag::probe,
             examples::example_input,
@@ -142,12 +159,14 @@ pub fn run() {
             history::history_delete,
             history::history_rerun,
             reveal::reveal_output,
+            reveal::open_output,
             close_guard::set_ui_busy,
             close_guard::close_answer,
             notify::notify_finished,
             browser::results_open,
             browser::results_query,
             browser::results_position,
+            browser::results_neighbours,
             browser::results_export,
             browser::results_cancel,
             browser::table_query,
@@ -161,8 +180,10 @@ pub fn run() {
             drop::path_status,
             species::taxdb_info,
             species::taxonomy_status,
+            data::data_status,
             spectrum::spectrum_support,
             spectrum::spectrum_peaks,
+            fasta::fasta_segment,
             settings::load_settings,
             settings::save_last,
             settings::save_preset,
@@ -199,6 +220,17 @@ pub fn run() {
                     let _ = window.emit(drop::HOVER_EVENT, over);
                 },
                 |route| {
+                    // A dropped identification file is listed with Reveal and
+                    // Open (Mass shifts): the drop scopes it, as a run does,
+                    // and Open records its identity now (reveal.rs may_open).
+                    let mgr = window.app_handle().state::<RunManager>();
+                    let dropped = drop::openable(&route);
+                    if let Ok(mut o) = mgr.openable.lock() {
+                        o.extend(dropped.iter().filter_map(|p| reveal::openable_identity(p)));
+                    }
+                    if let Ok(mut r) = mgr.revealable.lock() {
+                        r.extend(dropped);
+                    }
                     let _ = window.emit(drop::DROP_EVENT, route);
                 },
             ),

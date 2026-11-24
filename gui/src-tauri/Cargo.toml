@@ -1,6 +1,6 @@
 [package]
 name = "fastag"
-version = "1.15.7"
+version = "1.16.0"
 description = "FASTag desktop GUI"
 authors = ["Oliver Kohlbacher and contributors"]
 license = "MIT"
@@ -30,6 +30,9 @@ tauri-plugin-store = "~2.4.0"
 # Feedback report ids (feedback.rs uuid_v4): the OS generator, already in the
 # lock through rand (tauri-plugin-notification).
 getrandom = "0.3"
+# The taxonomy fetch's completion marker names its manifest by sha256
+# (data.rs fetched_complete); already in the lock through tauri.
+sha2 = "0.10"
 
 # The native feedback screenshot (feedback_capture.rs), with the platform
 # crates tauri itself uses at the versions the lock pins; only features are
@@ -53,12 +56,13 @@ version = "0.61"
 features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Memory"]
 
 # Process lifetime (lifetime.rs): prctl/getppid on Linux, the per-run job
-# object on Windows. Both already in the lock file through tauri.
+# object on Windows; a database's file identity (fasta.rs file_id). Both
+# already in the lock file through tauri.
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_System_Time"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_System_Time"] }
 
 [dev-dependencies]
 # tauri::test (MockRuntime): settings.rs opens its store in a mock app.

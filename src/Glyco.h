@@ -15,6 +15,15 @@
 // oxonium region; oxonium ions are intrinsically singly charged, so 1+ m/z
 // matching without deisotoping is correct, not a shortcut.
 //
+// A HexNAc fragment (the cross-ring and water losses 126.055 to 186.076)
+// counts only when HexNAc 204.087 itself is matched: the fragments are
+// evidence of that one HexNAc, not of a second species, and HexNAc
+// glycopeptide spectra carry 204.087 itself. On PXD003531 and PXD020401
+// 792 and 484 flags rested on HexNAc fragments alone, most often 126.055 +
+// 144.066 with no 204.087 (FASTag 1.16); at 0.3 Da 126.055 also takes the
+// TMT reporter 126.128. The sialic acid ions (NeuAc-H2O is often the
+// stronger) count on their own.
+//
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
 // $Maintainer: Oliver Kohlbacher $
@@ -35,8 +44,9 @@ namespace FASTag
   */
   struct OxoniumIon
   {
-    double mz;         ///< singly-protonated m/z
-    const char* name;  ///< glycan fragment name, e.g. "HexNAc"
+    double mz;                      ///< singly-protonated m/z
+    const char* name;               ///< glycan fragment name, e.g. "HexNAc"
+    const char* parent = nullptr;   ///< a fragment's parent ion (its name), which must match for it to count
   };
 
   /**
@@ -52,9 +62,9 @@ namespace FASTag
   inline const std::vector<OxoniumIon>& oxoniumTable()
   {
     static const std::vector<OxoniumIon> T = {
-        {126.05495, "HexNAc-C2H6O3"}, {138.05495, "HexNAc-CH6O3"},
-        {144.06552, "HexNAc-C2H4O2"}, {163.06010, "Hex"},
-        {168.06552, "HexNAc-2H2O"},   {186.07608, "HexNAc-H2O"},
+        {126.05495, "HexNAc-C2H6O3", "HexNAc"}, {138.05495, "HexNAc-CH6O3", "HexNAc"},
+        {144.06552, "HexNAc-C2H4O2", "HexNAc"}, {163.06010, "Hex"},
+        {168.06552, "HexNAc-2H2O", "HexNAc"},   {186.07608, "HexNAc-H2O", "HexNAc"},
         {204.08665, "HexNAc"},        {243.02638, "HexP"},
         {274.09213, "NeuAc-H2O"},     {290.08705, "NeuGc-H2O"},
         {292.10269, "NeuAc"},         {308.09761, "NeuGc"},
@@ -69,7 +79,7 @@ namespace FASTag
   */
   struct OxoniumScan
   {
-    int n_matched = 0;        ///< distinct oxonium species found
+    int n_matched = 0;        ///< distinct oxonium ions found (a fragment only with its parent)
     double frac = 0.0;        ///< summed matched intensity / base peak (can exceed 1)
     std::string ions;         ///< semicolon-joined names, "-" if none
     bool glyco = false;       ///< flagged: n_matched >= 2 and frac >= min_fraction
@@ -78,9 +88,10 @@ namespace FASTag
   /**
     @brief Scans a raw spectrum for the table's oxonium ions.
 
-    Takes the most intense peak in each ion's window. The spectrum is flagged
-    when at least two distinct ions match and their summed intensity is at
-    least @p min_fraction of the base peak.
+    Takes the most intense peak in each ion's window; a fragment ion
+    (OxoniumIon::parent) counts only when its parent ion matches. The
+    spectrum is flagged when at least two ions count and their summed
+    intensity is at least @p min_fraction of the base peak.
 
     @param[in] spec RAW spectrum, sorted by m/z.
     @param[in] frag_tol Fragment tolerance (ppm or Da, see @p tol_ppm).
@@ -99,17 +110,29 @@ namespace FASTag
     for (const auto& p : spec) base = std::max(base, static_cast<double>(p.getIntensity()));
     if (base <= 0.0) return out;
 
-    double matched_sum = 0.0;
-    std::string names;
-    for (const auto& ion : oxoniumTable())
+    const auto& table = oxoniumTable();
+    std::vector<double> found(table.size(), 0.0);
+    for (std::size_t i = 0; i < table.size(); ++i)
     {
+      const auto& ion = table[i];
       const double tol = tol_ppm ? ion.mz * frag_tol * 1e-6 : frag_tol;
       auto lo = std::lower_bound(spec.begin(), spec.end(), ion.mz - tol,
                                  [](const OpenMS::Peak1D& p, double v) { return p.getMZ() < v; });
-      double best = 0.0;
       for (; lo != spec.end() && lo->getMZ() <= ion.mz + tol; ++lo)
-        best = std::max(best, static_cast<double>(lo->getIntensity()));
-      if (best > 0.0)
+        found[i] = std::max(found[i], static_cast<double>(lo->getIntensity()));
+    }
+    const auto parentFound = [&](const char* parent) {
+      for (std::size_t j = 0; j < table.size(); ++j)
+        if (std::string(table[j].name) == parent) return found[j] > 0.0;
+      return false;
+    };
+    double matched_sum = 0.0;
+    std::string names;
+    for (std::size_t i = 0; i < table.size(); ++i)
+    {
+      const auto& ion = table[i];
+      const double best = found[i];
+      if (best > 0.0 && (!ion.parent || parentFound(ion.parent)))
       {
         ++out.n_matched;
         matched_sum += best;

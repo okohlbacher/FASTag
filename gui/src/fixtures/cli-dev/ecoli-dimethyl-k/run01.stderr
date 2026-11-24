@@ -1,0 +1,5 @@
+min_filter_length 3 is below the derived floor 4; about 42.3942% of random tags that length occur in this database by chance.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.12 over 26 repeat gaps, cycle 51, 113 distinct precursor m/z, 0% uncharged, 139 MS2 probed))
+Complement tolerance (auto): measured 0.17348341625534652 Da, in force 0.17348341625534652 Da; probe 139 MS2, 43 confident tags, 76 pairs within 0.9 Da (signal 70, median error 0.0290222 Da, MAD 0.0497131 Da)
+Tolerance by analyzer: ion-trap MS2 at 0.5 Da, complement window 0.190947 Da (measured; probe 139 ion-trap MS2, 51 confident tags, 88 pairs); other MS2 at 0.3 Da. The probe draw found 139 ion-trap MS2.
+Tolerance by analyzer: 139 ion-trap MS2 tagged at 0.5 Da, 0 other MS2 at 0.3 Da

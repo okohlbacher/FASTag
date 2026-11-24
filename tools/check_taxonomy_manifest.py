@@ -2,6 +2,7 @@
 """Check a taxonomy directory against its MANIFEST.json.
 
     check_taxonomy_manifest.py <share-FASTag-taxonomy dir> [<manifest.json>]
+    check_taxonomy_manifest.py --pinned <manifest.json> <taxonomy dir>
 
 Every file the manifest lists under "files" must be in the directory with the
 sha256 (and size) the manifest records; the index must be there. With a
@@ -10,6 +11,11 @@ MANIFEST.json if the directory has none (the pinned index of 2026-09-01
 predates the manifest; data/taxonomy/manifests/ holds the reconstructed one).
 Exits 1 on any mismatch, so a bundle cannot ship an index with a manifest
 that describes another one.
+
+--pinned checks a final payload (a mounted disk image, an unpacked package,
+an installed app) against the pinned manifest itself, writing nothing: each
+file the manifest lists must be a regular file there (no symlink) with the
+manifest's size and sha256, whatever MANIFEST.json the folder carries.
 """
 import hashlib
 import json
@@ -26,7 +32,35 @@ def sha256(p: Path) -> str:
     return h.hexdigest()
 
 
+def check(d: Path, files: dict) -> list:
+    """The mismatches of @p d against @p files (the manifest's "files")."""
+    index = [n for n in files if n.endswith(".taxdb")]
+    bad = []
+    if not index:
+        bad.append("the manifest lists no .taxdb index")
+    for name, rec in sorted(files.items()):
+        p = d / name
+        if p.is_symlink() or not p.is_file():
+            bad.append(f"{name}: missing or not a regular file in {d}")
+            continue
+        if rec.get("bytes") is not None and p.stat().st_size != rec["bytes"]:
+            bad.append(f"{name}: {p.stat().st_size} bytes, the manifest says {rec['bytes']}")
+            continue
+        got = sha256(p)
+        if got != rec["sha256"]:
+            bad.append(f"{name}: sha256 {got}, the manifest says {rec['sha256']}")
+        else:
+            print(f"{name}: sha256 {got} as pinned", file=sys.stderr)
+    return bad
+
+
 def main() -> int:
+    if len(sys.argv) == 4 and sys.argv[1] == "--pinned":
+        files = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8")).get("files", {})
+        bad = check(Path(sys.argv[3]), files)
+        for b in bad:
+            print(f"::error::taxonomy index in {sys.argv[3]}: {b}", file=sys.stderr)
+        return 1 if bad else 0
     if len(sys.argv) not in (2, 3):
         print(__doc__, file=sys.stderr)
         return 2
@@ -39,23 +73,7 @@ def main() -> int:
         print(f"{d}: no MANIFEST.json", file=sys.stderr)
         return 1
     files = json.loads(m.read_text(encoding="utf-8")).get("files", {})
-    index = [n for n in files if n.endswith(".taxdb")]
-    bad = []
-    if not index:
-        bad.append("the manifest lists no .taxdb index")
-    for name, rec in sorted(files.items()):
-        p = d / name
-        if not p.is_file():
-            bad.append(f"{name}: missing")
-            continue
-        if rec.get("bytes") is not None and p.stat().st_size != rec["bytes"]:
-            bad.append(f"{name}: {p.stat().st_size} bytes, the manifest says {rec['bytes']}")
-            continue
-        got = sha256(p)
-        if got != rec["sha256"]:
-            bad.append(f"{name}: sha256 {got}, the manifest says {rec['sha256']}")
-        else:
-            print(f"{name}: sha256 {got} as in MANIFEST.json", file=sys.stderr)
+    bad = check(d, files)
     for b in bad:
         print(f"::error::taxonomy manifest: {b}", file=sys.stderr)
     return 1 if bad else 0

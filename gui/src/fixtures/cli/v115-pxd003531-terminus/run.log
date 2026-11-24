@@ -1,0 +1,7 @@
+Modifications: Carbamidomethyl (C, fixed)
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1694 repeat gaps, cycle 177, 2306 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Subsampling: tagging 30 of 32513 input spectra (seed 13)
+Tolerance by analyzer: ion-trap MS2 at 0.5 Da, complement window 0.02 Da (fallback); other MS2 at 20 ppm. The probe draw found 0 ion-trap MS2.
+23 MS2 spectra, 1098 tags
+Subsumed tags dropped: 0
+Tolerance by analyzer: 0 ion-trap MS2 tagged at 0.5 Da, 23 other MS2 at 20 ppm

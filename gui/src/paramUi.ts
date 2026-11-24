@@ -124,10 +124,14 @@ const DB_UNUSED: Dependency = {
 /// Read wherever tags meet protein sequences: the database filter and every
 /// report that places tags (FASTag.cpp: the filter and TagReconciler take the
 /// orientation and the isobaric tolerance).
+// The alkylation report places only with a database (FASTag.cpp
+// alk_place): with a Filter database (in the list), a Protein database (then
+// DB_UNUSED's readers) or a named proteome, never on its own.
 const TAGS_ON_DB: Dependency = {
-  on: ['fasta', ...(DB_UNUSED.on as string[])],
+  on: ['fasta', 'recon_out', 'shortlist_out', 'fasta_out', 'search_config_out', 'alkylation_proteome'],
+  when: { alkylation_proteome: { isNot: ['auto'] } },
   say: 'a Filter database, or a report that places tags on a protein database',
-  note: 'keep only tags found in a database, or turn on the placements, the shortlist or the alkylation report'
+  note: 'keep only tags found in a database, or turn on the placements or the shortlist'
 }
 const DELTA_OFF: Dependency = { on: 'delta_out', note: 'only the mass-shift table uses it' }
 const SHORTLIST_OFF: Dependency = { on: ['shortlist_out', 'fasta_out', 'search_config_out'], note: 'no shortlist is written' }
@@ -222,7 +226,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     ],
     help: {
       text: 'Tag only this share of the spectra (more than 0, up to 1), chosen at random. 0 tags all of them.',
-      tip: '0.1 gives a fast species call on a large run.'
+      tip: 'All spectra is the default. 0.1 gives a faster species call on a large run, but too few cysteines may vote for an alkylation call.'
     }
   },
   subsample_seed: {
@@ -379,40 +383,6 @@ export const PARAM_UI: Record<string, ParamUi> = {
       tip: '0.04 Da is the default.'
     }
   },
-  // ---- Resolved tags (-resolved_out, -tag_graph_out: the Spectrum tab)
-  resolve_score: {
-    section: 'Resolved tags, advanced',
-    label: 'Ranking',
-    help: {
-      text: "How the resolved tags of a spectrum are ranked, the tags merged on its peaks that the Spectrum tab shows under All tags. cstar adds, for each step a chain gains, the step's C* log-odds of being right (its peaks, mass error, rival steps and the support of the tags) less the step threshold, and ranks first the best resolved tag that holds no peak together with its own complement; steplogodds is the same with the simpler 1.15 step model and without that rule; evidence sums the E-value evidence of a resolved tag's tags; anchor puts the resolved tag of the best single tag first and ranks the rest by steplogodds.",
-      tip: 'Keep cstar, the default: it won the preregistered held-out test, at 20 ppm and at 0.5 Da.'
-    }
-  },
-  resolve_threshold: {
-    section: 'Resolved tags, advanced',
-    label: 'Step threshold',
-    depends: [{ on: 'resolve_score', note: 'the evidence ranking uses no step threshold', when: { resolve_score: { isNot: ['evidence'] } } }],
-    help: {
-      text: 'The log-odds a step must exceed to lengthen a resolved tag, under the cstar, steplogodds and anchor rankings. Higher keeps resolved tags shorter and surer.',
-      tip: '3, the default, is the threshold the held-out tests adopted.'
-    }
-  },
-  resolve_max_evalue: {
-    section: 'Resolved tags, advanced',
-    label: 'Largest E-value merged',
-    help: {
-      text: 'Only tags with an E-value up to this are merged into resolved tags; the tags table itself is not filtered by it.',
-      tip: '1 is the default. Raise it to let weaker tags lengthen resolved tags.'
-    }
-  },
-  resolve_join: {
-    section: 'Resolved tags, advanced',
-    label: 'Join tags that touch',
-    help: {
-      text: 'Also join two tags that only meet at a shared peak, without a step in common, into one resolved tag.',
-      tip: 'Off by default: a join at one peak is weaker evidence than a shared step.'
-    }
-  },
   min_filter_length: {
     section: 'Keep only tags found in a database',
     depends: [{ on: 'fasta', note: 'only affects matching against a sequence database' }],
@@ -538,7 +508,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Glycopeptides',
     label: 'Oxonium flagging',
     help: {
-      text: 'Write a report that flags spectra with oxonium ions, the small sugar fragments that glycopeptides and glycans give off. A spectrum is flagged when at least 2 different oxonium ions are found and their summed intensity reaches the minimum fraction of the base peak.',
+      text: 'Write a report that flags spectra with oxonium ions, the small sugar fragments that glycopeptides and glycans give off. A spectrum is flagged when at least 2 different oxonium ions are found and their summed intensity reaches the minimum fraction of the base peak; the fragments of HexNAc count only when HexNAc itself (204.087) is found.',
       tip: 'A flag means a sugar broke apart in that spectrum; it does not identify a glycopeptide. On TMT data at 0.3 Da, a TMT reporter ion (126.128) overlaps a sugar fragment (126.055), so read the flags with care. Keep the tolerance that suits the MS2 analyzer.'
     }
   },
@@ -591,7 +561,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   digest_window: {
     section: 'Digest and labels',
     depends: [
-      { on: ['digest_out', 'label_out'], note: 'neither the digest nor the label report is written' }
+      { on: ['digest_out', 'label_out', 'qc_out'], note: 'none of the digest, label or Run QC reports is written' }
     ],
     help: {
       text: 'How close the mass at a tag end must be to a residue or label mass to count.',
@@ -645,6 +615,19 @@ export const PARAM_UI: Record<string, ParamUi> = {
       tip: 'FASTag uses 1 by default. Database reduction sets 2 (the shortlist recipe), as FASTag does for MSFragger with trypsin.'
     }
   },
+  // Feedback 422372a2: a shipped proteome in place of a FASTA of one's own.
+  recon_proteome: {
+    section: 'Placement, advanced',
+    label: 'Shipped proteome',
+    depends: [
+      { on: 'recon_out', note: 'only the tag placements use it' },
+      { on: 'recon_fasta', replaced: true, say: 'a Protein database', note: 'the tags place on the Protein database' }
+    ],
+    help: {
+      text: 'A protein database shipped with FASTag, for the tag placements and the mass-shift reports: the UniProt reference proteome of human, mouse, yeast or E. coli (reviewed entries). None: give a FASTA of your own, or the placements are not written.',
+      tip: 'Tags place on these from 8 residues (human, mouse) or 7 (yeast, E. coli): at tag length 3, Extension 3 reaches 9. A Protein database you give is used instead.'
+    }
+  },
   recon_min_length: {
     section: 'Placement, advanced',
     label: 'Shortest tag placed',
@@ -676,7 +659,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     label: 'Placements as identifications',
     depends: [{ on: 'recon_out', note: 'it writes the placements as identifications' }],
     help: {
-      text: 'Write the placements as identifications in idXML, mzIdentML or mzTab, for tools that read those formats. The file extension chooses the format: .idXML, .mzid or .mzTab (.mzIdentML is not accepted).',
+      text: 'Write the placements as identifications, for tools that read them. The file extension chooses the format: .mzTab (the default here, shown under Mass shifts), .idXML or .mzid (.mzIdentML is not accepted). An idXML or mzid file is listed under Mass shifts, to reveal or open in another tool.',
       tip: 'These are not filtered by a false discovery rate.'
     }
   },
@@ -792,6 +775,22 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'Add a column with each tag in ProForma 2.0 notation, a standard way to write peptides that other tools can read. I and L are written as J.'
     }
   },
+  terminus: {
+    section: 'Tag columns and files',
+    label: 'Series and terminus columns',
+    help: {
+      text: "Add two columns, series and terminus. FASTag reads each tag both ways, as y ions (z under c/z) and as b ions (c), and tests whether either reading reaches a peptide terminus, at most one residue away: for example a low peak that is y1 of a C-terminal K. terminus names every terminus found, such as C+K or N. series is the one reading that reaches a terminus in a way that was measured to hold (b, y, c or z): at a terminus, one residue from the N terminus, y1 of a C-terminal K or R, or one residue from the C terminus that may be K or R among others (such as [KQ]); not a lone K or R one residue beyond the high peak, nor any other residue one from the C terminus. It is - when no reading or both do.",
+      tip: 'Off by default. Above 25 ppm or 0.02 Da (ion-trap data, 0.5 Da) series is always -, as a terminus is often found by chance there; terminus is still filled.'
+    }
+  },
+  subsume_tags: {
+    section: 'Tag columns and files',
+    label: 'Drop tags inside longer tags',
+    help: {
+      text: 'Leave out of the tags table a tag whose peaks and residues all lie in a longer tag of the same spectrum, with the same fragment charge, ion series and precursor hypothesis, when the longer tag is at least as significant (its E-value is no higher). A longer tag with a worse E-value keeps the shorter one. Of two identical tags the one with the lower E-value stays. Only the tags table changes: the reports and placements still count every tag.',
+      tip: 'On by default. It drops rows only when tags of several lengths are made (Seed lengths, Extension). Off writes every tag.'
+    }
+  },
   res_conf: {
     section: 'Tagging',
     label: 'Per-residue confidence',
@@ -851,16 +850,10 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'The tags file. Set under Output as "Tags TSV".'
     }
   },
-  resolved_out: {
-    hidden: 'derived: the app writes it beside the tags output when the CLI has it',
+  fasta_proteins: {
+    hidden: 'set by the GUI: 3 whenever a filter database is given, so the tables name the proteins of each database hit',
     help: {
-      text: 'The resolved tags of each spectrum, best first: the tags merged on its peaks into longer reads. The app writes it beside the tags (run.resolved.tsv) and the Spectrum tab shows it under All tags.'
-    }
-  },
-  tag_graph_out: {
-    hidden: 'derived: the app writes it beside the tags output when the CLI has it',
-    help: {
-      text: "The merge graph of each spectrum: where its tags sit on the peaks and which continue which. The app writes it beside the tags (run.taggraph.tsv) and the Spectrum tab draws it as the merge graph."
+      text: 'Proteins listed per database hit. With a filter database the app asks for up to 3 proteins per tag, with the position of the tag in each, and shows them in the Tags and Spectrum tables.'
     }
   },
   progress: {
@@ -930,20 +923,20 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Alkylation',
     depends: [ALKYLATION_OFF],
     help: {
-      text: 'Which share of the counted spectra the alkylation call needs.'
+      text: 'Which share of the votes (or of the placed spectra, from a database) the alkylation call needs.'
     }
   },
   alkylation_min_spectra: {
     section: 'Alkylation',
     depends: [ALKYLATION_OFF],
     help: {
-      text: 'How many spectra the alkylation call needs.'
+      text: 'How many spectra the alkylation call needs: votes from the tags, or placed spectra from a database.'
     }
   },
   alkylation_out: {
     section: 'Alkylation',
     help: {
-      text: 'Write a report of which reagent alkylated the cysteines, or none, from the placements of peptides with one cysteine. Not validated on held-out data.'
+      text: 'Write a report of which reagent alkylated the cysteines, or none. No database is needed: every spectrum is tagged a second time with unmodified and alkylated cysteine (carbamidomethyl, propionamide, N-ethylmaleimide, methylthio, carboxymethyl) as alternatives, and the cysteine forms inside the best tags vote. With too few votes the report says no call and why, with the counts; give tag extension for more votes (tested with tag length 4 and Extension 6). With a protein database (Protein database, Filter database or a proteome named here) it also places peptides with one cysteine on it as a check.'
     }
   },
   alkylation_proteome: {
@@ -961,7 +954,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
       }
     ],
     help: {
-      text: 'The database the alkylation report uses when no placement database is given: auto (the human proteome), human, mouse, yeast or ecoli for the UniProt reference proteomes shipped with FASTag (reviewed entries; the release is in the report), or a FASTA file (.gz allowed). Tags place on the shipped proteomes from 8 residues (human, mouse) or 7 (yeast, E. coli) (or Shortest tag placed, when set above 0), so tag length + 2 × Extension must reach that: at tag length 3, Extension 3 for human or mouse, 2 for yeast or E. coli; otherwise no tag places and there is no call (reason tags_too_short). A FASTA file, here or as Protein database, is indexed with a minimum length that grows with its size (8 for a human-sized one, 4 for a few proteins). Shortest tag placed sets that length; it is in Advanced, group “Placement, advanced”, which is under Other analyses in every workflow but Mass-shift survey. Extension is not raised for a FASTA file, and a run on it that places nothing gives no tags_too_short reason.'
+      text: 'The database the alkylation report places peptides with one cysteine on, as a check of its call from the tags. auto (the default): the Protein database or the Filter database when one is given, else none (the call from the tags alone). Or human, mouse, yeast or ecoli for the UniProt reference proteomes shipped with FASTag (reviewed entries; the release is in the report), or a FASTA file (.gz allowed). Tags place on the shipped proteomes from 8 residues (human, mouse) or 7 (yeast, E. coli) (or Shortest tag placed, when set above 0), so tag length + 2 × Extension must reach that: at tag length 3, Extension 3 for human or mouse, 2 for yeast or E. coli; otherwise no tag places and there is no call (reason tags_too_short). A FASTA file, here or as Protein database, is indexed with a minimum length that grows with its size (8 for a human-sized one, 4 for a few proteins). Shortest tag placed sets that length; it is in Advanced, group “Placement, advanced”, which is under Other analyses in every workflow but Mass-shift survey. Extension is not raised for a FASTA file, and a run on it that places nothing gives no tags_too_short reason.'
     }
   },
   alkylation_tags_out: {
@@ -973,9 +966,18 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   alkylation_window: {
     section: 'Alkylation',
-    depends: [{ on: 'alkylation_out', note: 'only the alkylation report uses it' }],
+    // FASTag.cpp alk_place: read only when the report places on a database.
+    depends: [
+      { on: 'alkylation_out', note: 'only the alkylation report uses it' },
+      {
+        on: ['recon_fasta', 'fasta', 'recon_out', 'shortlist_out', 'fasta_out', 'search_config_out', 'alkylation_proteome'],
+        when: { alkylation_proteome: { isNot: ['auto'] } },
+        say: 'a protein database or a named proteome',
+        note: 'without a database the call is read off the tags; the window is for placements'
+      }
+    ],
     help: {
-      text: 'The mass window around each cysteine form for the alkylation report. 0 means 0.02 Da on a ppm run and 0.5 Da on a Da run.'
+      text: 'The mass window around each cysteine form for the placements of the alkylation report (only with a database). 0 means 0.02 Da on a ppm run and 0.5 Da on a Da run.'
     }
   },
   census: {
@@ -1337,6 +1339,12 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   pick_unknown_type: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  data_paths: {
+    hidden: 'capability check for the app; prints JSON and exits',
+    help: {
+      text: 'Print the folders this FASTag reads its shipped data from and exit. It writes no output file; the app reads it before a run.'
+    }
+  },
   probe_input: {
     hidden: 'metadata probe for programs; prints JSON lines and exits',
     help: {

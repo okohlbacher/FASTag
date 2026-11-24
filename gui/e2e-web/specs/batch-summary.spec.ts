@@ -62,6 +62,10 @@ async function shown(page: Page): Promise<string[][]> {
 async function runFolder(page: Page): Promise<void> {
   await openApp(page, 'gate-batch')
   await chooseTask(page, 'Characterize a run')
+  // These jobs are the 1.12 batch output, written without an alkylation
+  // report: the report Characterize writes by default from 1.16 is off.
+  await toStep(page, 'Outputs & run')
+  await page.locator('#out-alkylation_out').uncheck()
   await toStep(page, 'Inputs')
   await page.getByRole('radio', { name: 'Batch' }).check()
   await goTo(page, 'Batch')
@@ -188,4 +192,147 @@ test('by keyboard, focus does not fall to the page body after Add folder… or a
   await expect(page.getByText(`${NAMES.length - 1}/${NAMES.length} done`)).toBeVisible({ timeout: 15_000 })
   await expect(page.getByRole('heading', { name: 'Summary' })).toBeFocused()
   expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe('BODY')
+})
+
+// C13: a refused (raw DIA) job in a finished batch. The job list stays above
+// the failure banner; the banner says why and what to run once, with one
+// command, and FASTag's own sentence (which repeats both) is behind a closed
+// disclosure; the failed job's line is clamped; the summary's status cell
+// wraps instead of an ellipsis, and the table shows a cue that it scrolls.
+test('a refused job: the queue above one short explanation and one command; the summary wraps its status and cues its scroll', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await runFolder(page)
+  const alert = page.getByRole('alert')
+  await expect(alert).toContainText('FASTag did not tag this file: it is raw DIA')
+  const m = await page.evaluate(() => {
+    const main = document.querySelector('.view-batch .batch-main')!
+    const jobs = main.querySelector('ul.jobs')!
+    const banner = main.querySelector('.failure')!
+    const details = banner.querySelector('details.why-more') as HTMLDetailsElement | null
+    // What shows without opening anything: the banner minus the closed disclosure.
+    const clone = banner.cloneNode(true) as HTMLElement
+    clone.querySelectorAll('details.why-more').forEach((d) => d.remove())
+    const shown = clone.textContent ?? ''
+    const count = (s: string, re: RegExp): number => (s.match(re) ?? []).length
+    const failedJs = main.querySelector('li.job.failed .js') as HTMLElement
+    const lh = parseFloat(getComputedStyle(failedJs).lineHeight) || 16
+    const wrap = document.querySelector('.view-batch .summary-wrap') as HTMLElement
+    const status = [...document.querySelectorAll('.view-batch table.summary-table td.status')].find((td) =>
+      /exit code 11/.test(td.textContent ?? '')
+    ) as HTMLElement | undefined
+    return {
+      jobsFirst: !!(jobs.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING),
+      detailsClosed: !!details && !details.open,
+      whyInDetails: !!details?.querySelector('code.why'),
+      leads: count(shown, /FASTag did not tag this file/g),
+      commands: count(shown, /DIAspeXtract -in /g),
+      paragraphs: banner.querySelectorAll('.refusal p').length,
+      failedJsLines: failedJs.getBoundingClientRect().height / lh,
+      cue: getComputedStyle(wrap).backgroundImage,
+      statusCut: status ? status.scrollWidth > status.clientWidth + 0.5 : null,
+      statusText: status?.textContent ?? null,
+      // Wrapped to at most three lines, its first line the reason's start.
+      statusLines: status ? (status.querySelector('.status-text') as HTMLElement).getBoundingClientRect().height / (parseFloat(getComputedStyle(status).lineHeight) || 16) : null
+    }
+  })
+  expect(m.jobsFirst).toBe(true)
+  expect(m.detailsClosed).toBe(true)
+  expect(m.whyInDetails).toBe(true)
+  expect(m.leads).toBe(1)
+  expect(m.commands).toBe(1)
+  expect(m.paragraphs).toBe(1)
+  expect(m.failedJsLines).toBeLessThanOrEqual(2.05)
+  expect(m.cue).toMatch(/radial-gradient/)
+  expect(m.statusText).not.toBeNull()
+  expect(m.statusCut).toBe(false)
+  expect(m.statusLines).toBeGreaterThan(1.5)
+  expect(m.statusLines).toBeLessThanOrEqual(3.05)
+  // The queue's top is in the window, not pushed off by the banner.
+  await page.locator('.view-batch .page-scroll').evaluate((e) => e.scrollTo(0, 0))
+  const jobsBox = (await page.locator('.view-batch ul.jobs').boundingBox())!
+  expect(jobsBox.y).toBeLessThan(800)
+  // The full message opens on request.
+  await alert.locator('details.why-more > summary').click()
+  await expect(alert.locator('details.why-more code.why')).toBeVisible()
+})
+
+// Codex round 2, 13: at 1024x700 with Help open the Batch pane, not the
+// window, decides the layout: the summary goes under the queue instead of a
+// ~250 px sliver; the sticky File column is bounded, so scrolling to Label
+// shows it uncovered; and the refused job's recovery (short reason and its
+// DIAspeXtract command) is beside it in the queue, above the banner.
+test('with Help open at 1024x700: the summary stacks by pane width, Label scrolls clear of File, the recovery is beside the failed job', async ({ page }) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __copied: string[] }
+    w.__copied = []
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: (t: string) => (w.__copied.push(t), Promise.resolve()) }
+    })
+  })
+  await page.setViewportSize({ width: 1024, height: 700 })
+  await runFolder(page)
+  await page.getByRole('button', { name: 'Help', exact: true }).click()
+  await expect(page.locator('#help-panel')).toBeVisible()
+  // The window is wider than the old 1000 px breakpoint: only the pane is narrow.
+  const main = (await page.locator('.view-batch .batch-main').boundingBox())!
+  const side = (await page.locator('.view-batch .batch-side').boundingBox())!
+  expect(side.y).toBeGreaterThanOrEqual(main.y + main.height - 0.5)
+  expect(side.width).toBeGreaterThan(500)
+  // The summary's toolbar fits its pane.
+  const head = (await page.locator('.view-batch .batch-table .block-head').boundingBox())!
+  for (const name of ['Show cutoffs and caveats', 'Export summary TSV…']) {
+    const b = (await page.getByRole('button', { name }).boundingBox())!
+    expect(b.x + b.width).toBeLessThanOrEqual(head.x + head.width + 0.5)
+  }
+
+  // Scrolled to Label (a long file name in File must not cover it): the
+  // header and each row's Label cell are what is under their centre.
+  const wrap = page.locator('.view-batch .summary-wrap')
+  const label = table(page).getByRole('columnheader', { name: 'Label', exact: true })
+  await label.evaluate((th) => {
+    const w = th.closest('.summary-wrap') as HTMLElement
+    w.scrollLeft = (th as HTMLElement).offsetLeft - w.clientWidth / 2 + (th as HTMLElement).offsetWidth / 2
+    // A file name far longer than the pane: the column stays bounded.
+    const first = w.querySelector('tbody td:first-child .file-name') as HTMLElement
+    first.textContent = 'a-very-long-spectra-file-name-from-an-instrument-export-'.repeat(4) + '.mzML'
+  })
+  await label.scrollIntoViewIfNeeded()
+  const uncovered = await wrap.evaluate((w) => {
+    const th = [...w.querySelectorAll('thead th')].find((e) => e.textContent === 'Label') as HTMLTableCellElement
+    const col = th.cellIndex
+    const cells = [th, ...[...w.querySelectorAll('tbody tr')].map((tr) => (tr as HTMLTableRowElement).cells[col])]
+    const file = w.querySelector('tbody td:first-child') as HTMLElement
+    const wr = w.getBoundingClientRect()
+    return {
+      fileShare: file.getBoundingClientRect().width / wr.width,
+      hits: cells.map((c) => {
+        const r = c.getBoundingClientRect()
+        const x = Math.min(Math.max(r.left + r.width / 2, wr.left + 1), wr.right - 1)
+        const hit = document.elementFromPoint(x, r.top + Math.min(r.height / 2, 10))
+        return !!hit && (hit === c || c.contains(hit))
+      })
+    }
+  })
+  expect(uncovered.fileShare).toBeLessThanOrEqual(0.45)
+  expect(uncovered.hits.every(Boolean)).toBe(true)
+
+  // The recovery is in the failed job's row, before the banner, and works.
+  const failed = page.locator('.view-batch li.job.failed')
+  await expect(failed.locator('.js')).toHaveText(/^Failed: raw DIA, not tagged/)
+  const copy = failed.getByRole('button', { name: /^Copy the DIAspeXtract command for / })
+  const before = await copy.evaluate(
+    (b) => !!(b.compareDocumentPosition(document.querySelector('.view-batch .failure')!) & Node.DOCUMENT_POSITION_FOLLOWING)
+  )
+  expect(before).toBe(true)
+  await page.locator('.view-batch .page-scroll').evaluate((e) => e.scrollTo(0, 0))
+  await copy.scrollIntoViewIfNeeded()
+  const bar = (await page.locator('.actionbar:visible').first().boundingBox())!
+  const cb = (await copy.boundingBox())!
+  expect(cb.y + cb.height).toBeLessThanOrEqual(bar.y + 0.5)
+  await copy.click()
+  await expect(copy).toHaveText('Copied')
+  const sent = await page.evaluate(() => (window as unknown as { __copied: string[] }).__copied)
+  expect(sent).toHaveLength(1)
+  expect(sent[0]).toMatch(/^DIAspeXtract -in /)
 })

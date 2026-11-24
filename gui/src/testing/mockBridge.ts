@@ -22,6 +22,7 @@ import type {
   FastagApi,
   ProbeRun,
   ResolvedOutputs,
+  NavAnswer,
   ResultsView,
   RunEvent,
   RunRecord,
@@ -30,9 +31,12 @@ import type {
   Settings,
   SpeciesReport,
   SpectrumDump,
+  FastaDatabase,
+  FastaSegment,
   SpectrumSupport,
   TaxdbInfo,
   TaxonomyStatus,
+  DataStatus,
   TaxonomyDump
 } from '../types'
 import runStartedFixture from './fixtures/run-started.json'
@@ -112,6 +116,8 @@ export interface MockBridge extends FastagApi {
   taxonomyCalls: { nodes?: string; names?: string }[]
   // path -> report text; a missing path reads as "not written".
   reportFiles: Record<string, string>
+  // path -> the error report() rejects with (report.rs read_report: too large, unreadable).
+  reportErrors: Record<string, string>
   reportCalls: string[]
   // reportHead() calls (the sniff of an opened or dropped file).
   reportHeadCalls: string[]
@@ -136,11 +142,24 @@ export interface MockBridge extends FastagApi {
   spectrumDumps: Record<string, string>
   spectrumMissing: string[]
   spectrumCalls: { input: string; nativeId: string; params: Record<string, unknown> | null }[]
+  // fasta_segment: path -> identifier -> "description\tsequence" (or the
+  // sequence alone; an identifier given twice: a list of both). The file
+  // read is the run's: fastaRuns[tags][database], else the database in the
+  // parameters of the record that wrote @p tags (historyOf); a tags table
+  // of no run, or a run without that database, is refused as fasta.rs
+  // refuses it.
+  fastaFiles: Record<string, Record<string, string | string[]>>
+  fastaRuns: Record<string, Partial<Record<FastaDatabase, string>>>
+  fastaCalls: { tags: string; database: FastaDatabase; path: string | null; identifier: string; start: number; end: number }[]
   taxdbInfoResult: TaxdbInfo | null
   // Where a -species run finds the index (default: found, as an install
   // with the taxonomy asset unpacked); taxonomyStatusCalls: the -taxdb asked.
   taxonomyStatusResult: TaxonomyStatus
   taxonomyStatusCalls: (string | undefined)[]
+  // Where a run finds the shipped digest data and proteomes (default: all
+  // there, as in an installed FASTag); dataStatusCalls: how often it was asked.
+  dataStatusResult: DataStatus
+  dataStatusCalls: number
   // The CLI's --helphelp options. The default is a CLI without
   // -probe_input, as every released FASTag is.
   cliOptions: CliOptions
@@ -184,6 +203,7 @@ export interface MockBridge extends FastagApi {
   // The last open's event callback: tests drive the D5 events with it.
   emitBrowser(e: BrowserEvent): void
   revealCalls: { path: string; folder: boolean }[]
+  openCalls: string[]
   revealError: Error | null
   emitMenu(action: string): void
   exportCalls: { path: string; view: ResultsView; columns: string[]; dest: string }[]
@@ -240,11 +260,14 @@ export interface MockBridge extends FastagApi {
   feedbackPlatformResult: FeedbackPlatform
   feedbackRunResult: RunInfo | null
   feedbackRunCalls: (string | null)[]
-  feedbackReports: { report: FeedbackReport; png: Uint8Array | null; folder: string; zip: string | null }[]
+  // zipOf: what the report's zip holds (feedback.rs export_ordered), and for which request.
+  feedbackReports: { report: FeedbackReport; png: Uint8Array | null; folder: string; zip: string | null; zipOf?: { seq: number; json: string; screenshot: boolean } }[]
   feedbackSaveError: string | null
   feedbackExports: { id: string; include: Include; json: string }[]
   feedbackIssues: { title: string; reportId: string; kind: string; url: string }[]
   feedbackRevealCalls: string[]
+  // Each zip revealed: its request and what it holds.
+  feedbackRevealed: { id: string; seq: number; json: string; screenshot: boolean }[]
   holdRun(): void
   // With @p error: the held invoke replies fail (an invoke that fails after
   // its Done: the job settles without outputs, runJob.ts).
@@ -387,6 +410,7 @@ export function installMockBridge(): MockBridge {
     taxonomyError: null,
     taxonomyCalls: [],
     reportFiles: {},
+    reportErrors: {},
     reportCalls: [],
     reportHeadCalls: [],
     resultsColumns: ['spectrum', 'tag', 'length', 'evalue', 'fasta_hit'],
@@ -403,10 +427,23 @@ export function installMockBridge(): MockBridge {
     spectrumDumps: {},
     spectrumMissing: [],
     spectrumCalls: [],
+    fastaFiles: {},
+    fastaRuns: {},
+    fastaCalls: [],
     taxdbInfoResult: null,
     taxonomyStatusResult: { index: '/app/taxonomy/tax_k7.taxdb', dir: '/app/taxonomy', expected: '/app/taxonomy/tax_k7.taxdb', fromEnv: false },
     taxonomyStatusCalls: [],
-    cliOptions: { options: ['in', 'out', 'fasta', 'fragment_tolerance', 'fragment_tolerance_unit'], ok: true, detail: '5 options' },
+    dataStatusResult: {
+      digestDir: '/app/share/FASTag/digest',
+      files: { digestModels: true, digestModelsV2: true, massgapMods: true, calibration: true },
+      alkylationDir: '/app/share/FASTag/alkylation',
+      proteomes: ['human', 'mouse', 'yeast', 'ecoli'],
+      searched: ['/app/share/FASTag/digest', '/app/bin/share-FASTag-digest', '/app/bin/digest'],
+      fromEnv: false,
+      autoDbFree: true
+    },
+    dataStatusCalls: 0,
+    cliOptions: { options: ['in', 'out', 'fasta', 'fragment_tolerance', 'fragment_tolerance_unit', 'recon_proteome'], ok: true, detail: '6 options' },
     probeOutputs: {},
     probeCalls: [],
     holdProbes: false,
@@ -460,6 +497,7 @@ export function installMockBridge(): MockBridge {
     finishReads: () => finishReads?.(),
     resultsOpenCalls: [],
     revealCalls: [],
+    openCalls: [],
     revealError: null,
     emitBrowser: (e) => browserCb?.(e),
     emitMenu: (a) => menuListeners.slice().forEach((cb) => cb(a)),
@@ -512,6 +550,7 @@ export function installMockBridge(): MockBridge {
     feedbackExports: [],
     feedbackIssues: [],
     feedbackRevealCalls: [],
+    feedbackRevealed: [],
     holdRun: () => {
       held = held ?? []
     },
@@ -541,6 +580,10 @@ export function installMockBridge(): MockBridge {
     taxonomyStatus: (explicit) => {
       mock.taxonomyStatusCalls.push(explicit)
       return Promise.resolve(mock.taxonomyStatusResult)
+    },
+    dataStatus: () => {
+      mock.dataStatusCalls += 1
+      return Promise.resolve(mock.dataStatusResult)
     },
     cliCapabilities: () => Promise.resolve(mock.cliOptions),
     probeInput: (input, fasta) => {
@@ -599,6 +642,8 @@ export function installMockBridge(): MockBridge {
     },
     report: (path) => {
       mock.reportCalls.push(path)
+      // As report.rs read_report's errors (over its size limit, a read that failed).
+      if (mock.reportErrors[path] != null) return Promise.reject(new Error(mock.reportErrors[path]))
       return Promise.resolve(mock.reportFiles[path] ?? null)
     },
     reportHead: (path) => {
@@ -623,6 +668,25 @@ export function installMockBridge(): MockBridge {
       else if (nativeId in mock.spectrumDumps) d = { ...base, ok: true, code: 0, missing: false, stdout: mock.spectrumDumps[nativeId], reason: null }
       else d = { ...base, ok: false, code: 6, missing: false, stdout: '', reason: `-dump_spectrum: no spectrum of '${input}' has the native ID '${nativeId}'.` }
       return Promise.resolve(d)
+    },
+    fastaSegment: (tags, database, identifier, start, end) => {
+      const run = mock.fastaRuns[tags] ?? (mock.history.find((r) => r.outputs.includes(tags))?.params as Record<string, unknown> | undefined)
+      const given = run?.[database]
+      const path = typeof given === 'string' && given !== '' ? given : null
+      mock.fastaCalls.push({ tags, database, path, identifier, start, end })
+      if (!run) return Promise.reject(`${tags} was not written by a run of this app`)
+      const db = path ? mock.fastaFiles[path] : undefined
+      if (!path || !db) return Promise.reject(`the run that wrote ${tags} recorded no -${database} database it read`)
+      const e = db[identifier]
+      if (e == null) return Promise.reject(`${identifier} is not in ${path}`)
+      if (Array.isArray(e)) return Promise.resolve({ identifier, description: '', length: 0, start, end, sequence: '', occurrences: e.length })
+      const tab = e.indexOf('\t')
+      const description = tab >= 0 ? e.slice(0, tab) : ''
+      const seq = tab >= 0 ? e.slice(tab + 1) : e
+      const s = Math.min(Math.max(1, start), seq.length)
+      const t = Math.min(Math.max(s, end), seq.length)
+      const out: FastaSegment = { identifier, description, length: seq.length, start: s, end: t, sequence: seq.slice(s - 1, t), occurrences: 1 }
+      return Promise.resolve(out)
     },
     resultsQuery: (path, view, offset, limit) => {
       mock.resultsQueryCalls.push({ path, view, offset, limit })
@@ -659,8 +723,65 @@ export function installMockBridge(): MockBridge {
       })
     },
     resultsPosition: () => Promise.resolve(null),
+    // As browser.rs neighbours(), built from this mock's own resultsQuery
+    // and resultsPosition, so a test's views, D5 waits and failures apply.
+    // The backend answers from one snapshot; the mock's table changes
+    // between these calls only when a test changes it (and a test of that
+    // replaces resultsNeighbours). Snapshot 0: the mock has one.
+    resultsNeighbours: async (path, view, row, spectrum): Promise<NavAnswer> => {
+      const snapshot = 0
+      const pending: NavAnswer = { status: 'pending', snapshot }
+      const absent: NavAnswer = { status: 'absent', snapshot }
+      const at = async (r: number): Promise<{ pos: number; matched: number } | 'pending' | null> => {
+        const head = await mock.resultsQuery(path, view, 0, 1)
+        if (head.ranked === false) return 'pending'
+        const pos = await mock.resultsPosition(path, view, r)
+        return pos != null && pos >= 0 ? { pos, matched: head.matchedRows } : null
+      }
+      let found = row != null ? await at(row) : null
+      if (found === 'pending') return pending
+      let rowId = row ?? -1
+      if (!found) {
+        const mine = await mock.resultsQuery(path, { ...view, spectrum, spectrumExact: true }, 0, 1)
+        if (mine.rows.length === 0) return absent
+        if (mine.ranked === false) return pending
+        const first = mine.rowIds?.[0]
+        if (first == null || first === row) return absent
+        found = await at(first)
+        if (found === 'pending') return pending
+        if (!found) return absent
+        rowId = first
+      }
+      const { pos, matched } = found
+      const step = async (dir: -1 | 1): Promise<{ spectrum: string; rowId: number } | null | 'pending'> => {
+        for (let n = 0; n < 50; n++) {
+          const a = dir > 0 ? pos + 1 + n * 200 : Math.max(0, pos - (n + 1) * 200)
+          const b = dir > 0 ? Math.min(matched, a + 200) : pos - n * 200
+          if (a >= b) return null
+          const pg = await mock.resultsQuery(path, view, a, b - a)
+          if (pg.ranked === false) return 'pending'
+          if (pg.rows.length === 0) return null
+          const sc = pg.columns.indexOf('spectrum')
+          for (let k = 0; k < pg.rows.length; k++) {
+            const i = dir > 0 ? k : pg.rows.length - 1 - k
+            const sp = pg.rows[i]?.[sc]
+            if (sp != null && sp !== spectrum) return { spectrum: sp, rowId: pg.rowIds?.[i] ?? -1 }
+          }
+        }
+        return null
+      }
+      const prev = await step(-1)
+      if (prev === 'pending') return pending
+      const next = await step(1)
+      if (next === 'pending') return pending
+      return { status: 'at', snapshot, pos, matched, rowId, prev, next }
+    },
     revealOutput: (path, folder) => {
       mock.revealCalls.push({ path, folder })
+      return mock.revealError ? Promise.reject(mock.revealError) : Promise.resolve()
+    },
+    openOutput: (path) => {
+      mock.openCalls.push(path)
       return mock.revealError ? Promise.reject(mock.revealError) : Promise.resolve()
     },
     onMenu: on(menuListeners),
@@ -882,22 +1003,33 @@ export function installMockBridge(): MockBridge {
       mock.feedbackReports = []
       return Promise.resolve(n)
     },
-    feedbackReveal: (id) => {
+    // As feedback.rs reveal_target: with a request number, only the zip that
+    // request built; the zip revealed is recorded with its bytes (the json
+    // and the screenshot it holds).
+    feedbackReveal: (id, seq) => {
+      const r = mock.feedbackReports.find((x) => x.report.id === id)
+      if (seq !== undefined && (!r?.zipOf || r.zipOf.seq !== seq)) return Promise.reject(new Error('the export shown is no longer the zip'))
       mock.feedbackRevealCalls.push(id)
+      if (r?.zipOf) mock.feedbackRevealed.push({ id, ...r.zipOf })
       return Promise.resolve()
     },
-    // As feedback.rs export (publicExport is its port).
-    feedbackExport: (id, include) => {
+    // As feedback.rs export_ordered (publicExport is its port): a request
+    // not newer than the one whose zip is there is refused and writes
+    // nothing; each accepted one writes a file of its own (export-<n>/).
+    feedbackExport: (id, include, seq) => {
       const r = mock.feedbackReports.find((x) => x.report.id === id)
       if (!r) return Promise.reject(new Error(`no feedback report ${id}`))
+      const n = seq ?? (r.zipOf?.seq ?? 0) + 1
+      if (r.zipOf && n <= r.zipOf.seq) return Promise.reject(new Error('a newer export of this report was built after this request'))
       const json = JSON.stringify(publicExport(r.report, include, !!r.png), null, 2)
-      r.zip = `${r.folder}/${id}.feedback.zip`
+      r.zip = `${r.folder}/export-${n}/${id}.feedback.zip`
+      r.zipOf = { seq: n, json, screenshot: include.screenshot && !!r.png }
       mock.feedbackExports.push({ id, include: { ...include }, json })
       const size = (png: Uint8Array): { width: number; height: number } => {
         const v = new DataView(png.buffer, png.byteOffset, png.byteLength)
         return png.length >= 24 ? { width: v.getUint32(16), height: v.getUint32(20) } : { width: 0, height: 0 }
       }
-      return Promise.resolve({ zip: r.zip, json, image: include.screenshot && r.png ? { bytes: r.png.length, ...size(r.png) } : null })
+      return Promise.resolve({ zip: r.zip, json, image: include.screenshot && r.png ? { bytes: r.png.length, ...size(r.png) } : null, seq: n })
     },
     feedbackSetStatus: (id, status, url) => {
       const r = mock.feedbackReports.find((x) => x.report.id === id)

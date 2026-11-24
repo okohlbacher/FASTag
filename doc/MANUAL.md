@@ -41,20 +41,36 @@ on each side (`nterm_mass`, `cterm_mass`), the E-value (smaller is better) and, 
 it occurs. Filter by text, length, E-value or database hit; **Export shown rows…** saves what is
 shown.
 
+With a FASTA, the CLI option `-fasta_proteins <n>` (which the GUI sets to 3) also writes which
+proteins the tag occurs in and where: `db_proteins` lists up to n of them as
+`identifier@start-end` (1-based positions in the protein), `db_genes` their gene names (`GN=` in
+the FASTA header, `-` when there is none) and `db_protein_count` how many proteins hold the tag in
+all. Only matches in the orientation `fasta_hit` names count, target proteins come before decoys,
+and entrapment matches name proteins of the entrapment database. A protein is named by its
+identifier only, so give each entry its own: when entries repeat an identifier the run warns, and
+the Spectrum tab names such a protein with the positions but does not align the tags on it.
+
 ![The tags table](images/manual-03-tags.png)
 
-Select a row and press Enter (or **Open in Spectrum**) to see its evidence:
+Select a row and press Enter (or **Open in Spectrum**) to see its evidence. In the Glyco, Triage
+and Mass shifts tables, a click on a scan (it has the spectrum icon) opens it the same way.
 
 ![A tag drawn on its spectrum](images/manual-04-spectrum.png)
 
-The stick plot shows the peaks FASTag used; the tag's b or y ladder is drawn over them with the
-mass error of each step, and the table below lists the spectrum's other tags.
+The stick plot shows the peaks FASTag used; the tag's b and y ladders are drawn over them on
+their own lines, each labelled with its series as judged from the peaks (**b or y?** when it is not
+told apart), with the mass error of each step, and the table below lists the spectrum's other tags.
 
 ## 3. Surveying a run
 
-**Characterize a run** samples 10% of the spectra and adds the species, digest, label and glyco
+**Characterize a run** reads all spectra and adds the species, digest, label, alkylation and glyco
 reports. The screenshots use PXD000001 (an *Erwinia carotovora* lysate, trypsin, TMT; see
 [TUTORIAL.md, Part 2](TUTORIAL.md#part-2-pxd000001) for the download).
+
+The **Alkylation report** (step 4, on by default) needs no protein database and no shipped
+proteome: it reads the cysteine forms in the tags. Its votes need a cysteine inside a tag, so a
+larger Extension gives more; with Spectra to read set to 10% at Extension 2 it often says "no call"
+with the counts. On all of PXD000001 at Extension 2 it calls Methylthio (MMTS), 52 of 69 votes.
 
 ![Setup for a survey](images/manual-05-setup-characterize.png)
 
@@ -72,6 +88,35 @@ presence call: short tags cannot resolve close species, and "no call" does not m
 the runner-up model and FASTag's reasoning:
 
 ![Protease call](images/manual-08-digest.png)
+
+**Run QC** (`-qc_out`) names the isobaric kit of a labelled run (`reporter_kit`): the label
+mass on the tag ends decides TMT (229.163 Da) or TMTpro (304.207 Da), and the kit is the
+smallest one of that label that holds every reporter channel seen, so the PXD000001 run is
+`tmt6plex` (the original TMT 6-plex reagent, with 127C and 129C; the current one has 127N and
+129N, and both count as TMT 6-plex). Larger kits whose extra channels were not seen are not
+listed. When the label mass cannot decide (a Da fragment tolerance, too few tags),
+`reporter_kit_candidates` lists the smallest kit per label, for example `tmt10plex,tmt16plex`,
+marked `reporters_only`. When the label mass and the channels disagree (a TMT label, but a
+channel only TMTpro has), no kit is called: `reporter_kit` is `conflict`,
+`reporter_family_evidence` is `label_conflict`, and the report names both the label and the
+kits the channels allow.
+`reporter_channel_<label>` counts the MS/MS spectra with each reporter above the noise
+threshold (3x the spectrum's median peak), out of the spectra that can show it.
+
+**Mass-shift survey** measures mass shifts against a protein database: your FASTA (Protein
+database), or a shipped proteome (human, mouse, yeast or E. coli) chosen beside it in Inputs.
+When a species report of the same file is open, the line under the choice names its organism.
+Without a database the run still starts, but writes the tags table only: the shift reports
+(placements, mass-shift table, spectra per shift, accounting, mass-gap report) are off and marked
+"needs a protein database", and the plan line says how many are off. The shipped proteomes place
+tags from 8 residues (human, mouse) or 7 (yeast, E. coli); the workflow's Extension 3 reaches 9.
+
+**Identifiability triage** writes one row per MS/MS spectrum (the census). Besides the best tag it
+gives `max_len`, the longest tag of the spectrum, and `res_cover`, how many residues of the
+peptide the spectrum's tags cover together. A tag read on b ions is placed by its orientation
+when the `-fasta` match tells it; otherwise the tags are folded so that a stretch read on b and
+on y ions counts once, and `res_cover` is a lower bound (`res_cover_exact` 0). The run summary
+gives `max_tags`, the cap on the tags per spectrum.
 
 ## 4. Getting help
 

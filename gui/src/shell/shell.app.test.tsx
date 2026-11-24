@@ -63,14 +63,16 @@ describe('shell: views', () => {
   })
 
   // P2b: in Results the running state (GUI-DESIGN 3 S2) holds the progress
-  // bar and Cancel, so the pill there shows the phase and the percentage
-  // only; History (a view without the run) is where the pill keeps its bar
-  // and Cancel. Successor of "Run moves to Results; the pill shows the
-  // phase, the percentage and Cancel there".
-  it('Run moves to Results; the pill shows the phase and the percentage, the running state the bar and Cancel', async () => {
+  // bar, so the pill there shows the phase and the percentage; History (a
+  // view without the run) is where the pill keeps its own bar. Cancel has one
+  // home on every view: the pill's, an outlined stop control (Codex round 2
+  // "Cancel changes region"). Successor of "Run moves to Results; the pill
+  // shows the phase, the percentage, the running state the bar and Cancel".
+  it('Run moves to Results; the pill shows the phase and the percentage, and holds the one Cancel on every view', async () => {
     const mock = installMockBridge()
     const c = await renderApp(mock)
     expect(within(pill()).getByText('Idle')).toBeDefined()
+    expect(within(pill()).queryByRole('button', { name: 'Cancel' })).toBeNull()
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())
     await waitFor(() => expect(mock.runCalls).toHaveLength(1))
@@ -88,17 +90,74 @@ describe('shell: views', () => {
     expect(screen.getAllByRole('progressbar')).toHaveLength(1)
     const running = screen.getByRole('region', { name: 'Running' })
     expect(within(running).getByRole('progressbar')).toBeDefined()
-    expect(within(p).queryByRole('button', { name: 'Cancel' })).toBeNull()
-    // In a view without the run the pill has the bar and Cancel.
+    // Cancel looks the same wherever the view is: an outlined stop control,
+    // never a filled red button (filled red confirms a delete), and only
+    // ever the pill's.
+    const oneCancel = (): HTMLElement => {
+      const all = screen.getAllByRole('button', { name: 'Cancel' })
+      expect(all).toHaveLength(1)
+      expect(pill().contains(all[0])).toBe(true)
+      expect(all[0].classList.contains('danger-quiet')).toBe(true)
+      expect(all[0].classList.contains('danger')).toBe(false)
+      expect(all[0].getAttribute('aria-keyshortcuts')).toMatch(/Period Escape$/)
+      return all[0]
+    }
+    oneCancel()
+    expect(within(running).queryByRole('button', { name: 'Cancel' })).toBeNull()
+    // In a view without the run the pill has its bar too.
     await click(viewButton('History'))
     expect(screen.getAllByRole('progressbar')).toHaveLength(1)
     expect(within(pill()).getByRole('progressbar')).toBeDefined()
+    oneCancel()
+    // In Setup the run bar shows the progress; the footer has no Cancel.
+    await click(viewButton('Setup'))
+    expect(within(pill()).queryByRole('progressbar')).toBeNull()
+    const bar = document.querySelector<HTMLElement>('.view-setup .runbar')!
+    expect(within(bar).queryByRole('button', { name: 'Cancel' })).toBeNull()
+    oneCancel()
+    // The inert Running… is not the screen's filled action.
+    expect(within(bar).getByRole('button', { name: 'Running…' }).classList.contains('primary')).toBe(false)
+    await click(viewButton('Batch'))
+    oneCancel()
+    // With Help open the pill still has it.
+    await click(screen.getByRole('button', { name: 'Help' }))
+    expect(screen.getByRole('complementary', { name: 'Help' })).toBeDefined()
+    await click(oneCancel())
+    expect(mock.cancelCalls).toBe(1)
+    expect(oneCancel().hasAttribute('disabled')).toBe(true)
+    expect(pill().textContent).toMatch(/Cancelling…/)
+  })
+
+  it('a batch run: the pill holds the one Cancel on Batch and Setup, none in the run bar', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    await addBatch(mock, ['/d/a.mzML', '/d/b.mzML'])
+    await startBatch()
+    await waitFor(() => expect(mock.runCalls).toHaveLength(1))
+    for (const v of ['Batch', 'Setup', 'Results', 'History']) {
+      await click(viewButton(v))
+      const all = screen.getAllByRole('button', { name: 'Cancel' })
+      expect(all).toHaveLength(1)
+      expect(pill().contains(all[0])).toBe(true)
+    }
+    await click(viewButton('Batch'))
     await click(within(pill()).getByRole('button', { name: 'Cancel' }))
     expect(mock.cancelCalls).toBe(1)
-    // In Setup the run bar shows the progress, and the pill no second Cancel.
-    await click(viewButton('Setup'))
+  })
+
+  it('focus on the pill\'s Cancel does not fall to the page body when the run ends: the shown view gets it', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    await pickSingle(mock, '/d/a.mzML')
+    await click(runButton())
+    await waitFor(() => expect(mock.runCalls).toHaveLength(1))
+    await click(viewButton('History'))
+    const cancel = within(pill()).getByRole('button', { name: 'Cancel' })
+    cancel.focus()
+    await click(cancel)
+    await act(async () => mock.emitDone({ ok: false, code: null, cancelled: true, runId: mock.lastRunId }))
     expect(within(pill()).queryByRole('button', { name: 'Cancel' })).toBeNull()
-    expect(within(pill()).queryByRole('progressbar')).toBeNull()
+    await waitFor(() => expect(document.activeElement).toBe(document.querySelector('.view[data-view="history"]')))
   })
 
   it('Esc cancels a run when nothing else is open', async () => {
@@ -404,8 +463,8 @@ describe('shell: finish', () => {
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())
     await waitFor(() => expect(mock.runCalls).toHaveLength(1))
-    // In Results, Cancel is the running state's (P2b, GUI-DESIGN 3 S2).
-    await click(within(screen.getByRole('region', { name: 'Running' })).getByRole('button', { name: 'Cancel' }))
+    // Cancel is the run status pill's on every view, Results too.
+    await click(within(pill()).getByRole('button', { name: 'Cancel' }))
     await act(async () => mock.emitDone({ ok: false, code: null, cancelled: true, runId: mock.lastRunId }))
     await flush()
     expect(mock.notifyCalls).toHaveLength(0)

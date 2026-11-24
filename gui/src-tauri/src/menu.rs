@@ -13,6 +13,10 @@
 //   Run:  Run Cmd+Enter; Cancel Cmd+. (Esc in the webview)
 //   View: Setup, Results, Batch, History Cmd+1..4; Search parameters Cmd+K;
 //         Theme: System, Light, Dark
+//   Edit: Undo, Redo (macOS only), Cut, Copy, Paste, Select All, which act
+//         on the focused text field (every field of the app, the Feedback
+//         form's included): the platform's own items on macOS and Windows; on
+//         Linux items of ours that run WebKitGTK's editing command (below)
 //   Help: Help Cmd+? (F1 in the webview), FAQ, Send Feedback… Cmd+Shift+F,
 //         About
 
@@ -77,6 +81,116 @@ pub const HELP: &[Item] = &[
     Item { id: "about", label: "About FASTag", accel: None },
 ];
 
+/// An item of the Edit menu. On macOS and Windows the platform's predefined
+/// one (muda), whose click the system sends to the focused text field of the
+/// webview. On Linux Cut, Copy, Paste and Select All are items of ours
+/// (LINUX_EDIT_IS_OURS): muda's GTK ones only send the keys through libxdo,
+/// a feature tauri leaves off, so a click did nothing (and xdo does not reach
+/// a Wayland window); ours run the webview's editing command (Dispatch::Editing).
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Edit {
+    Undo,
+    Redo,
+    Separator,
+    Cut,
+    Copy,
+    Paste,
+    SelectAll,
+}
+
+impl Edit {
+    /// The shortcut the platform gives the item (none of ours may take it).
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn accel(self) -> Option<&'static str> {
+        match self {
+            Edit::Undo => Some("CmdOrCtrl+Z"),
+            Edit::Redo => Some("CmdOrCtrl+Shift+Z"),
+            Edit::Separator => None,
+            Edit::Cut => Some("CmdOrCtrl+X"),
+            Edit::Copy => Some("CmdOrCtrl+C"),
+            Edit::Paste => Some("CmdOrCtrl+V"),
+            Edit::SelectAll => Some("CmdOrCtrl+A"),
+        }
+    }
+
+    /// The id of the item of ours for this edit command (Linux), if any.
+    pub fn id(self) -> Option<&'static str> {
+        match self {
+            Edit::Cut => Some(EDIT_CUT_ID),
+            Edit::Copy => Some(EDIT_COPY_ID),
+            Edit::Paste => Some(EDIT_PASTE_ID),
+            Edit::SelectAll => Some(EDIT_SELECT_ALL_ID),
+            Edit::Undo | Edit::Redo | Edit::Separator => None,
+        }
+    }
+
+    /// The label of the item of ours (Linux): GTK's own wording.
+    pub fn label(self) -> &'static str {
+        match self {
+            Edit::Undo => "Undo",
+            Edit::Redo => "Redo",
+            Edit::Separator => "",
+            Edit::Cut => "Cut",
+            Edit::Copy => "Copy",
+            Edit::Paste => "Paste",
+            Edit::SelectAll => "Select All",
+        }
+    }
+}
+
+/// The ids of the Linux Edit items of ours (Edit::id).
+pub const EDIT_CUT_ID: &str = "edit.cut";
+pub const EDIT_COPY_ID: &str = "edit.copy";
+pub const EDIT_PASTE_ID: &str = "edit.paste";
+pub const EDIT_SELECT_ALL_ID: &str = "edit.select_all";
+
+/// The WebKit editing command (webkit_web_view_execute_editing_command;
+/// WEBKIT_EDITING_COMMAND_CUT, _COPY, _PASTE, _SELECT_ALL) of Edit item @p id.
+pub fn editing_command(id: &str) -> Option<&'static str> {
+    match id {
+        EDIT_CUT_ID => Some("Cut"),
+        EDIT_COPY_ID => Some("Copy"),
+        EDIT_PASTE_ID => Some("Paste"),
+        EDIT_SELECT_ALL_ID => Some("SelectAll"),
+        _ => None,
+    }
+}
+
+/// Whether the Edit menu's Cut, Copy, Paste and Select All are items of ours
+/// (Linux) rather than the platform's predefined ones.
+pub const LINUX_EDIT_IS_OURS: bool = cfg!(target_os = "linux");
+
+/// How an Edit menu entry is built.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum EditEntry {
+    /// muda's predefined item.
+    Predefined(Edit),
+    /// A MenuItem of ours: (id, label). It has no accelerator: a GTK
+    /// accelerator is taken by the window before the webview sees the key,
+    /// so Ctrl+C would no longer reach the Results table's own Ctrl+C (copy
+    /// the row); the keys stay the webview's, as with the predefined items,
+    /// whose GTK accelerator is a label only.
+    Ours(&'static str, &'static str),
+}
+
+/// The entry of Edit item @p e when the items are ours (@p ours) or not.
+pub fn edit_entry(e: Edit, ours: bool) -> EditEntry {
+    match (ours, e.id()) {
+        (true, Some(id)) => EditEntry::Ours(id, e.label()),
+        _ => EditEntry::Predefined(e),
+    }
+}
+
+/// The Edit menu on macOS.
+pub const EDIT_MACOS: &[Edit] = &[Edit::Undo, Edit::Redo, Edit::Separator, Edit::Cut, Edit::Copy, Edit::Paste, Edit::SelectAll];
+/// The Edit menu on Windows and Linux (report 20261121T143325Z_856491d9:
+/// copy and paste had no menu there). Undo and Redo are left out: GTK has
+/// no predefined ones, and the webview's Ctrl+Z still works in a field.
+/// On Linux the four items are ours and run WebKitGTK's editing command on a
+/// click (edit_entry); their shortcuts are the webview's own and work either way.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+pub const EDIT_OTHER: &[Edit] = &[Edit::Cut, Edit::Copy, Edit::Paste, Edit::Separator, Edit::SelectAll];
+
 /// Every item of ours, in menu order.
 pub fn all() -> impl Iterator<Item = &'static Item> {
     FILE.iter().chain(RUN).chain(VIEWS).chain(SEARCH).chain(THEMES).chain(HELP)
@@ -96,6 +210,9 @@ pub enum Dispatch {
     Close,
     /// Emit the action on MENU_EVENT for the renderer.
     Emit(&'static str),
+    /// Run this WebKit editing command on the main webview (the Linux Edit
+    /// items of ours; editing_command).
+    Editing(&'static str),
     /// A predefined item (Copy, Hide, ...) or no item of ours.
     Ignore,
 }
@@ -104,18 +221,29 @@ pub fn dispatch(id: &str) -> Dispatch {
     match id {
         QUIT_ID => Dispatch::Quit,
         CLOSE_ID => Dispatch::Close,
-        _ => action_of(id).map_or(Dispatch::Ignore, Dispatch::Emit),
+        _ => match editing_command(id) {
+            Some(c) => Dispatch::Editing(c),
+            None => action_of(id).map_or(Dispatch::Ignore, Dispatch::Emit),
+        },
     }
 }
 
-/// The on_menu_event handler of lib.rs: @p quit, @p close and @p emit are
-/// AppHandle::exit, the main window's close and AppHandle::emit.
-pub fn on_menu_event(id: &str, quit: impl FnOnce(), close: impl FnOnce(), emit: impl FnOnce(&'static str)) -> Dispatch {
+/// The on_menu_event handler of lib.rs: @p quit, @p close, @p emit and
+/// @p edit are AppHandle::exit, the main window's close, AppHandle::emit and
+/// the webview's execute_editing_command (Linux).
+pub fn on_menu_event(
+    id: &str,
+    quit: impl FnOnce(),
+    close: impl FnOnce(),
+    emit: impl FnOnce(&'static str),
+    edit: impl FnOnce(&'static str),
+) -> Dispatch {
     let d = dispatch(id);
     match d {
         Dispatch::Quit => quit(),
         Dispatch::Close => close(),
         Dispatch::Emit(a) => emit(a),
+        Dispatch::Editing(c) => edit(c),
         Dispatch::Ignore => {}
     }
     d
@@ -149,6 +277,27 @@ fn file_menu<R: Runtime>(app: &AppHandle<R>, quit: Option<Entry<R>>) -> tauri::R
     submenu(app, "File", e)
 }
 
+fn edit_menu<R: Runtime>(app: &AppHandle<R>, items: &[Edit]) -> tauri::Result<Submenu<R>> {
+    let e = items
+        .iter()
+        .map(|i| {
+            Ok(match edit_entry(*i, LINUX_EDIT_IS_OURS) {
+                EditEntry::Ours(id, label) => Box::new(MenuItem::with_id(app, id, label, true, None::<&str>)?) as Entry<R>,
+                EditEntry::Predefined(e) => Box::new(match e {
+                    Edit::Undo => PredefinedMenuItem::undo(app, None)?,
+                    Edit::Redo => PredefinedMenuItem::redo(app, None)?,
+                    Edit::Separator => PredefinedMenuItem::separator(app)?,
+                    Edit::Cut => PredefinedMenuItem::cut(app, None)?,
+                    Edit::Copy => PredefinedMenuItem::copy(app, None)?,
+                    Edit::Paste => PredefinedMenuItem::paste(app, None)?,
+                    Edit::SelectAll => PredefinedMenuItem::select_all(app, None)?,
+                }) as Entry<R>,
+            })
+        })
+        .collect::<tauri::Result<Vec<_>>>()?;
+    submenu(app, "Edit", e)
+}
+
 fn view_menu<R: Runtime>(app: &AppHandle<R>, extra: Vec<Entry<R>>) -> tauri::Result<Submenu<R>> {
     let mut e = group(app, VIEWS)?;
     e.push(sep(app)?);
@@ -167,8 +316,8 @@ fn view_menu<R: Runtime>(app: &AppHandle<R>, extra: Vec<Entry<R>>) -> tauri::Res
 /// The menu bar. On macOS: Tauri's default menu (tauri menu.rs
 /// Menu::default) with the app's own Quit (Cmd+Q must reach the close guard;
 /// the predefined Quit sends terminate:, which cannot be prevented) and the
-/// File, Run, View and Help menus of the app. On Windows and Linux: File
-/// (with Quit), Run, View and Help.
+/// File, Edit, Run, View and Help menus of the app. On Windows and Linux:
+/// File (with Quit), Edit, Run, View and Help.
 pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let pkg = app.package_info();
     #[cfg(target_os = "macos")]
@@ -208,20 +357,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
                     ],
                 )?,
                 &file_menu(app, None)?,
-                &Submenu::with_items(
-                    app,
-                    "Edit",
-                    true,
-                    &[
-                        &PredefinedMenuItem::undo(app, None)?,
-                        &PredefinedMenuItem::redo(app, None)?,
-                        &PredefinedMenuItem::separator(app)?,
-                        &PredefinedMenuItem::cut(app, None)?,
-                        &PredefinedMenuItem::copy(app, None)?,
-                        &PredefinedMenuItem::paste(app, None)?,
-                        &PredefinedMenuItem::select_all(app, None)?,
-                    ],
-                )?,
+                &edit_menu(app, EDIT_MACOS)?,
                 &submenu(app, "Run", group(app, RUN)?)?,
                 &view_menu(app, vec![Box::new(PredefinedMenuItem::fullscreen(app, None)?)])?,
                 &Submenu::with_items(
@@ -242,6 +378,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
             app,
             &[
                 &file_menu(app, Some(Box::new(quit)))?,
+                &edit_menu(app, EDIT_OTHER)?,
                 &submenu(app, "Run", group(app, RUN)?)?,
                 &view_menu(app, vec![])?,
                 &submenu(app, "Help", group(app, HELP)?)?,
@@ -299,10 +436,33 @@ mod tests {
         assert_eq!(labels, ["Setup", "Results", "Batch", "History"]);
     }
 
+    // Every platform has an Edit menu with cut, copy, paste and select all
+    // (report 20261121T143325Z_856491d9), and none of the app's shortcuts
+    // takes theirs: Cmd/Ctrl+C, V, X and A stay the text field's.
+    #[test]
+    fn every_platform_has_an_edit_menu_whose_keys_stay_the_fields() {
+        for list in [EDIT_MACOS, EDIT_OTHER] {
+            for e in [Edit::Cut, Edit::Copy, Edit::Paste, Edit::SelectAll] {
+                assert!(list.contains(&e), "{e:?}");
+            }
+        }
+        let ours: Vec<&str> = all().filter_map(|i| i.accel).chain(["CmdOrCtrl+W", "CmdOrCtrl+Q"]).collect();
+        for e in EDIT_MACOS.iter().chain(EDIT_OTHER) {
+            if let Some(a) = e.accel() {
+                assert!(!ours.contains(&a), "{a} is taken by an item of ours");
+            }
+        }
+        assert_eq!(EDIT_OTHER.iter().filter_map(|e| e.accel()).collect::<Vec<_>>(), ["CmdOrCtrl+X", "CmdOrCtrl+C", "CmdOrCtrl+V", "CmdOrCtrl+A"]);
+        // The predefined items' ids are muda's own: a click is not an action of ours.
+        for id in ["cut", "copy", "paste", "select_all"] {
+            assert_eq!(dispatch(id), Dispatch::Ignore);
+        }
+    }
+
     #[test]
     fn accelerators_parse() {
         // The strings muda parses when the menu is built.
-        for a in all().filter_map(|i| i.accel).chain(["CmdOrCtrl+W", "CmdOrCtrl+Q"]) {
+        for a in all().filter_map(|i| i.accel).chain(["CmdOrCtrl+W", "CmdOrCtrl+Q"]).chain(EDIT_MACOS.iter().filter_map(|e| e.accel())) {
             a.parse::<muda::accelerator::Accelerator>().unwrap_or_else(|e| panic!("{a}: {e}"));
         }
     }
@@ -313,18 +473,62 @@ mod tests {
     fn menu_events_dispatch() {
         for i in all() {
             let (mut q, mut c, mut emitted) = (0, 0, Vec::new());
-            let d = on_menu_event(i.id, || q += 1, || c += 1, |a| emitted.push(a));
+            let d = on_menu_event(i.id, || q += 1, || c += 1, |a| emitted.push(a), |_| panic!("{}: not an edit", i.id));
             assert_eq!(d, Dispatch::Emit(i.id));
             assert_eq!((q, c), (0, 0), "{}: emits only", i.id);
             assert_eq!(emitted, vec![i.id]);
         }
         let (mut q, mut c, mut emitted) = (0, 0, Vec::<&str>::new());
-        assert_eq!(on_menu_event(QUIT_ID, || q += 1, || c += 1, |a| emitted.push(a)), Dispatch::Quit);
-        assert_eq!(on_menu_event(CLOSE_ID, || q += 1, || c += 1, |a| emitted.push(a)), Dispatch::Close);
+        assert_eq!(on_menu_event(QUIT_ID, || q += 1, || c += 1, |a| emitted.push(a), |_| panic!("not an edit")), Dispatch::Quit);
+        assert_eq!(on_menu_event(CLOSE_ID, || q += 1, || c += 1, |a| emitted.push(a), |_| panic!("not an edit")), Dispatch::Close);
         // A predefined item (its id is muda's own) and a stray id do nothing.
-        assert_eq!(on_menu_event("copy", || q += 1, || c += 1, |a| emitted.push(a)), Dispatch::Ignore);
-        assert_eq!(on_menu_event("", || q += 1, || c += 1, |a| emitted.push(a)), Dispatch::Ignore);
+        assert_eq!(on_menu_event("copy", || q += 1, || c += 1, |a| emitted.push(a), |_| panic!("not an edit")), Dispatch::Ignore);
+        assert_eq!(on_menu_event("", || q += 1, || c += 1, |a| emitted.push(a), |_| panic!("not an edit")), Dispatch::Ignore);
         assert_eq!((q, c), (1, 1));
         assert!(emitted.is_empty());
+    }
+
+    // Finding #12: muda's GTK Cut, Copy, Paste and Select All did nothing on
+    // a click without the libxdo feature. On Linux the four are items of ours
+    // whose click runs the webview's editing command.
+    #[test]
+    fn linux_edit_items_are_ours_and_run_the_webviews_editing_command() {
+        let four = [(Edit::Cut, EDIT_CUT_ID, "Cut", "Cut"), (Edit::Copy, EDIT_COPY_ID, "Copy", "Copy"), (Edit::Paste, EDIT_PASTE_ID, "Paste", "Paste"), (Edit::SelectAll, EDIT_SELECT_ALL_ID, "Select All", "SelectAll")];
+        assert_eq!(LINUX_EDIT_IS_OURS, cfg!(target_os = "linux"));
+        for (e, id, label, cmd) in four {
+            assert_eq!(e.id(), Some(id));
+            assert_eq!(edit_entry(e, true), EditEntry::Ours(id, label));
+            // macOS and Windows keep the platform's own item.
+            assert_eq!(edit_entry(e, false), EditEntry::Predefined(e));
+            assert_eq!(editing_command(id), Some(cmd));
+            assert_eq!(dispatch(id), Dispatch::Editing(cmd));
+            // A click runs the command, and nothing else.
+            let (mut q, mut c, mut emitted, mut edited) = (0, 0, Vec::<&str>::new(), Vec::new());
+            assert_eq!(on_menu_event(id, || q += 1, || c += 1, |a| emitted.push(a), |x| edited.push(x)), Dispatch::Editing(cmd));
+            assert_eq!((q, c), (0, 0), "{id}");
+            assert!(emitted.is_empty(), "{id}");
+            assert_eq!(edited, vec![cmd]);
+            // Not an id of ours otherwise, nor muda's predefined one.
+            assert!(all().all(|i| i.id != id) && id != QUIT_ID && id != CLOSE_ID, "{id}");
+        }
+        // The Linux list: every entry but the separator is ours.
+        let entries: Vec<_> = EDIT_OTHER.iter().map(|e| edit_entry(*e, true)).collect();
+        assert_eq!(
+            entries,
+            [
+                EditEntry::Ours(EDIT_CUT_ID, "Cut"),
+                EditEntry::Ours(EDIT_COPY_ID, "Copy"),
+                EditEntry::Ours(EDIT_PASTE_ID, "Paste"),
+                EditEntry::Predefined(Edit::Separator),
+                EditEntry::Ours(EDIT_SELECT_ALL_ID, "Select All"),
+            ]
+        );
+        // Undo and Redo (macOS only) stay predefined in any case.
+        for e in [Edit::Undo, Edit::Redo, Edit::Separator] {
+            assert_eq!(edit_entry(e, true), EditEntry::Predefined(e));
+            assert_eq!(e.id(), None);
+        }
+        assert_eq!(editing_command("copy"), None);
+        assert_eq!(editing_command("open-spectra"), None);
     }
 }

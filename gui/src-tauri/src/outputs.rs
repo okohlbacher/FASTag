@@ -24,7 +24,7 @@ pub fn output_options() -> &'static [String] {
     static OPTIONS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
     OPTIONS.get_or_init(|| {
         let m: serde_json::Value = serde_json::from_str(MANIFEST).expect("params.generated.json is JSON");
-        let mut o: Vec<String> = m["params"]
+        m["params"]
             .as_array()
             .map(|ps| {
                 ps.iter()
@@ -32,21 +32,9 @@ pub fn output_options() -> &'static [String] {
                     .filter_map(|p| p["name"].as_str().map(String::from))
                     .collect()
             })
-            .unwrap_or_default();
-        // The tag graph outputs the backend adds itself (fastag.rs with_tag_graph),
-        // whether or not the manifest's CLI has them.
-        for t in TAG_GRAPH_OUTPUTS {
-            if !o.iter().any(|x| x == t.0) {
-                o.push(t.0.to_string());
-            }
-        }
-        o
+            .unwrap_or_default()
     })
 }
-
-/// The tag graph tables of a run (-resolved_out, -tag_graph_out), written
-/// beside the tags as <stem><suffix> when the CLI has both options.
-pub const TAG_GRAPH_OUTPUTS: [(&str, &str); 2] = [("resolved_out", ".resolved.tsv"), ("tag_graph_out", ".taggraph.tsv")];
 
 /// The input-file options of FASTag (the manifest's `input-file` parameters,
 /// -in among them): the spectra, the databases (fasta, recon_fasta,

@@ -3,10 +3,11 @@
 // evidence, and nothing is a call the CLI did not make (Q2).
 
 import { describe, expect, it } from 'vitest'
-import { parseReport } from '../digestReport'
+import { alkylationCall, parseReport } from '../digestReport'
+import ALKYLATION_TAGS from '../fixtures/alkylation-tags.tsv?raw'
 import { CLI_CASES, logLines, type CliCase } from '../testing/cliFixtures'
 import { speciesFromTsv } from '../testing/speciesTsv'
-import { addNote, buildOverview, MIN_TAGGED, type Overview, type Tile } from './overview'
+import { addNote, alkylationReason, buildOverview, MIN_TAGGED, type Overview, type Tile } from './overview'
 
 function overviewOf(c: CliCase, extra: { instrument?: string | null } = {}): Overview {
   const reports = [parseReport(c.digest, `/d/${c.name}.digest.tsv`), parseReport(c.label, `/d/${c.name}.label.tsv`)]
@@ -132,10 +133,11 @@ describe('Overview model: calls', () => {
     const t = tile(o, 'alkylation')
     expect(t.value).toBe('not assessed')
     expect(t.tone).toBe('off')
-    // Characterize's extension 2 cannot place tags in a proteome: the action
-    // raises it to 3, and the tile says so.
-    expect(t.action).toEqual({ kind: 'enable', label: 'Add Alkylation report and run again', values: { alkylation_out: 'alkylation.tsv', extension: '3' } })
-    expect(t.note).toMatch(/raises the extension from 2 to 3/)
+    // feedback 202dbcf4: the report needs no database, so the action adds it
+    // without raising Characterize's extension 2, and the tile says so.
+    expect(t.action).toEqual({ kind: 'enable', label: 'Add Alkylation report and run again', values: { alkylation_out: 'alkylation.tsv' } })
+    expect(t.note).toMatch(/needs no database/)
+    expect(t.note).not.toMatch(/raises the extension/)
     expect(line(o, 'fixed C')).toMatchObject({ evidence: 'default' })
     expect(line(o, 'fixed C').note).toBe('default, alkylation not assessed (alkylation report not written)')
   })
@@ -394,6 +396,99 @@ describe('Overview model: the alkylation report', () => {
     expect(t).toMatchObject({ value: 'no call', tone: 'nocall' })
     expect(t.note).toMatch(/no tag reaches the 8 residues the proteome needs/)
     expect(t.action).toEqual({ kind: 'enable', label: 'Run again with extension 3', values: { extension: '3' } })
+  })
+
+  // feedback 202dbcf4: format 2, the call from the tags without a database
+  const tagReport = (status: string, reason: string, extra = ''): string =>
+    [
+      'section\tkey\tvalue\tn\tdescription',
+      'alk_run\tformat\t2\t-\t-',
+      'alk_run\tmethod\ttags\t-\t-',
+      'alk_run\tdatabase\t-\t-\t-',
+      'alk_run\tdatabase_source\tnone\t-\t-',
+      'alkt_run\tformat\t2\t-\t-',
+      `alkylation_call\tstatus\t${status}\t8\t-`,
+      `alkylation_call\treason\t${reason}\t-\t-`,
+      'alkylation_call\tsource\ttags\t-\t-',
+      extra
+    ].join('\n')
+  it('a tag-only report (format 2): the call names the votes and no database, and few votes ask for longer tags', () => {
+    const r = parseReport(tagReport('no_call', 'few_cys_spectra'), '/d/a.alkylation.tsv')
+    expect(r.kind).toBe('alkylation')
+    const t = tile(of(tagReport('no_call', 'few_cys_spectra')), 'alkylation')
+    expect(t).toMatchObject({ value: 'no call', tone: 'nocall' })
+    expect(t.note).toMatch(/8 spectra vote from their tags/)
+    expect(t.note).not.toMatch(/proteome/)
+    expect(t.action).toBeUndefined()
+    const c = tile(of(tagReport('call', '-', 'alkylation_call\treagent\tMethylthio\t6\t-\nalkylation_call\tmass\t45.987721\t-\t-\nalkylation_call\tshare\t0.75\t8\t-')), 'alkylation')
+    expect(c).toMatchObject({ value: 'Methylthio', tone: 'call' })
+    expect(c.note).toMatch(/75% of 8 spectra whose tags read a cysteine, no database; experimental/)
+    const u = tile(of(tagReport('no_call', 'unresolved_forms')), 'alkylation')
+    expect(u.note).toMatch(/cannot tell two cysteine forms apart/)
+  })
+
+  // Codex7 review n1: a tag-only CAM call is no call alias_needs_database;
+  // the tile names the candidate and asks for a protein database.
+  it('a tag candidate with an exact alias: "Candidate: Carbamidomethyl", needs a protein database', () => {
+    const text = tagReport(
+      'no_call',
+      'alias_needs_database',
+      'alkylation_call\tcandidate\tCarbamidomethyl\t36\t-\nalkylation_call\tshare\t0.9\t40\t-\nalkylation_call\tvoted\t40\t40\t-'
+    )
+    const r = parseReport(text, '/d/a.alkylation.tsv')
+    expect(r.kind).toBe('alkylation')
+    const t = tile(of(text), 'alkylation')
+    expect(t).toMatchObject({ value: 'Candidate: Carbamidomethyl', tone: 'nocall' })
+    expect(t.note).toMatch(/^needs a protein database to confirm \(90% of 40 tag votes\); run again with a FASTA \(Protein database\) or a shipped proteome/)
+    expect(alkylationReason('alias_needs_database')).toMatch(/needs a protein database/)
+  })
+
+  // Release-gate review n4: 18 CAM + 2 other + 4 conflicts is a share of
+  // 0.75 of 24 (the share row's n, format 3), not "75% of 20".
+  it('a format 3 call pairs the share with its reported denominator, conflicts included', () => {
+    const text = tagReport(
+      'call',
+      '-',
+      'alkylation_call\treagent\tCarbamidomethyl\t18\t-\nalkylation_call\tmass\t57.021464\t-\t-\nalkylation_call\tshare\t0.75\t24\t-\nalkylation_call\tvoted\t24\t20\t-'
+    ).replace('alkylation_call\tstatus\tcall\t8\t-', 'alkylation_call\tstatus\tcall\t20\t-')
+    const c = tile(of(text), 'alkylation')
+    expect(c).toMatchObject({ value: 'Carbamidomethyl', tone: 'call' })
+    expect(c.note).toMatch(/^75% of 24 tag votes \(20 for a form, 4 conflicted\), no database; experimental$/)
+    expect(c.note).not.toMatch(/of 20/)
+  })
+
+  // Codex6 review n1: from format 4 the share's denominator holds the tag
+  // votes that abstained (alkt_form alias_unconfirmed); PXD000001 at
+  // Extension 2: Methylthio 52 of 69, 57 for a form, 1 conflicted, 11 abstained.
+  it('a format 4 call names the abstained votes in its denominator, not as conflicts', () => {
+    const text = tagReport(
+      'call',
+      '-',
+      'alkt_form\talias_unconfirmed\t11\t69\t-\nalkylation_call\treagent\tMethylthio\t52\t-\nalkylation_call\tmass\t45.987721\t-\t-\nalkylation_call\tshare\t0.7536231884057971\t69\t-\nalkylation_call\tvoted\t69\t57\t-'
+    )
+      .replace('alk_run\tformat\t2\t-\t-', 'alk_run\tformat\t4\t-\t-')
+      .replace('alkylation_call\tstatus\tcall\t8\t-', 'alkylation_call\tstatus\tcall\t57\t-')
+    expect(alkylationCall(parseReport(text, '/d/a.alkylation.tsv')).abstained).toBe(11)
+    const c = tile(of(text), 'alkylation')
+    expect(c).toMatchObject({ value: 'Methylthio', tone: 'call' })
+    expect(c.note).toMatch(/^75\.36% of 69 tag votes \(57 for a form, 1 conflicted, 11 abstained\), no database; experimental$/)
+    // Format 3 has no abstentions: the same rows read as 12 conflicts.
+    const f3 = text.replace('alk_run\tformat\t4\t-\t-', 'alk_run\tformat\t3\t-\t-')
+    expect(alkylationCall(parseReport(f3, '/d/a.alkylation.tsv')).abstained).toBe(0)
+    expect(tile(of(f3), 'alkylation').note).toMatch(/\(57 for a form, 12 conflicted\)/)
+  })
+
+  // Review n4: neither component calls on a shipped proteome with too short
+  // tags (PXD000001, gui/src/fixtures/alkylation-tags.tsv): the report's
+  // call is the tag call's few_cys_spectra, the tags_too_short is the
+  // placement call's; the tile keeps both and the extension that places.
+  it('a tag no call over a placement call whose tags are too short keeps the diagnosis and the extension', () => {
+    const t = tile(of(ALKYLATION_TAGS, { tag_length: '3', extension: '0' }), 'alkylation')
+    expect(t).toMatchObject({ value: 'no call', tone: 'nocall' })
+    expect(t.note).toMatch(/^8 spectra vote from their tags, fewer than the call needs; the placements: no tag reaches the 8 residues the proteome needs$/)
+    expect(t.action).toEqual({ kind: 'enable', label: 'Run again with extension 3', values: { extension: '3' } })
+    // The search line's reason is the tag call's, in tag words.
+    expect(line(of(ALKYLATION_TAGS, { tag_length: '3', extension: '0' }), 'fixed C').note).toBe('default; no alkylation call (too few tag votes for a cysteine form)')
   })
 
   it('shows the call with its reagent, and suggests it for the search', () => {

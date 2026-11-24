@@ -10,6 +10,7 @@
 import type { ParamValue } from '../ParamField'
 import { initialValues } from './useSession'
 import { rebaseOutputs } from '../app/paths'
+import { withoutDatabase } from './products'
 
 export type TaskId = 'export-tags' | 'run-qc' | 'mass-shift' | 'species' | 'db-reduction' | 'triage' | 'characterize'
 
@@ -57,7 +58,7 @@ export interface Task {
   time: 'short' | 'longer'
   timeNote: string
   group: TaskGroup
-  /// "Recommended to start" on its tile.
+  /// The "Start here" chip on its tile (title: "Recommended to start").
   recommended?: true
   /// One gray line under each basic field, for this workflow.
   help: Record<string, string>
@@ -66,6 +67,12 @@ export interface Task {
   /// A line beside a product of this workflow that is off by default: what
   /// it needs here.
   productNotes?: Record<string, string>
+  /// Its database reports (products.ts db) wait for a protein database
+  /// instead of blocking Run: while none is chosen they are off, and the
+  /// run writes what needs none (runValues).
+  dbOptional?: true
+  /// Optional inputs step 2 shows open, not behind Add optional input.
+  openInputs?: string[]
   /// Groups of Advanced with another home (paramLayout SECTIONS) that lead
   /// with the workflow's own, by title: the settings of a report it writes
   /// by default (Characterize: species).
@@ -137,9 +144,9 @@ export const TASKS: readonly Task[] = [
     use: 'Unexpected or unknown modifications.',
     notFor: 'Confirmed identifications: shifts and placements are candidates without FDR control.',
     time: 'longer',
-    timeNote: 'places every tag on the FASTA',
+    timeNote: 'places every tag on the protein database',
     group: 'sample',
-    blurb: 'Blind modification search: mass shifts between tags and the database, with sites and UniMod names.',
+    blurb: 'Blind modification search: mass shifts between tags and a protein database (your FASTA or a shipped proteome), with sites and UniMod names.',
     products: 'shift table',
     values: {
       ...ALL,
@@ -150,9 +157,16 @@ export const TASKS: readonly Task[] = [
       extension: '3'
     },
     basic: ['extension', 'recon_missed_cleavages'],
-    required: ['recon_fasta'],
+    // Feedback 422372a2: the shifts are measured against a protein database,
+    // a FASTA of the user's or a shipped proteome. Without one the shift
+    // reports are off and the run writes the tags only (dbOptional).
+    optionalInputs: ['recon_fasta', 'fasta'],
+    openInputs: ['recon_fasta'],
+    about: ['recon_proteome'],
+    dbOptional: true,
     help: {
-      recon_fasta: 'The FASTA the tags are placed on (tryptic peptides); shifts are measured against it.',
+      recon_fasta: 'Your FASTA the tags are placed on (tryptic peptides); shifts are measured against it. Or choose a shipped proteome below.',
+      recon_proteome: 'The organism\'s shipped proteome, when you have no FASTA of your own.',
       extension: 'Longer tags place better.',
       recon_missed_cleavages: 'Missed trypsin cleavages per placement, 0 to 10.'
     },
@@ -167,7 +181,7 @@ export const TASKS: readonly Task[] = [
     use: 'Contamination checks, mixed or unknown samples.',
     notFor: 'Ion-trap data: the calls are unreliable at the wide tolerances it needs.',
     time: 'short',
-    timeNote: '10% of the spectra is usually enough',
+    timeNote: 'tagging plus a lookup in the bundled index',
     group: 'sample',
     blurb: 'Which taxa the sample contains, from the bundled taxonomy index. No FASTA needed.',
     products: 'species report',
@@ -179,7 +193,7 @@ export const TASKS: readonly Task[] = [
     optionalInputs: ['taxdb'],
     help: {
       species_rank: 'The taxonomic level of the report.',
-      subsample_fraction: 'All spectra by default; 10% is usually enough.'
+      subsample_fraction: 'All spectra by default; a share reads faster.'
     },
     outputs: ['out', 'species_out'],
     docs: { to: 'species-howto', label: 'Species detection' }
@@ -257,37 +271,37 @@ export const TASKS: readonly Task[] = [
     id: 'characterize',
     label: 'Characterize a run',
     question: 'What was done to this sample before it was measured?',
-    gets: 'The protease, labels, glycopeptides and species, from 10% of the spectra.',
+    gets: 'The protease, labels, alkylation, glycopeptides and species, from all spectra.',
     use: 'An unknown or legacy data set, before choosing search settings.',
     notFor: 'A final call on very few spectra: the calls then say \'too little evidence\'.',
     time: 'short',
-    timeNote: '10% of the spectra',
+    timeNote: 'tagging plus the survey reports',
     group: 'sample',
     recommended: true,
-    blurb: 'Protease, labels, glycopeptides and species from 10% of the spectra; alkylation on request.',
-    products: '4 reports',
-    // No alkylation report by default: it places tags on a shipped proteome,
-    // which needs tags of 8 residues (human), and extension 2 (validated
-    // for the species call) reaches 7 with seed 3: every run would end with
-    // tags_too_short.
+    blurb: 'Protease, labels, alkylation, glycopeptides and species, from all spectra.',
+    products: '5 reports',
+    // All spectra and the alkylation report by default (user decision,
+    // 1.16): the report needs no proteome (its call is read off the tags),
+    // and on all spectra at Extension 2 enough cysteines vote (PXD000001:
+    // methylthio, 52 of 69 votes); on 10% they did not (8 votes, no call).
     values: {
       ...ALL,
       digest_out: 'digest.tsv',
       label_out: 'label.tsv',
+      alkylation_out: 'alkylation.tsv',
       glyco: true,
       species: true,
-      extension: '2',
-      subsample_fraction: '0.1'
+      extension: '2'
     },
     basic: ['subsample_fraction'],
     optionalInputs: ['taxdb'],
     help: {
-      subsample_fraction: '10% gives stable calls in a tenth of the time.'
+      subsample_fraction: 'All spectra; on a share too few cysteines may vote.'
     },
     outputs: ['out', 'digest_out', 'label_out', 'alkylation_out', 'glyco_out', 'species_out'],
     productNotes: {
       alkylation_out:
-        'Without a protein database the alkylation report places its tags on a shipped proteome, which needs tags of 8 residues (human, mouse) or 7 (yeast, E. coli) (or Shortest tag placed, when set above 0). Turning it on raises Extension so that tag length + 2 × Extension reaches that length; this changes every tag of the run. The species and digest calls are validated at Extension 2. A FASTA of your own (as the proteome or as Protein database) needs a length that grows with its size (8 for a human-sized one): Extension is not raised, and the note says what a human-sized one needs. With another report that places tags, Extension is left as it is.'
+        'The alkylation report needs no protein database: it counts the cysteines the tags read in each form (unmodified, carbamidomethyl, propionamide, N-ethylmaleimide, methylthio, carboxymethyl) and calls the reagent when enough spectra vote; otherwise it says no call and why, with the counts. Votes need a cysteine inside a tag, so longer tags give more (tested with tag length 4 and Extension 6); on all spectra at Extension 2 there are usually enough, on a share of them often too few. A protein database adds the placements of single-cysteine peptides as a check. A shipped proteome named as the proteome needs tags of 8 residues (human, mouse) or 7 (yeast, E. coli) (or Shortest tag placed, when set above 0): turning the report on then raises Extension so that tag length + 2 × Extension reaches that length; this changes every tag of the run. The species and digest calls are validated at Extension 2. A FASTA of your own (as the proteome or as Protein database) needs a length that grows with its size (8 for a human-sized one): Extension is not raised, and the note says what a human-sized one needs. With another report that places tags, Extension is left as it is.'
     },
     leadGroups: ['Species', 'Species, advanced', 'Taxonomy'],
     docs: { to: 'digest', label: 'Digest, label and mass-gap reports' }
@@ -357,6 +371,12 @@ export function originText(o: Origin): string {
   if (o.kind === 'builtin') return taskById(o.id)?.label ?? o.id
   if (o.kind === 'preset') return `preset ${o.name}`
   return 'FASTag defaults'
+}
+
+/// The values a run of @p task is sent: for a workflow whose database
+/// reports wait for a database (dbOptional), those without one are off.
+export function runValues<T extends Record<string, ParamValue>>(task: Task | null | undefined, values: T): T {
+  return task?.dbOptional ? (withoutDatabase(values) as T) : values
 }
 
 /// The values a session starting from @p base has, its reports beside

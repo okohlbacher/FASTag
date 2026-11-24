@@ -116,15 +116,23 @@ test('a blocked input links to its FAQ and glossary, then returns without changi
   expect(await mockState<unknown[]>(page, 'runCalls')).toEqual([])
 })
 
-test('closing contextual Help after changing view leaves focus on a usable control', async ({ page }) => {
+test('the app bar Help opens the page of the screen shown', async ({ page }) => {
   await openApp(page)
   await goTo(page, 'History')
-  const opener = page.getByRole('button', { name: 'Reopen results or reuse settings' })
+  await page.getByRole('button', { name: 'Help', exact: true }).focus()
+  await page.keyboard.press('Enter')
+  await expect(helpPanel(page).locator('#workflow-history-h')).toBeFocused()
+})
+
+test('closing contextual Help after changing view leaves focus on a usable control', async ({ page }) => {
+  await openApp(page)
+  // A link into Help on Setup, hidden once the view changes.
+  const opener = page.getByRole('button', { name: 'More about this task' })
   await opener.focus()
   await page.keyboard.press('Enter')
   const panel = helpPanel(page)
-  await expect(panel.locator('#workflow-history-h')).toBeFocused()
-  await goTo(page, 'Setup')
+  await expect(panel.locator('#task-export-tags > summary')).toBeFocused()
+  await goTo(page, 'History')
   await panel.getByRole('button', { name: 'Close Help' }).click()
   await expect(panel).toBeHidden()
   await expect(page.getByRole('button', { name: 'Help', exact: true })).toBeFocused()

@@ -1,0 +1,98 @@
+section	key	value	n	description
+run	version	1.15.7	-	FASTag 1.15.7 wrote this report.
+run	input	run01.mzML	-	The spectra were read from run01.mzML.
+run	fragment_tolerance	0.3	-	The fragment tolerance is 0.3 Da.
+run	fragment_tolerance_unit	Da	-	The fragment tolerance is in Da.
+run	tag_length	3	-	Tags were seeded at length 3.
+run	subsample_fraction	0	-	A fraction of 0 of the spectra was tagged (0 = all).
+run	subsample_spectra	0	-	0 spectra were drawn for tagging (0 = all).
+run	run_report_version	6	-	The run section follows FASTag run report format 6.
+run	pick_profile	legacy	-	Profile MS2 was centroided under -pick_profile legacy.
+run	profile_ms2_picked	0	0	0 of 0 profile MS2 spectra were centroided before tagging.
+run	profile_ms2_kept	0	0	0 of 0 profile MS2 spectra were tagged as profile (picking yielded nothing).
+run	activation_collisional	139	139	139 of 139 MS2 spectra were activated by collision (CID, HCD, trap-type CID, PQD).
+run	activation_electron	0	139	0 of 139 MS2 spectra were activated by electron transfer or capture (ETD, ECD).
+run	activation_hybrid	0	139	0 of 139 MS2 spectra were activated by a hybrid method (EThcD, ETciD).
+run	activation_unknown	0	139	0 of 139 MS2 spectra carry no activation FASTag classifies.
+run	unknown_charge	assume2	-	Precursors without a charge were tagged under -unknown_charge assume2.
+run	isotope_error	0	-	Precursor isotope offsets 0 were considered.
+run	charge_header	0	0	0 of 0 MS2 spectra were reported at their precursor's charge.
+run	charge_possible	0	0	0 of 0 MS2 spectra were reported at a listed possible charge.
+run	charge_inferred	0	0	0 of 0 MS2 spectra were reported at an inferred charge.
+run	charge_ambiguous	0	0	0 of 0 MS2 spectra were reported at the better of two inferred charges.
+run	charge_assumed	0	0	0 of 0 MS2 spectra were reported at charge 2 without charge evidence.
+run	charge_enumerated	0	0	0 of 0 MS2 spectra were reported at an enumerated charge.
+run	isotope_shifted	0	0	0 of 0 MS2 spectra were reported at a precursor isotope offset other than 0.
+run	multi_hypothesis	0	0	0 of 0 MS2 spectra were tagged under more than one precursor hypothesis.
+run	ion_series	by	-	MS2 spectra were read under -ion_series by.
+run	ion_series_by	139	139	139 of 139 MS2 spectra were tagged as b/y ions.
+run	ion_series_cz	0	139	0 of 139 MS2 spectra were tagged as c/z-dot ions.
+run	complement_tolerance	0.17348341625534652	-	The complement window in force was 0.17348341625534652 Da (-complement_tolerance_unit auto).
+run	complement_tolerance_source	measured	-	The window was measured on the run's probe.
+run	complement_tolerance_measured	0.17348341625534652	-	The probe measured a complement window of 0.17348341625534652 Da.
+run	complement_probe_confident	44	139	44 of 139 probe MS2 spectra had a rank-1 tag at E <= 0.01.
+run	complement_probe_signal	72	78	78 complement pairs fell within 0.9 Da, 72 above the chance floor.
+run	complement_probe_median	0.029022216796420253	-	The floor-corrected median complement error was 0.029022216796420253 Da.
+run	complement_probe_mad	0.04971313476426076	-	The floor-corrected median absolute deviation of the complement error was 0.04971313476426076 Da.
+qc	qc_version	3	-	The qc section follows format 3.
+qc	instrument_model	LTQ Orbitrap XL	-	The instrument model is LTQ Orbitrap XL (as the input's run metadata names it).
+qc	instrument_serial_number	01579B	-	The instrument serial number is 01579B (as the input's run metadata states it).
+qc	start_timestamp	2010-02-22T16:21:17	-	The acquisition start is 2010-02-22T16:21:17 (ISO 8601, as the input's run metadata states it).
+qc	spectra_input	139	-	139 spectra in the input.
+qc	spectra_read	139	139	Spectra read: every spectrum of the input.
+qc	subsampled	0	-	Every spectrum was read.
+qc	count_ms1	0	139	0 spectra of MS level 1 (metadata only; peaks are not needed).
+qc	count_ms2	139	139	139 spectra of MS level 2 (metadata only; peaks are not needed).
+qc	count_ms2_ITMS	139	139	139 MS2 spectra read out in analyser class ITMS.
+qc	analyzer_source_filter	139	139	Spectra whose analyser class came from the Thermo filter string.
+qc	analyzer_source_config	0	139	Spectra whose analyser class came from the instrument configuration the scan references.
+qc	analyzer_source_run	0	139	Spectra whose analyser class came from the run's default instrument configuration.
+qc	analyzer_source_none	0	139	Spectra whose analyser class came from nothing (class unknown).
+qc	sps_ms3	0	0	MS3 spectra with more than one precursor (synchronous precursor selection).
+qc	resolution_stated_ITMS_ms2	n/a	139	The file states no resolving power for ITMS_ms2 spectra.
+qc	resolution_measured_ITMS_ms2	n/a	-	Not measured: centroid_only (centroid_only: the class has centroided spectra only).
+qc	resolution_source_ITMS_ms2	n/a	-	Where resolution_ITMS_ms2 comes from: stated by the file, else measured on profile spectra.
+qc	resolution_ITMS_ms2	n/a	-	The resolution of ITMS_ms2 spectra: the stated value, else the median measured over every m/z band.
+qc	precursor_charge_0	0	139	MS2 spectra with no precursor charge given (unknown).
+qc	precursor_charge_0_share	0.0000	139	The share of the MS2 spectra with precursor charge 0.
+qc	precursor_charge_2	97	139	MS2 spectra with precursor charge 2.
+qc	precursor_charge_2_share	0.6978	139	The share of the MS2 spectra with precursor charge 2.
+qc	precursor_charge_3	33	139	MS2 spectra with precursor charge 3.
+qc	precursor_charge_3_share	0.2374	139	The share of the MS2 spectra with precursor charge 3.
+qc	precursor_charge_4	9	139	MS2 spectra with precursor charge 4.
+qc	precursor_charge_4_share	0.0647	139	The share of the MS2 spectra with precursor charge 4.
+qc	reporter_assessable_TMT	0	139	MS2 spectra that can show TMT reporters (high-resolution analyser, the reporter range inside the scan).
+qc	reporter_TMT_ion_trap_ms2	66	139	MS2 spectra not assessable for TMT: ion_trap_ms2.
+qc	reporter_TMT_low_mass_cutoff	73	139	MS2 spectra not assessable for TMT: low_mass_cutoff.
+qc	reporter_TMT_no_peaks	0	139	MS2 spectra not assessable for TMT: no_peaks.
+qc	reporter_observed_TMT	none	0	Channels seen (within 20 ppm, at least 3x the median peak) in at least 20% of the assessable MS2, with that share.
+qc	reporter_assessable_iTRAQ	0	139	MS2 spectra that can show iTRAQ reporters (high-resolution analyser, the reporter range inside the scan).
+qc	reporter_iTRAQ_ion_trap_ms2	43	139	MS2 spectra not assessable for iTRAQ: ion_trap_ms2.
+qc	reporter_iTRAQ_low_mass_cutoff	96	139	MS2 spectra not assessable for iTRAQ: low_mass_cutoff.
+qc	reporter_iTRAQ_no_peaks	0	139	MS2 spectra not assessable for iTRAQ: no_peaks.
+qc	reporter_observed_iTRAQ	none	0	Channels seen (within 20 ppm, at least 3x the median peak) in at least 20% of the assessable MS2, with that share.
+qc	reporter_tmt6plex	not_assessable	0	Not assessable: low_mass_cutoff.
+qc	reporter_tmt10plex	not_assessable	0	Not assessable: low_mass_cutoff.
+qc	reporter_tmt11plex	not_assessable	0	Not assessable: low_mass_cutoff.
+qc	reporter_tmt16plex	not_assessable	0	Not assessable: low_mass_cutoff.
+qc	reporter_tmt18plex	not_assessable	0	Not assessable: low_mass_cutoff.
+qc	reporter_itraq4plex	not_assessable	0	Not assessable: low_mass_cutoff.
+qc	reporter_itraq8plex	not_assessable	0	Not assessable: low_mass_cutoff.
+qc	reporter_compatible_kits	none	-	Kits compatible with the observed reporters, smallest first; several when the channels do not decide.
+qc	reporter_kit	not_assessable	-	No reporter family could be assessed (see reporter_<kit>).
+qc	reporter_kit_candidates	none	-	The smallest kit per label consistent with the observed channels (and with the label mass when it decides); one entry when the kit is called.
+qc	reporter_family_evidence	-	-	No reporter family is present.
+qc	reporter_label_delta	n/a	1322	No label mass decides the family.
+qc	ms2_tagged_e001	54	139	MS2 spectra whose best reported tag has E <= 0.01 (the census best tag).
+qc	tag_yield	0.3885	139	The share of the MS2 spectra read with a tag at E <= 0.01.
+qc	redundancy_ms2	139	139	MS2 spectra with peaks and a precursor, clustered for redundancy.
+qc	redundancy_share	0.1367	139	The share of those MS2 in clusters of size > 1 (same charge, precursor within 10 ppm, RT span <= 60 s, 1/K0 within 0.02, binned cosine >= 0.8 over >= 6 bins; complete linkage).
+qc	redundancy_clusters	8	139	Clusters of size > 1.
+qc	redundancy_largest	3	139	The largest cluster.
+qc	redundancy_pairs_compared	30	-	Pairs inside the precursor, charge, RT and mobility windows that were compared.
+qc	redundancy_components_split	0	-	Linked groups larger than 300 spectra, clustered in RT chunks of that size (bounds time and memory).
+qc	redundancy_tag_share	0.0935	139	The share of those MS2 in clusters of size > 1 (same charge, precursor within 10 ppm, RT span <= 60 s, 1/K0 within 0.02, the same best tag (E <= 0.01); complete linkage).
+qc	redundancy_tag_clusters	6	139	Clusters of size > 1.
+qc	redundancy_tag_largest	3	139	The largest cluster.
+qc	redundancy_tag_pairs_compared	13	-	Pairs inside the precursor, charge, RT and mobility windows that were compared.
+qc	redundancy_tag_components_split	0	-	Linked groups larger than 300 spectra, clustered in RT chunks of that size (bounds time and memory).

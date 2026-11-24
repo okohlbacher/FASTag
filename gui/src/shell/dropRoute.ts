@@ -5,8 +5,8 @@
 //              folder (Batch); .fasta -> Database; .taxdb -> Taxonomy;
 //   a tags TSV -> Results; digest, label and mass-gap reports -> the Digest
 //   tab; recon and delta tables -> Mass gaps & recon, a glyco report ->
-//   Glyco (P4c: the report opener sniffs which), a -recon_id_out (.mzTab;
-//   .idXML and .mzid are named there) -> Mass gaps & recon; a species report -> the
+//   Glyco (P4c: the report opener sniffs which), a -recon_id_out (.mzTab is
+//   shown; .idXML and .mzid are listed as files) -> Mass gaps & recon; a species report -> the
 //   Species tab; .sdrf.tsv -> Batch.
 // Nothing is taken while FASTag runs (the Open buttons are disabled then).
 
@@ -31,13 +31,12 @@ export interface DropPlan {
 }
 
 // The report kinds a tab shows (the long-form reports in Digest; P4c: recon
-// and delta in Mass gaps & recon, glyco in Glyco; the resolved tags and the
-// tag graph in Spectrum).
+// and delta in Mass gaps & recon, glyco in Glyco).
 // The workflow reports (qc, shortlist, census*, alkylation, delta_spectra,
 // delta_counts) open like a picked report: their header says which view.
 const REPORT_TABS = new Set([
   'digest', 'label', 'massgap', 'recon', 'delta', 'glyco', 'recon_ids', 'qc', 'shortlist', 'census_sorted', 'census_summary',
-  'census', 'alkylation', 'delta_spectra', 'delta_counts', 'check_header', 'resolved', 'taggraph'
+  'census', 'alkylation', 'delta_spectra', 'delta_counts', 'check_header'
 ])
 
 const base = (p: string): string => p.slice(Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\')) + 1)

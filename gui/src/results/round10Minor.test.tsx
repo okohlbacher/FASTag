@@ -50,7 +50,8 @@ describe('round 10 minor: the alkylation note says where Extension is', () => {
       await openGroup('Alkylation')
     }
     const note = document.getElementById('out-alkylation_out-d')!
-    expect(note.textContent).toBe('Turning it on raises Extension 0 → 3 (Settings); that changes every tag.')
+    // feedback 202dbcf4: no database, so no raise; the note links Extension.
+    expect(note.textContent).toBe('No database needed: the call is read off the tags; a longer Extension (Settings) gives more votes.')
   })
 })
 
@@ -66,6 +67,8 @@ describe('round 10 minor: the Outputs card layout of the alkylation row', () => 
   it('the (?) follows the label and the note takes a full line', async () => {
     const mock = installMockBridge()
     await renderCharacterizeApp(mock)
+    // On by default from 1.16; its note shows while it is off.
+    await click(document.getElementById('out-alkylation_out')!)
     const row = document.getElementById('out-alkylation_out')!.closest('li')!
     expect(row.classList.contains('wide')).toBe(true)
     const kids = [...row.children]

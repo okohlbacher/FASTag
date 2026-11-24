@@ -242,12 +242,15 @@ describe('round 7, 14: the field popover shows the tip below the text', () => {
 
 describe('round 7, 15 and 16: the alkylation extension by proteome, restored when unneeded', () => {
   const alk = PRODUCT_OF.get('alkylation_out')!
-  const base = { tag_length: '3', extension: '0' }
+  // feedback 202dbcf4: auto reads no proteome, so only a named one raises.
+  const base = { tag_length: '3', extension: '0', alkylation_proteome: 'human' }
   it('human and mouse need 8, yeast and E. coli 7; a FASTA file is not raised (round 9, 5)', () => {
     expect(alkylationTarget({})).toBe(8)
     expect(alkylationTarget({ alkylation_proteome: 'mouse' })).toBe(8)
     expect(alkylationTarget({ alkylation_proteome: 'yeast' })).toBe(7)
-    expect(alkylationExtension({ ...base, alkylation_proteome: 'auto' })).toBe('3')
+    expect(alkylationExtension({ ...base, alkylation_proteome: 'human' })).toBe('3')
+    expect(alkylationExtension({ ...base, alkylation_proteome: 'auto' })).toBeNull()
+    expect(alkylationExtension({ tag_length: '3', extension: '0' })).toBeNull()
     expect(alkylationExtension({ ...base, alkylation_proteome: 'ecoli' })).toBe('2')
     expect(alkylationExtension({ ...base, alkylation_proteome: '/d/my.fasta' })).toBeNull()
   })

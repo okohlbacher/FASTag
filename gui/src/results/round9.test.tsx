@@ -138,9 +138,11 @@ describe('round 9, 4: values that replace the form are not raised', () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, '/d/x.mzML')
-    mock.history = [rec('1', '/d/a.mzML', '/d/a.tags.tsv', { alkylation_out: '/d/a.alkylation.tsv', extension: '2', tag_length: '3' }, { workflow: 'characterize' })]
+    mock.history = [rec('1', '/d/a.mzML', '/d/a.tags.tsv', { alkylation_out: '/d/a.alkylation.tsv', alkylation_proteome: 'human', extension: '2', tag_length: '3' }, { workflow: 'characterize' })]
     const [row] = await historyRows()
-    await click(within(row).getByRole('button', { name: 'Settings into form' }))
+    // Settings into form is under the row's More menu.
+    await click(within(row).getByRole('button', { name: /^More actions for / }))
+    await click(within(row).getByRole('menuitem', { name: 'Settings into form' }))
     await goTo('setup')
     await flush()
     expect(await formValue('extension')).toBe('2')
@@ -154,7 +156,10 @@ describe('round 9, 4: values that replace the form are not raised', () => {
 describe('round 9, 5-7: one rule for every database the alkylation report places on', () => {
   const alk = PRODUCT_OF.get('alkylation_out')!
   it('a shipped proteome raises; a FASTA proteome and a Protein database do not, and say the human-sized need', () => {
-    expect(alkylationExtension({ tag_length: '3', extension: '0' })).toBe('3')
+    expect(alkylationExtension({ alkylation_proteome: 'human', tag_length: '3', extension: '0' })).toBe('3')
+    // feedback 202dbcf4: auto with no database places nothing and needs nothing.
+    expect(alkylationExtension({ tag_length: '3', extension: '0' })).toBeNull()
+    expect(alkylationShort({ tag_length: '3', extension: '0' })).toBeNull()
     expect(alkylationExtension({ alkylation_proteome: '/x/three.fasta', tag_length: '3', extension: '0' })).toBeNull()
     expect(alkylationShort({ alkylation_proteome: '/x/three.fasta', tag_length: '3', extension: '0' })).toBe('3')
     expect(alkylationExtension({ recon_fasta: '/x/human.fasta', tag_length: '3', extension: '2' })).toBeNull()
@@ -166,13 +171,13 @@ describe('round 9, 5-7: one rule for every database the alkylation report places
   })
   it('the minimum tag length the run sets is the target (6 needs less, 10 more)', () => {
     expect(alkylationTarget({ recon_min_length: '6' })).toBe(6)
-    expect(alkylationExtension({ recon_min_length: '6', tag_length: '3', extension: '0' })).toBe('2')
-    expect(alkylationExtension({ recon_min_length: '10', tag_length: '3', extension: '3' })).toBe('4')
+    expect(alkylationExtension({ alkylation_proteome: 'human', recon_min_length: '6', tag_length: '3', extension: '0' })).toBe('2')
+    expect(alkylationExtension({ alkylation_proteome: 'human', recon_min_length: '10', tag_length: '3', extension: '3' })).toBe('4')
     expect(alkylationTarget({ recon_min_length: '0', alkylation_proteome: 'yeast' })).toBe(7)
   })
   it('tag_lengths replaces tag_length: the longest seed counts', () => {
-    expect(alkylationExtension({ tag_lengths: ['3', '5'], tag_length: '3', extension: '0' })).toBe('2')
-    expect(alkylationExtension({ tag_lengths: ['2'], tag_length: '4', extension: '0' })).toBe('3')
+    expect(alkylationExtension({ alkylation_proteome: 'human', tag_lengths: ['3', '5'], tag_length: '3', extension: '0' })).toBe('2')
+    expect(alkylationExtension({ alkylation_proteome: 'human', tag_lengths: ['2'], tag_length: '4', extension: '0' })).toBe('3')
   })
   it('the Overview names the run\'s minimum and offers the extension that reaches it', () => {
     const text = [
@@ -244,7 +249,7 @@ describe('round 9, 14: a report of a run that did not finish opens marked', () =
     mock.history = [rec('1', '/d/a.mzML', '/d/a.tags.tsv', { qc_out: '/d/a.qc.tsv' }, { outputs: ['/d/a.tags.tsv', '/d/a.qc.tsv'], status: 'failed', exitCode: 2 })]
     await renderColdApp(mock)
     await goTo('results')
-    await click(screen.getByRole('button', { name: 'Open a FASTag report…' }))
+    await click(screen.getByRole('button', { name: 'Open report…' }))
     await waitFor(() => expect(screen.getByText('Reports may be partial.')).toBeTruthy())
     expect(screen.getByText('Reports may be partial.').parentElement!.textContent).toMatch(/a\.qc\.tsv \(failed/)
   })

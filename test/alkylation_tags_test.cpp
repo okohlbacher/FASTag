@@ -16,6 +16,7 @@
 #include <OpenMS/CHEMISTRY/ModificationsDB.h>
 #include <OpenMS/CHEMISTRY/ResidueDB.h>
 #include <OpenMS/CHEMISTRY/ResidueModification.h>
+#include <OpenMS/CONCEPT/Constants.h>
 #include <OpenMS/FORMAT/MzMLFile.h>
 #include <OpenMS/KERNEL/MSExperiment.h>
 #include <OpenMS/METADATA/Precursor.h>
@@ -51,6 +52,36 @@ static std::string withForm(const std::string& pep, const std::string& form)
   return pep.substr(0, c) + "C(" + form + ")" + pep.substr(c + 1);
 }
 
+/// Declares the scan window an instrument acquiring from @p lo m/z writes
+/// (mzML scan window lower/upper limit), up to 2000 m/z or the top peak.
+/// Codex6 review n1: an ion the alias reading gives (76.022, the unmodified
+/// C immonium) is absent as evidence only where it could have been seen.
+static void acquiredFrom(OpenMS::MSSpectrum& s, double lo)
+{
+  OpenMS::ScanWindow w;
+  w.begin = lo;
+  w.end = std::max(2000.0, s.empty() ? 0.0 : s.back().getMZ() + 1.0);
+  s.getInstrumentSettings().setScanWindows({w});
+}
+
+/// Adds the C immonium ion of @p form (AlkylationTags::immoniumMz) to a
+/// synthetic spectrum, at 0.3 (fragments 0.5-1, noise 0.02-0.22), as HCD
+/// spectra of a C peptide often carry it (49-61% of CAM peptide spectra on
+/// PXD020401 and PXD003531), and declares it acquired from 50 m/z
+/// (acquiredFrom()). Release-gate review n1: a vote whose C edge an alias
+/// reads as well needs it.
+static void addImmonium(OpenMS::MSSpectrum& s, const std::string& form)
+{
+  for (const auto& f : FASTag::Alkylation::forms())
+    if (f.name == form)
+    {
+      s.emplace_back(FASTag::AlkylationTags::immoniumMz(f), 0.3f);
+      s.sortByPosition();
+      acquiredFrom(s, 50.0);
+      return;
+    }
+}
+
 static int writeMzml(const std::string& out, const std::string& form, int n)
 {
   OpenMS::PeakMap exp;
@@ -62,6 +93,7 @@ static int writeMzml(const std::string& out, const std::string& form, int n)
       // "mixed": two of three spectra Carbamidomethyl, one Nethylmaleimide.
       const std::string f = form != "mixed" ? form : (scan % 3 == 2 ? "Nethylmaleimide" : "Carbamidomethyl");
       ComplementSynth::Spec s = ComplementSynth::make(withForm(pep, f), 2, false, 0, 0.0, 20, 1000u + static_cast<unsigned>(scan));
+      addImmonium(s.spec, f);
       OpenMS::MSSpectrum sp = s.spec;
       sp.setMSLevel(2);
       sp.setRT(10.0 + scan);
@@ -86,6 +118,35 @@ static FASTag::Tag tag(const std::string& seq, double e, bool gapped = false, in
   t.evalue = e;
   t.gapped = gapped;
   t.charge = charge;
+  return t;
+}
+
+/// One spectrum through the tool's path (src/FASTag.cpp): the shadow tags,
+/// each checked against the prepared peaks (VoteContext), then the vote.
+/// With @p unchecked, the same tags into @p raw without the checks (the
+/// 0dfac519 vote), so a test can show its confound is live.
+static void tagChecked(AT::Tally& t, const OpenMS::MSSpectrum& spec, double prec_mz, int charge, const FASTag::Param& sp,
+                       const FASTag::Tables& tabs, const AT::VoteContext& ctx, AT::Tally* raw = nullptr)
+{
+  const OpenMS::MSSpectrum prep = FASTag::preparedPeaks(spec, prec_mz, charge, sp);
+  // The spectrum as read, for the immonium check, as FASTag.cpp passes it.
+  const AT::SpectrumPeaks pk{&prep, (prec_mz - OpenMS::Constants::PROTON_MASS_U) * charge, &spec};
+  AT::Vote v, w;
+  for (const FASTag::Tag& tg : FASTag::tagSpectrum(spec, prec_mz, charge, sp, tabs))
+  {
+    t.addTag(v, tg, ctx, pk);
+    if (raw) raw->addTag(w, tg, ctx.cands);
+  }
+  t.addSpectrum(v);
+  if (raw) raw->addSpectrum(w);
+}
+
+/// A synthetic tag at fragment charge 1 whose C edge ends at @p high_mz (no path peaks: Tag::high_mz bounds it).
+static FASTag::Tag tagAt(const std::string& seq, double e, double high_mz)
+{
+  FASTag::Tag t = tag(seq, e);
+  t.high_mz = high_mz;
+  t.low_mz = high_mz - 500.0;
   return t;
 }
 
@@ -271,6 +332,76 @@ int main(int argc, char** argv)
     check(!c.called && c.reason == "unresolved_forms", "30 CAM votes at 0.5 Da: unresolved_forms");
   }
 
+  // ---- feedback 202dbcf4: single-step twins and aliases over the run's alphabet
+  {
+    const auto base = AT::alphabet({});
+    check(base.size() == 18, "18 base steps without C: " + std::to_string(base.size()));
+    bool no_c = true;
+    for (const auto& st : base) no_c = no_c && st.name != "C";
+    check(no_c, "C is not a step (its forms are the candidates)");
+    // the base residues: no twin at 20 ppm or 0.3 Da; at 0.5 Da CAM and Carboxymethyl twin each other
+    const auto t02 = AT::twins(cands, 0.02);
+    const auto t05 = AT::twins(cands, 0.5);
+    bool none02 = true;
+    for (const auto& v : t02) none02 = none02 && v == "-";
+    check(none02 && AT::stepsResolved(cands, 0.02) && AT::stepsResolved(cands, 0.3), "no twin at 0.02 or 0.3 Da");
+    check(t05[0] == "C[Carboxymethyl]:0.9840" && t05[4] == "C[Carbamidomethyl]:0.9840" && !AT::stepsResolved(cands, 0.5),
+          "CAM and Carboxymethyl twin at 0.5 Da: " + t05[0] + " / " + t05[4]);
+    check(AT::stepsResolved(cands, 0.02) == AT::formsResolved(cands, 0.02) &&
+              AT::stepsResolved(cands, 0.5) == AT::formsResolved(cands, 0.5),
+          "on the base residues, the step rule is the 1.13 form rule");
+    // a variable modification whose residue reads like a C form: one edge of
+    // that mass is either, so the form is not resolved and there is no call.
+    // K + 31.9361 = 160.0311, 0.0004 Da from C[Carbamidomethyl] (160.0307).
+    const double k = OpenMS::ResidueDB::getInstance()->getResidue('K')->getMonoWeight(OpenMS::Residue::Internal);
+    const double cam_c = OpenMS::ResidueDB::getInstance()->getResidue('C')->getMonoWeight(OpenMS::Residue::Internal) + cands[0].mass;
+    std::vector<FASTag::ModSpec> mods = {FASTag::ModSpec{'K', cam_c - k + 0.0004, "Twin", true}};
+    const auto alpha = AT::alphabet(AT::shadowMods(mods, cands));
+    check(alpha.size() == 19 && alpha.back().name == "K[Twin]", "the variable alternative is a step: " + alpha.back().name);
+    const auto tw = AT::twins(cands, 0.02, &alpha);
+    check(tw[0] == "K[Twin]:0.0004", "K[Twin] twins C[Carbamidomethyl]: " + tw[0]);
+    check(!AT::stepsResolved(cands, 0.02, &alpha), "a residue twin leaves the forms unresolved");
+    AT::Tally t;
+    t.spectra = 30;
+    t.votes[0] = 30;
+    A::Settings s;
+    check(AT::callTags(t, s, cands, 0.02).called, "30 CAM votes, base residues: call");
+    const A::Call c = AT::callTags(t, s, cands, 0.02, &alpha);
+    check(!c.called && c.reason == "unresolved_forms", "30 CAM votes with a residue twin: unresolved_forms");
+    // a fixed modification moves the residue (the step K is then K + delta)
+    const auto fixed = AT::alphabet({FASTag::ModSpec{'K', cam_c - k + 0.0004, "Twin", false}});
+    check(fixed.size() == 18 && !AT::stepsResolved(cands, 0.02, &fixed), "a fixed K twin also leaves the forms unresolved");
+    // the alias sums use the alphabet: the base aliases stay with a modification
+    const auto al = AT::aliases(cands, 0.02, &alpha);
+    check(al[0].rfind("C+G:0.0000", 0) == 0, "CAM's C+G alias kept with mods: " + al[0]);
+    // An alias that only a modified residue makes: Oxidation (M) + A
+    // (147.0354 + 71.0371 = 218.0725) against a form that sits there.
+    const double oxm = 131.040485 + 15.994915;
+    std::vector<FASTag::ModSpec> mo = {FASTag::ModSpec{'M', 15.994915, "Oxidation", true}};
+    const auto alpha_ox = AT::alphabet(AT::shadowMods(mo, cands));
+    std::vector<A::Form> fake = cands;
+    fake[3].mass = oxm + 71.03711 - (cam_c - cands[0].mass);  // Methylthio moved onto M[Oxidation] + A
+    const auto alo = AT::aliases(fake, 0.02, &alpha_ox);
+    check(alo[3].find("A+M[Oxidation]") != std::string::npos, "a modified residue in an alias: " + alo[3]);
+    check(AT::aliases(fake, 0.02)[3].find("M[Oxidation]") == std::string::npos, "not without the modification");
+    // the report rows: format 2 and one twin row per form
+    AT::ReportInfo info;
+    info.tol_da = 0.02;
+    info.alpha = alpha;
+    const auto rows = AT::rows(t, c, s, cands, info);
+    int twins_rows = 0;
+    std::string fmt, resolved, cam_twin;
+    for (const auto& r : rows)
+    {
+      if (r.section == "alkt_form" && r.key.rfind("twin.", 0) == 0) ++twins_rows;
+      if (r.section == "alkt_form" && r.key == "twin.Carbamidomethyl") cam_twin = r.value;
+      if (r.section == "alkt_run" && r.key == "format") fmt = r.value;
+      if (r.section == "alkt_run" && r.key == "forms_resolved") resolved = r.value;
+    }
+    check(fmt == "4" && twins_rows == AT::NUM_CANDIDATES && cam_twin == "K[Twin]:0.0004" && resolved == "no",
+          "format 4, six twin rows, forms_resolved no: " + fmt + " " + std::to_string(twins_rows) + " " + cam_twin + " " + resolved);
+  }
+
   // ---- the call: #3g's rule over the six classes
   {
     A::Settings s;
@@ -338,6 +469,9 @@ int main(int argc, char** argv)
     const FASTag::Param sp = AT::shadowParam(run, cands);
     const FASTag::Tables tabs(sp);
     const FASTag::Tables run_tabs(run);
+    // review n1: through the tool's checks (the positive control of the alias
+    // check: a real C form keeps its votes)
+    const AT::VoteContext ctx = AT::voteContext(sp, cands, nullptr);
     for (int k = 0; k < AT::NUM_CANDIDATES; ++k)
     {
       const std::string form = cands[static_cast<std::size_t>(k)].name;
@@ -345,18 +479,53 @@ int main(int argc, char** argv)
       unsigned seed = 7;
       for (const char* pep : PEPTIDES)
       {
-        const ComplementSynth::Spec s = ComplementSynth::make(withForm(pep, form), 2, false, 0, 0.0, 20, seed++);
-        AT::Vote v;
-        for (const FASTag::Tag& tg : FASTag::tagSpectrum(s.spec, s.prec_mz, 2, sp, tabs)) t.addTag(v, tg, cands);
-        t.addSpectrum(v);
+        ComplementSynth::Spec s = ComplementSynth::make(withForm(pep, form), 2, false, 0, 0.0, 20, seed++);
+        addImmonium(s.spec, form);
+        tagChecked(t, s.spec, s.prec_mz, 2, sp, tabs, ctx);
       }
       A::Settings st;
       st.min_spectra = 6;
-      const A::Call c = A::callAlkylation(t.asAlkylationTally(cands), st);
+      const A::Call c = AT::callTags(t, st, ctx);
       check(c.called && c.cls == cands[static_cast<std::size_t>(k)].cls,
             form + ": synthetic spectra call " + (c.called ? A::className(c.cls) : "no_call " + c.reason) + " (votes " +
                 std::to_string(t.votes[static_cast<std::size_t>(k)]) + " of " + std::to_string(t.spectra) + ")");
+      std::cerr << "checked " << form << ": " << t.votes[static_cast<std::size_t>(k)] << " of " << t.spectra << " (alias_rejected "
+                << t.alias_rejected << ")\n";
       check(t.votes[static_cast<std::size_t>(k)] >= 8, form + ": at least 8 of 12 spectra vote their form");
+      // Codex7 review n1: the run's tag-only call (aliasGuard) never names a
+      // form with an exact alias at 20 ppm (CAM = C + G, Propionamide = A + C);
+      // it names the candidate, and a placement call that agrees confirms it.
+      // NEM (N + N 0.029, M + P 0.036 Da), Methylthio, Carboxymethyl and
+      // unmodified C keep the call.
+      const A::Call g = AT::aliasGuard(c, ctx);
+      const bool exact = k == 0 || k == 1;
+      check(ctx.needs_database[static_cast<std::size_t>(k)] == exact, form + ": needs_database at 20 ppm");
+      if (exact)
+      {
+        check(!g.called && g.reason == A::ALIAS_NEEDS_DATABASE && g.cls == c.cls && g.top == c.top && g.voted == c.voted &&
+                  g.share == c.share,
+              form + ": tag-only no_call alias_needs_database, candidate kept: " + (g.called ? "call" : g.reason));
+        A::Call place;  // the placements on a database call the same form
+        place.called = true;
+        place.cls = c.cls;
+        place.top = place.binned = place.voted = 20;
+        place.share = 1.0;
+        const A::Call both = A::combineCalls(g, &place);
+        check(both.called && both.cls == c.cls && both.source == "tags+placement" && both.confirmed && both.top == c.top,
+              form + ": an agreeing placement call names it (tags+placement)");
+        A::Call other = place;
+        other.cls = A::METHYLTHIO;
+        const A::Call dis = A::combineCalls(g, &other);
+        check(!dis.called && dis.reason == "disagree", form + ": a placement call of another form disagrees");
+        A::Call none;  // the placements make no call
+        none.reason = "few_cys_spectra";
+        const A::Call alone = A::combineCalls(g, &none);
+        check(!alone.called && alone.reason == A::ALIAS_NEEDS_DATABASE && alone.source == "tags",
+              form + ": no placement call: still alias_needs_database");
+        check(!A::combineCalls(g, nullptr).called, form + ": no database: no call");
+      }
+      else
+        check(g.called && g.cls == c.cls && A::combineCalls(g, nullptr).called, form + ": tag-only call unchanged");
       if (k == 2)
       {
         // Control: the run's own alphabet (fixed CAM) never spells a NEM C, so
@@ -411,35 +580,74 @@ int main(int argc, char** argv)
   //      on the next ion's 13C peak); the alias row names the twin. At a
   //      0.02 Da tolerance the 0.0193 Da offset matches at every m/z (at 20 ppm
   //      only above ~965 m/z, where the peak tolerance reaches 0.0193 Da).
+  //      Review n1: the final call is asserted, through the tool's checks:
+  //      CAM or no call, never decided by a Carboxymethyl vote. The 13C
+  //      reading loses to the monoisotopic one while both ladders go on; with
+  //      the monoisotopic peak of the ion after the C lost (b and y; its 13C
+  //      peaks kept: "broken"), the 13C ladder is the longer tag and the
+  //      unchecked vote (0dfac519) has Carboxymethyl votes (3 of 9 here).
+  for (const int ext : {0, 6, -6})
   {
+    const bool broken = ext < 0;
     FASTag::Param run;
     run.tag_length = 3;
+    run.max_extension = broken ? -ext : ext;
     run.deisotope = false;
     run.tol_ppm = false;
     run.frag_tol = 0.02;
     run.mods = {{'C', cands[0].mass, "Carbamidomethyl", false}};
     const FASTag::Param sp = AT::shadowParam(run, cands);
     const FASTag::Tables tabs(sp);
-    AT::Tally t;
+    const AT::VoteContext ctx = AT::voteContext(sp, cands, nullptr);
+    AT::Tally t, raw;
     int cm_reads = 0;
     unsigned seed = 300;
-    for (const char* pep : PEPTIDES)
-    {
-      const ComplementSynth::Spec s = ComplementSynth::make(withForm(pep, "Carbamidomethyl"), 2, false, 2, 0.0, 20, seed++);
-      AT::Vote v;
-      for (const FASTag::Tag& tg : FASTag::tagSpectrum(s.spec, s.prec_mz, 2, sp, tabs))
+    for (int rep = 0; rep < 3; ++rep)
+      for (const char* pep : PEPTIDES)
       {
-        if (std::getenv("ALKT_DEBUG") && tg.seq.find("C[Carboxymethyl]") != std::string::npos)
-          std::cerr << pep << " " << tg.seq << " z" << tg.charge << " E " << tg.evalue << "\n";
-        if (tg.charge == 1 && !tg.gapped && tg.evalue <= 1.0 && tg.seq.find("C[Carboxymethyl]") != std::string::npos) ++cm_reads;
-        t.addTag(v, tg, cands);
+        ComplementSynth::Spec s = ComplementSynth::make(withForm(pep, "Carbamidomethyl"), 2, false, 2, 0.0, 20, seed++);
+        addImmonium(s.spec, "Carbamidomethyl");
+        if (broken)
+        {
+          const OpenMS::AASequence aa = OpenMS::AASequence::fromString(withForm(pep, "Carbamidomethyl"));
+          const std::size_t c = std::string(pep).find('C'), n = aa.size();
+          std::vector<double> drop;
+          if (c + 2 < n) drop.push_back(aa.getPrefix(c + 2).getMonoWeight(OpenMS::Residue::BIon, 1));
+          if (n - c + 1 < n) drop.push_back(aa.getSuffix(n - c + 1).getMonoWeight(OpenMS::Residue::YIon, 1));
+          OpenMS::MSSpectrum kept;
+          for (const auto& pk : s.spec)
+          {
+            bool d = false;
+            for (double m : drop) d = d || std::fabs(pk.getMZ() - m) < 1e-6;
+            if (!d) kept.push_back(pk);
+          }
+          s.spec = kept;
+        }
+        for (const FASTag::Tag& tg : FASTag::tagSpectrum(s.spec, s.prec_mz, 2, sp, tabs))
+        {
+          if (std::getenv("ALKT_DEBUG") && tg.seq.find("C[Carboxymethyl]") != std::string::npos)
+            std::cerr << pep << " " << tg.seq << " z" << tg.charge << " E " << tg.evalue << "\n";
+          if (tg.charge == 1 && !tg.gapped && tg.evalue <= 1.0 && tg.seq.find("C[Carboxymethyl]") != std::string::npos) ++cm_reads;
+        }
+        tagChecked(t, s.spec, s.prec_mz, 2, sp, tabs, ctx, &raw);
       }
-      t.addSpectrum(v);
-    }
-    std::cerr << "isotope twin: " << cm_reads << " C[Carboxymethyl] readings; votes CAM " << t.votes[0]
-              << " Carboxymethyl " << t.votes[4] << " of " << t.spectra << "\n";
+    A::Settings st;
+    const A::Call c = AT::callTags(t, st, ctx);
+    std::cerr << "isotope twin, extension " << (broken ? -ext : ext) << (broken ? " broken" : "") << ": " << cm_reads << " C[Carboxymethyl] readings; unchecked CAM "
+              << raw.votes[0] << " Carboxymethyl " << raw.votes[4] << " of " << raw.spectra << "; checked CAM " << t.votes[0]
+              << " Carboxymethyl " << t.votes[4] << " alias_rejected " << t.alias_rejected << " of " << t.spectra << " -> "
+              << (c.called ? A::className(c.cls) : "no_call " + c.reason) << "\n";
     check(cm_reads > 0, "undeisotoped CAM spectra with 13C peaks read C[Carboxymethyl] (the confound is live)");
     check(t.residues[4] > 0, "the C[Carboxymethyl] readings reach the counted residues");
+    const std::string label = "extension " + std::to_string(run.max_extension) + (broken ? " broken" : "");
+    if (broken)
+    {
+      check(raw.votes[4] > 0, label + ": the unchecked vote has Carboxymethyl votes (the confound is live)");
+      check(t.alias_rejected >= raw.votes[4], label + ": the isotope check rejects them");
+    }
+    check(t.votes[4] == 0, label + ": no Carboxymethyl vote survives the isotope check");
+    check(!c.called || c.cls == A::CARBAMIDOMETHYL, label + ": the call is CAM or no_call, never Carboxymethyl");
+    if (ext == 6) check(c.called && c.cls == A::CARBAMIDOMETHYL, label + ": the checked votes call CAM");
   }
 
   // ---- negative control: peptides without C give no vote and no call;
@@ -451,7 +659,8 @@ int main(int argc, char** argv)
     run.mods = {{'C', cands[0].mass, "Carbamidomethyl", false}};
     const FASTag::Param sp = AT::shadowParam(run, cands);
     const FASTag::Tables tabs(sp);
-    AT::Tally none, z3;
+    const AT::VoteContext ctx = AT::voteContext(sp, cands, nullptr);
+    AT::Tally none, z3, none_c, z3_c;  // *_c: through the tool's checks
     unsigned seed = 50;
     for (const char* pep : PEPTIDES)
     {
@@ -466,10 +675,13 @@ int main(int argc, char** argv)
         none.addTag(v, tg, cands);
       }
       none.addSpectrum(v);
-      const ComplementSynth::Spec s3 = ComplementSynth::make(withForm(pep, "Carbamidomethyl"), 3, true, 0, 0.0, 20, seed++);
+      tagChecked(none_c, s.spec, s.prec_mz, 2, sp, tabs, ctx);
+      ComplementSynth::Spec s3 = ComplementSynth::make(withForm(pep, "Carbamidomethyl"), 3, true, 0, 0.0, 20, seed++);
+      addImmonium(s3.spec, "Carbamidomethyl");
       AT::Vote w;
       for (const FASTag::Tag& tg : FASTag::tagSpectrum(s3.spec, s3.prec_mz, 3, sp, tabs)) z3.addTag(w, tg, cands);
       z3.addSpectrum(w);
+      tagChecked(z3_c, s3.spec, s3.prec_mz, 3, sp, tabs, ctx);
     }
     // Random edges between noise peaks give a few weak (E 0.3-1) C votes even
     // without a C (3 of 12 here, each a different form): far fewer than the
@@ -487,6 +699,591 @@ int main(int argc, char** argv)
     const A::Call c3 = A::callAlkylation(z3.asAlkylationTally(cands), st);
     check(c3.called && c3.cls == A::CARBAMIDOMETHYL,
           "3+ CAM spectra: call " + (c3.called ? std::string(A::className(c3.cls)) : "no_call " + c3.reason));
+    // the same through the tool's checks
+    check(!AT::callTags(none_c, A::Settings{}, ctx).called && none_c.spectra <= none.spectra, "C-free peptides, checked: no call");
+    const A::Call c3c = AT::callTags(z3_c, st, ctx);
+    check(c3c.called && c3c.cls == A::CARBAMIDOMETHYL && z3_c.votes[0] == z3.votes[0],
+          "3+ CAM spectra, checked: call CAM with the same votes (" + std::to_string(z3_c.votes[0]) + " of " +
+              std::to_string(z3.votes[0]) + ")");
+  }
+
+  // ---- review n2: the twin guard per vote, with the tagger's own edge
+  //      windows (the tolerance at the C edge's m/z), not one tolerance at
+  //      1000 m/z for the whole run. CAM and Carboxymethyl are 0.984 Da
+  //      apart: at 400 ppm two windows overlap from 1230 m/z, at 500 ppm from
+  //      984 m/z.
+  {
+    const double d_cam = AT::twinDistances(cands)[0];
+    check(std::fabs(d_cam - 0.98402) < 1e-4 && std::fabs(AT::minTwinDistance(cands) - d_cam) < 1e-12,
+          "the smallest twin distance is CAM / Carboxymethyl, 0.984 Da");
+    FASTag::Param p400;
+    p400.tol_ppm = true;
+    p400.frag_tol = 400.0;
+    check(std::fabs(AT::resolvedBelowMz(p400, 0.984) - 1230.0) < 1e-9, "0.984 / (2 * 400e-6) = 1230");
+    FASTag::Param pda;
+    pda.tol_ppm = false;
+    pda.frag_tol = 0.3;
+    check(std::isinf(AT::resolvedBelowMz(pda, 0.984)), "0.3 Da resolves 0.984 Da at every m/z");
+    pda.frag_tol = 0.5;
+    check(AT::resolvedBelowMz(pda, 0.984) == 0.0, "0.5 Da resolves 0.984 Da at no m/z");
+    // formsResolved / stepsResolved are the same rule on the same distances
+    for (double tol : {0.02, 0.3, 0.49, 0.492, 0.5})
+      check(AT::formsResolved(cands, tol) == (2.0 * tol < d_cam) && AT::stepsResolved(cands, tol) == (2.0 * tol < d_cam),
+            "formsResolved/stepsResolved follow twinDistances at " + std::to_string(tol));
+
+    // Twelve spectra, each one CAM tag whose C edge ends at hi m/z; the tag
+    // carries its path peaks, and the spectrum is those peaks (no alias peak).
+    const auto run = [&](const FASTag::Param& p, double hi, AT::Tally* raw) {
+      const auto* rdb = OpenMS::ResidueDB::getInstance();
+      auto res = [&](const char* c) { return rdb->getResidue(c)->getMonoWeight(OpenMS::Residue::Internal); };
+      const AT::VoteContext ctx = AT::voteContext(AT::shadowParam(p, cands), cands);
+      AT::Tally t;
+      for (int i = 0; i < 12; ++i)
+      {
+        // LC[Carbamidomethyl]EK, spelled from the high end: L is the top
+        // step, then C (path[2] -> path[3] = hi), E, K.
+        FASTag::Tag tg = tag("LC[Carbamidomethyl]EK", 1e-6);
+        const double c_lo = hi - (res("C") + cands[0].mass);
+        tg.path_mz = {c_lo - res("E") - res("K"), c_lo - res("E"), c_lo, hi, hi + res("L")};
+        tg.n_res = 4;
+        tg.low_mz = tg.path_mz.front();
+        tg.high_mz = tg.path_mz.back();
+        OpenMS::MSSpectrum pk;
+        pk.emplace_back(AT::immoniumMz(cands[0]), 30.0f);  // the CAM immonium ion (review n1)
+        for (double mz : tg.path_mz) pk.emplace_back(mz, 100.0f);
+        acquiredFrom(pk, 50.0);
+        const AT::SpectrumPeaks sp{&pk, 4000.0};
+        AT::Vote v, w;
+        t.addTag(v, tg, ctx, sp);
+        t.addSpectrum(v);
+        if (raw)
+        {
+          raw->addTag(w, tg, cands);
+          raw->addSpectrum(w);
+        }
+      }
+      return std::make_pair(t, ctx);
+    };
+    A::Settings st;
+    // (a) 400 ppm, C edge at 1200 m/z (< 1230): the votes count, the run is called
+    {
+      const auto [t, ctx] = run(p400, 1200.0, nullptr);
+      const A::Call c = AT::callTags(t, st, ctx);
+      check(std::fabs(ctx.resolved_below_mz - 1230.0) < 0.1, "400 ppm: resolved below 1230 m/z (" + std::to_string(ctx.resolved_below_mz) + ")");
+      check(t.votes[0] == 12 && t.unresolved == 0 && c.called && c.cls == A::CARBAMIDOMETHYL,
+            "400 ppm, C edge at 1200 m/z: 12 CAM votes, call CAM (" + std::to_string(t.votes[0]) + ", " + c.reason + ")");
+    }
+    // (b) 400 ppm, C edge at 1260 m/z (>= 1230): one peak fits both windows;
+    //     the 0dfac519 vote counted it (raw), now it is set aside
+    {
+      AT::Tally raw;
+      const auto [t, ctx] = run(p400, 1260.0, &raw);
+      const A::Call c = AT::callTags(t, st, ctx);
+      check(raw.votes[0] == 12 && A::callAlkylation(raw.asAlkylationTally(cands), st).called,
+            "400 ppm, 1260 m/z: the unchecked vote counts CAM (the guard at 1000 m/z, 0.8 < 0.984 Da, let it through)");
+      check(t.votes[0] == 0 && t.unresolved == 12 && t.spectra == 0, "400 ppm, 1260 m/z: the 12 votes are unresolved");
+      check(!c.called && c.reason == "unresolved_forms", "400 ppm, 1260 m/z: no_call unresolved_forms (" + c.reason + ")");
+    }
+    FASTag::Param p500 = p400;
+    p500.frag_tol = 500.0;
+    // (c) 500 ppm, C edge at 900 m/z (< 984): counted and called; the run-wide
+    //     guard (1.0 Da at 1000 m/z >= 0.984) suppressed it
+    {
+      const auto [t, ctx] = run(p500, 900.0, nullptr);
+      const A::Call c = AT::callTags(t, st, ctx);
+      check(t.votes[0] == 12 && c.called && c.reason != "unresolved_forms",
+            "500 ppm, C edge at 900 m/z: counted and called (" + c.reason + ")");
+      const A::Call old = AT::callTags(t, st, cands, AT::edgeToleranceDa(p500));
+      check(!old.called && old.reason == "unresolved_forms", "500 ppm: the run-wide guard at 1000 m/z gave unresolved_forms");
+    }
+    // (d) 500 ppm, C edge at 1000 m/z (>= 984): unresolved
+    {
+      const auto [t, ctx] = run(p500, 1000.0, nullptr);
+      check(t.unresolved == 12 && t.votes[0] == 0 && AT::callTags(t, st, ctx).reason == "unresolved_forms",
+            "500 ppm, C edge at 1000 m/z: unresolved");
+    }
+    // (e) Da: 0.3 resolves at every m/z, 0.5 at none (formsResolved's results)
+    for (double tol : {0.3, 0.5})
+    {
+      FASTag::Param pd;
+      pd.tol_ppm = false;
+      pd.frag_tol = tol;
+      for (double hi : {600.0, 1500.0})
+      {
+        const auto [t, ctx] = run(pd, hi, nullptr);
+        const A::Call c = AT::callTags(t, st, ctx);
+        const bool want = AT::formsResolved(cands, tol);
+        // At 0.3 Da the pair aliases of CAM within the windows find no peak
+        // in this path-only spectrum, so all 12 count.
+        check((t.votes[0] == 12) == want && (t.unresolved == 12) == !want && c.called == want &&
+                  (want || c.reason == "unresolved_forms"),
+              "Da " + std::to_string(tol) + " at " + std::to_string(hi) + " m/z: as formsResolved (" + c.reason + ")");
+      }
+    }
+    // the report rows: resolved_below_mz and unresolved
+    {
+      const auto [t, ctx] = run(p400, 1260.0, nullptr);
+      AT::ReportInfo info;
+      info.tol_da = AT::edgeToleranceDa(p400);
+      info.tol_ppm = true;
+      info.resolved_below_mz = ctx.resolved_below_mz;
+      const auto rows = AT::rows(t, AT::callTags(t, st, ctx), st, cands, info);
+      std::string rb, un, un_n;
+      for (const auto& r : rows)
+      {
+        if (r.section == "alkt_run" && r.key == "resolved_below_mz") rb = r.value;
+        if (r.section == "alkt_form" && r.key == "unresolved") { un = r.value; un_n = r.n; }
+      }
+      check(rb.rfind("1230.0", 0) == 0 && un == "12" && un_n == "12", "rows resolved_below_mz " + rb + ", unresolved " + un + " of " + un_n);
+    }
+  }
+
+  // ---- review n3: through the combined report, a conflict counts against
+  //      the share. 10 CAM and 90 conflicted votes gave share 1.0 and a CAM
+  //      call (the placements abstaining); now share 0.1 of 100, no_call.
+  {
+    FASTag::Param p;
+    const AT::VoteContext ctx = AT::voteContext(AT::shadowParam(p, cands), cands);
+    A::Settings st;
+    A::Call placement;  // abstains
+    placement.reason = "few_cys_spectra";
+    for (const auto& [cam, conf] : {std::pair<int, int>{10, 90}, std::pair<int, int>{90, 10}})
+    {
+      AT::Tally t;
+      t.votes[0] = static_cast<std::uint64_t>(cam);
+      t.conflict = static_cast<std::uint64_t>(conf);
+      t.spectra = 100;
+      const A::Call tags = AT::callTags(t, st, ctx);
+      const A::Call out = A::combineCalls(tags, &placement);
+      const auto rows = A::callRows("alkylation_call", out, st, A::forms(), "votes", true);
+      std::string status, share, share_n, voted;
+      for (const auto& r : rows)
+      {
+        if (r.key == "status") status = r.value;
+        if (r.key == "share") { share = r.value; share_n = r.n; }
+        if (r.key == "voted") voted = r.value;
+      }
+      const std::string what = std::to_string(cam) + " CAM + " + std::to_string(conf) + " conflicts: " + status + " " + out.reason +
+                               " share " + share + " n " + share_n;
+      if (cam == 10)
+        check(!out.called && out.reason == "ambiguous" && std::fabs(out.share - 0.1) < 1e-12 && out.voted == 100 &&
+                  status == "no_call" && share == "0.1" && share_n == "100" && voted == "100",
+              what);
+      else
+        check(out.called && out.cls == A::CARBAMIDOMETHYL && std::fabs(out.share - 0.9) < 1e-12 && out.voted == 100 &&
+                  status == "call" && share == "0.9" && share_n == "100",
+              what);
+      std::string tshare_n;
+      for (const auto& r : AT::rows(t, tags, st, cands, AT::ReportInfo{}))
+        if (r.section == "alkylation_tags_call" && r.key == "share") tshare_n = r.n;
+      check(tshare_n == "100", "alkylation_tags_call share n is votes plus conflicts: " + tshare_n);
+    }
+  }
+
+  // ---- review n1: aliases. An unmodified GC/CG (AC/CA) whose middle peak is
+  //      lost in one series reads as one C[Carbamidomethyl]
+  //      (C[Propionamide]) edge there; the other series keeps the middle
+  //      peak, which the alias check finds. The unchecked vote (0dfac519)
+  //      calls the reagent; the checked one must not.
+  {
+    FASTag::Param run;
+    run.tag_length = 3;
+    run.max_extension = 6;
+    run.mods = {{'C', cands[0].mass, "Carbamidomethyl", false}};
+    const FASTag::Param sp = AT::shadowParam(run, cands);
+    const FASTag::Tables tabs(sp);
+    const AT::VoteContext ctx = AT::voteContext(sp, cands, nullptr);
+    for (const char x : {'G', 'A'})
+    {
+      const int k = x == 'G' ? 0 : 1;  // the form the pair reads as
+      AT::Tally checked, raw;
+      unsigned seed = 600;
+      int n = 0;
+      for (int rep = 0; rep < 2; ++rep)
+        for (const char* base : PEPTIDES)
+        {
+          // X before the C on even spectra, after it on odd ones; the middle
+          // peak dropped from y (rep 0) or from b (rep 1).
+          std::string pep = base;
+          const std::size_t c = pep.find('C');
+          const bool before = (n % 2) == 0;
+          pep.insert(before ? c : c + 1, 1, x);
+          const std::size_t j = c;  // the pair (XC or CX) is at j, j + 1
+          ComplementSynth::Spec s = ComplementSynth::make(pep, 2, false, 0, 0.0, 20, seed++);
+          const OpenMS::AASequence aa = OpenMS::AASequence::fromString(pep);
+          const double b_mid = aa.getPrefix(j + 1).getMonoWeight(OpenMS::Residue::BIon, 1);
+          const double y_mid = aa.getSuffix(aa.size() - j - 1).getMonoWeight(OpenMS::Residue::YIon, 1);
+          const double drop = rep == 0 ? y_mid : b_mid;
+          OpenMS::MSSpectrum kept;
+          for (const auto& pk : s.spec)
+            if (std::fabs(pk.getMZ() - drop) > 1e-6) kept.push_back(pk);
+          check(kept.size() + 1 == s.spec.size(), pep + ": one middle peak dropped");
+          tagChecked(checked, kept, s.prec_mz, 2, sp, tabs, ctx, &raw);
+          ++n;
+        }
+      A::Settings st;
+      const A::Call rc = A::callAlkylation(raw.asAlkylationTally(cands), st);
+      const A::Call cc = AT::callTags(checked, st, ctx);
+      const std::string fname = cands[static_cast<std::size_t>(k)].name;
+      std::cerr << "alias " << x << "C: unchecked " << fname << " " << raw.votes[static_cast<std::size_t>(k)] << " unmod "
+                << raw.votes[AT::UNMODIFIED] << " of " << raw.spectra << " -> "
+                << (rc.called ? A::className(rc.cls) : "no_call " + rc.reason) << "; checked " << fname << " "
+                << checked.votes[static_cast<std::size_t>(k)] << " unmod " << checked.votes[AT::UNMODIFIED] << " alias_rejected "
+                << checked.alias_rejected << " of " << checked.spectra << " -> "
+                << (cc.called ? A::className(cc.cls) : "no_call " + cc.reason) << "\n";
+      check(rc.called && rc.cls == cands[static_cast<std::size_t>(k)].cls,
+            std::string(1, x) + "C with a lost middle peak: the unchecked vote calls " + fname + " (the confound is live)");
+      check(!(cc.called && cc.cls == cands[static_cast<std::size_t>(k)].cls),
+            std::string(1, x) + "C with a lost middle peak: no " + fname + " call");
+      check(checked.alias_rejected > 0, std::string(1, x) + "C: the alias check rejects votes");
+    }
+  }
+
+  // ---- release-gate review n1: an alias that leaves no trace. Unmodified
+  //      GC/CG (AC/CA) with the middle peak lost in BOTH series reads as one
+  //      C[Carbamidomethyl] (C[Propionamide]) edge that no peak contradicts;
+  //      the format 3 vote counted it for the reagent. The vote now needs the
+  //      reagent's C immonium ion, which an unmodified C peptide does not
+  //      give (its own, 76.022, is added): the final call is not the reagent.
+  {
+    FASTag::Param run;
+    run.tag_length = 3;
+    run.max_extension = 6;
+    run.mods = {{'C', cands[0].mass, "Carbamidomethyl", false}};
+    const FASTag::Param sp = AT::shadowParam(run, cands);
+    const FASTag::Tables tabs(sp);
+    const AT::VoteContext ctx = AT::voteContext(sp, cands, nullptr);
+    for (const char x : {'G', 'A'})
+    {
+      const int k = x == 'G' ? 0 : 1;
+      AT::Tally checked, raw;
+      unsigned seed = 900;
+      int n = 0;
+      for (int rep = 0; rep < 2; ++rep)
+        for (const char* base : PEPTIDES)
+        {
+          std::string pep = base;
+          const std::size_t c = pep.find('C');
+          pep.insert((n % 2) == 0 ? c : c + 1, 1, x);
+          ComplementSynth::Spec s = ComplementSynth::make(pep, 2, false, 0, 0.0, 20, seed++);
+          const OpenMS::AASequence aa = OpenMS::AASequence::fromString(pep);
+          const double b_mid = aa.getPrefix(c + 1).getMonoWeight(OpenMS::Residue::BIon, 1);
+          const double y_mid = aa.getSuffix(aa.size() - c - 1).getMonoWeight(OpenMS::Residue::YIon, 1);
+          OpenMS::MSSpectrum kept;
+          for (const auto& pk : s.spec)
+            if (std::fabs(pk.getMZ() - b_mid) > 1e-6 && std::fabs(pk.getMZ() - y_mid) > 1e-6) kept.push_back(pk);
+          check(kept.size() + 2 == s.spec.size(), pep + ": both middle peaks dropped");
+          addImmonium(kept, "unmodified");
+          tagChecked(checked, kept, s.prec_mz, 2, sp, tabs, ctx, &raw);
+          ++n;
+        }
+      A::Settings st;
+      const A::Call rc = A::callAlkylation(raw.asAlkylationTally(cands), st);
+      const A::Call cc = AT::callTags(checked, st, ctx);
+      const std::string fname = cands[static_cast<std::size_t>(k)].name;
+      std::cerr << "alias " << x << "C, both middle peaks lost: unchecked " << fname << " "
+                << raw.votes[static_cast<std::size_t>(k)] << " of " << raw.spectra << " -> "
+                << (rc.called ? A::className(rc.cls) : "no_call " + rc.reason) << "; checked " << fname << " "
+                << checked.votes[static_cast<std::size_t>(k)] << " alias_unconfirmed " << checked.alias_unconfirmed << " of "
+                << checked.spectra << " -> " << (cc.called ? A::className(cc.cls) : "no_call " + cc.reason) << "\n";
+      check(rc.called && rc.cls == cands[static_cast<std::size_t>(k)].cls,
+            std::string(1, x) + "C, both middle peaks lost: the unchecked vote calls " + fname + " (the confound is live)");
+      check(checked.alias_unconfirmed > 0, std::string(1, x) + "C, both middle peaks lost: votes abstain (alias_unconfirmed)");
+      check(checked.votes[static_cast<std::size_t>(k)] <= 2,
+            std::string(1, x) + "C, both middle peaks lost: at most 2 " + fname + " votes survive (" +
+                std::to_string(checked.votes[static_cast<std::size_t>(k)]) + ")");
+      check(!(cc.called && cc.cls == cands[static_cast<std::size_t>(k)].cls),
+            std::string(1, x) + "C, both middle peaks lost: the final call is not " + fname);
+    }
+    // Positive control: real CAM spectra keep their call with the immonium
+    // ion and abstain without it (the rule is live on true reagent spectra).
+    AT::Tally with, without;
+    unsigned seed = 950;
+    for (const char* pep : PEPTIDES)
+    {
+      ComplementSynth::Spec s = ComplementSynth::make(withForm(pep, "Carbamidomethyl"), 2, false, 0, 0.0, 20, seed++);
+      tagChecked(without, s.spec, s.prec_mz, 2, sp, tabs, ctx);
+      addImmonium(s.spec, "Carbamidomethyl");
+      tagChecked(with, s.spec, s.prec_mz, 2, sp, tabs, ctx);
+    }
+    A::Settings st;
+    st.min_spectra = 6;
+    const A::Call cw = AT::callTags(with, st, ctx);
+    check(cw.called && cw.cls == A::CARBAMIDOMETHYL && with.alias_unconfirmed == 0,
+          "CAM spectra with the immonium ion: call CAM, none abstains");
+    check(without.votes[0] == 0 && without.alias_unconfirmed >= with.votes[0] && !AT::callTags(without, st, ctx).called,
+          "CAM spectra without the immonium ion: every CAM vote abstains, no call (" + std::to_string(without.alias_unconfirmed) + ")");
+    // the report row
+    std::string au, au_n;
+    for (const auto& r : AT::rows(without, AT::callTags(without, st, ctx), st, cands, AT::ReportInfo{}))
+      if (r.section == "alkt_form" && r.key == "alias_unconfirmed") { au = r.value; au_n = r.n; }
+    check(au == std::to_string(without.alias_unconfirmed) &&
+              au_n == std::to_string(without.spectra + without.unresolved + without.alias_unconfirmed),
+          "row alias_unconfirmed " + au + " of " + au_n);
+  }
+
+  // ---- codex6 review n1, final-call control 1: the internal a-type ion of an
+  //      unmodified GC/CG (AC/CA) pair has the CAM (Propionamide) immonium m/z.
+  //      Both middle peaks lost in both series, that ion present and the
+  //      spectrum acquired from 100 m/z (76.022, the unmodified C immonium,
+  //      cannot be seen): the format 4 rule of f0211733 took the ion for the
+  //      reagent's immonium and counted the votes. Nothing tells the readings
+  //      apart, so they abstain and the final call is not the reagent.
+  {
+    FASTag::Param run;
+    run.tag_length = 3;
+    run.max_extension = 6;
+    run.mods = {{'C', cands[0].mass, "Carbamidomethyl", false}};
+    const FASTag::Param sp = AT::shadowParam(run, cands);
+    const FASTag::Tables tabs(sp);
+    const AT::VoteContext ctx = AT::voteContext(sp, cands, nullptr);
+    for (const char x : {'G', 'A'})
+    {
+      const int k = x == 'G' ? 0 : 1;
+      AT::Tally checked, raw;
+      unsigned seed = 1900;
+      int n = 0;
+      for (int rep = 0; rep < 2; ++rep)
+        for (const char* base : PEPTIDES)
+        {
+          std::string pep = base;
+          const std::size_t c = pep.find('C');
+          pep.insert((n % 2) == 0 ? c : c + 1, 1, x);
+          ComplementSynth::Spec s = ComplementSynth::make(pep, 2, false, 0, 0.0, 20, seed++);
+          const OpenMS::AASequence aa = OpenMS::AASequence::fromString(pep);
+          const double b_mid = aa.getPrefix(c + 1).getMonoWeight(OpenMS::Residue::BIon, 1);
+          const double y_mid = aa.getSuffix(aa.size() - c - 1).getMonoWeight(OpenMS::Residue::YIon, 1);
+          OpenMS::MSSpectrum kept;
+          for (const auto& pk : s.spec)
+            if (pk.getMZ() >= 100.0 && std::fabs(pk.getMZ() - b_mid) > 1e-6 && std::fabs(pk.getMZ() - y_mid) > 1e-6)
+              kept.push_back(pk);
+          // The pair's internal a-type ion: X + C - CO + H+, the reagent's immonium m/z.
+          const double internal_a = OpenMS::ResidueDB::getInstance()->getResidue(std::string(1, x))->getMonoWeight(
+                                        OpenMS::Residue::Internal) +
+                                    OpenMS::ResidueDB::getInstance()->getResidue("C")->getMonoWeight(OpenMS::Residue::Internal) -
+                                    (12.0 + 15.9949146196) + OpenMS::Constants::PROTON_MASS_U;
+          check(std::fabs(internal_a - AT::immoniumMz(cands[static_cast<std::size_t>(k)])) < 1e-4,
+                std::string(1, x) + "C internal a-ion " + std::to_string(internal_a) + " is the reagent immonium m/z");
+          kept.emplace_back(internal_a, 0.3f);
+          kept.sortByPosition();
+          acquiredFrom(kept, 100.0);
+          tagChecked(checked, kept, s.prec_mz, 2, sp, tabs, ctx, &raw);
+          ++n;
+        }
+      A::Settings st;
+      const A::Call cc = AT::callTags(checked, st, ctx);
+      const std::string fname = cands[static_cast<std::size_t>(k)].name;
+      std::cerr << "alias " << x << "C, both middle peaks lost, internal a-ion, from 100 m/z: checked " << fname << " "
+                << checked.votes[static_cast<std::size_t>(k)] << " alias_unconfirmed " << checked.alias_unconfirmed << " of "
+                << checked.spectra << " -> " << (cc.called ? A::className(cc.cls) : "no_call " + cc.reason) << "\n";
+      check(A::callAlkylation(raw.asAlkylationTally(cands), st).called, std::string(1, x) + "C internal a-ion: the unchecked vote calls (live)");
+      check(checked.alias_unconfirmed > 0, std::string(1, x) + "C internal a-ion: votes abstain");
+      check(checked.votes[static_cast<std::size_t>(k)] <= 2, std::string(1, x) + "C internal a-ion: at most 2 " + fname +
+                                                                  " votes survive (" +
+                                                                  std::to_string(checked.votes[static_cast<std::size_t>(k)]) + ")");
+      check(!(cc.called && cc.cls == cands[static_cast<std::size_t>(k)].cls),
+            std::string(1, x) + "C internal a-ion: the final call is not " + fname);
+    }
+  }
+
+  // ---- codex6 review n1, final-call control 2: abstentions are in the share.
+  //      55 CAM and 45 Methylthio candidate votes, 28 CAM ones abstaining
+  //      (alias_unconfirmed): 27 CAM and 45 Methylthio votes were a Methylthio
+  //      share of 0.625 over the 60% threshold; with the abstentions it is 0.45.
+  {
+    int cam = -1, mt = -1;
+    for (std::size_t g = 0; g < cands.size(); ++g)
+    {
+      if (cands[g].name == "Carbamidomethyl") cam = static_cast<int>(g);
+      if (cands[g].name == "Methylthio") mt = static_cast<int>(g);
+    }
+    check(cam >= 0 && mt >= 0, "Carbamidomethyl and Methylthio are candidates");
+    if (cam >= 0 && mt >= 0)
+    {
+      FASTag::Param p;
+      p.tol_ppm = true;
+      p.frag_tol = 10.0;
+      const AT::VoteContext ctx = AT::voteContext(AT::shadowParam(p, cands), cands, nullptr);
+      A::Settings st;
+      const auto tally = [&](std::uint64_t c, std::uint64_t m, std::uint64_t abst) {
+        AT::Tally t;
+        t.votes[static_cast<std::size_t>(cam)] = c;
+        t.votes[static_cast<std::size_t>(mt)] = m;
+        t.spectra = c + m;
+        t.alias_unconfirmed = abst;
+        return t;
+      };
+      const A::Call all = AT::callTags(tally(55, 45, 0), st, ctx);
+      check(!all.called, "55 CAM / 45 Methylthio: no call (" + all.reason + ")");
+      const A::Call abst = AT::callTags(tally(27, 45, 28), st, ctx);
+      check(!(abst.called && abst.cls == A::METHYLTHIO),
+            "27 CAM / 45 Methylthio / 28 CAM abstaining: not a Methylthio call (share " + std::to_string(abst.share) + ")");
+      check(!abst.called && abst.reason == "ambiguous" && std::fabs(abst.share - 0.45) < 1e-9 && abst.voted == 100,
+            "27 / 45 / 28 abstaining: ambiguous, share 0.45 of 100 (" + abst.reason + " " + std::to_string(abst.share) + " " +
+                std::to_string(abst.voted) + ")");
+      // The rule is live: without abstentions 27 / 45 is a Methylthio call.
+      const A::Call none = AT::callTags(tally(27, 45, 0), st, ctx);
+      check(none.called && none.cls == A::METHYLTHIO, "27 CAM / 45 Methylthio, none abstaining: Methylthio is called");
+      // The report says so.
+      std::string share_n, voted_d;
+      for (const auto& r : AT::rows(tally(27, 45, 28), abst, st, cands, AT::ReportInfo{}))
+      {
+        if (r.section == "alkylation_tags_call" && r.key == "share") share_n = r.n;
+        if (r.section == "alkylation_tags_call" && r.key == "voted") voted_d = r.description;
+      }
+      check(share_n == "100" && voted_d.find("28 abstained") != std::string::npos,
+            "the share's n is 100 and voted names the 28 abstentions (" + share_n + ", " + voted_d + ")");
+    }
+  }
+
+  // ---- immoniumConfirms: the form's immonium, resolved from the alias's own
+  {
+    check(std::fabs(AT::immoniumMz(cands[0]) - 133.0430) < 1e-3, "CAM C immonium 133.043");
+    check(std::fabs(AT::immoniumMz(cands[AT::UNMODIFIED]) - 76.0216) < 1e-3, "unmodified C immonium 76.022");
+    FASTag::Param p;
+    p.tol_ppm = true;
+    p.frag_tol = 20.0;
+    const auto al = AT::aliasList(cands, 0.05, nullptr);
+    const AT::Alias* cg = nullptr;
+    const AT::Alias* iso = nullptr;
+    for (const auto& a : al[0])
+      if (a.name == "C+G") cg = &a;
+    for (const auto& a : al[4])
+      if (a.kind == AT::Alias::Kind::ISO && a.other == 0) iso = &a;
+    check(cg && iso, "aliases C+G of CAM and C[Carbamidomethyl]+13C of Carboxymethyl listed");
+    if (cg && iso)
+    {
+      // Codex6 review n1: 133.0430 is also the internal a-type ion of
+      // unmodified GC/CG, so the CAM immonium tells C+G apart only with the
+      // unmodified C immonium (76.022) absent where it could have been seen.
+      OpenMS::MSSpectrum with, without, gc_ion, gc_c76, peaks_from_60;
+      with.emplace_back(AT::immoniumMz(cands[0]), 10.0f);
+      with.emplace_back(500.0, 100.0f);
+      acquiredFrom(with, 50.0);
+      without.emplace_back(120.0, 10.0f);
+      without.emplace_back(500.0, 100.0f);
+      acquiredFrom(without, 50.0);
+      // 133.043 alone, acquired from 100 m/z: 76.022 could not be seen.
+      gc_ion.emplace_back(AT::immoniumMz(cands[0]), 10.0f);
+      gc_ion.emplace_back(500.0, 100.0f);
+      acquiredFrom(gc_ion, 100.0);
+      // 133.043 with the unmodified C immonium beside it: the C+G reading's own ion.
+      gc_c76 = with;
+      gc_c76.emplace_back(AT::immoniumMz(cands[AT::UNMODIFIED]), 2.0f);
+      gc_c76.sortByPosition();
+      // No scan window: the peaks' range decides (a peak at 60 m/z puts 76.022 inside it).
+      peaks_from_60.emplace_back(60.0, 1.0f);
+      peaks_from_60.emplace_back(AT::immoniumMz(cands[0]), 10.0f);
+      peaks_from_60.emplace_back(500.0, 100.0f);
+      const AT::SpectrumPeaks pw{&with, 1000.0}, po{&without, 1000.0}, pg{&gc_ion, 1000.0}, p76{&gc_c76, 1000.0},
+          p60{&peaks_from_60, 1000.0};
+      check(AT::immoniumConfirms(0, *cg, cands, pw, p), "CAM immonium present, 76.022 seeable and absent: C+G confirmed as CAM");
+      check(!AT::immoniumConfirms(0, *cg, cands, po, p), "no CAM immonium: not confirmed");
+      check(!AT::immoniumConfirms(0, *cg, cands, pg, p),
+            "133.043 (the GC internal a-ion too) with 76.022 outside the scan window: not confirmed");
+      check(!AT::immoniumConfirms(0, *cg, cands, p76, p), "133.043 with 76.022 present: not confirmed");
+      check(AT::immoniumConfirms(0, *cg, cands, p60, p), "no scan window, peaks from 60 m/z, no 76.022: confirmed");
+      peaks_from_60.erase(peaks_from_60.begin());
+      check(!AT::immoniumConfirms(0, *cg, cands, p60, p), "no scan window, peaks from 133 m/z: 76.022 unseeable, not confirmed");
+      // raw takes precedence over the prepared peaks
+      const AT::SpectrumPeaks pr{&without, 1000.0, &with};
+      check(AT::immoniumConfirms(0, *cg, cands, pr, p), "the raw spectrum's immonium ion counts");
+      // Carboxymethyl (134.027) against CAM + 13C (its immonium's 13C at
+      // 134.046): told apart at 20 ppm, not at 0.02 Da
+      OpenMS::MSSpectrum cm;
+      cm.emplace_back(AT::immoniumMz(cands[4]), 10.0f);
+      cm.emplace_back(500.0, 100.0f);
+      const AT::SpectrumPeaks pc{&cm, 1000.0};
+      check(AT::immoniumConfirms(4, *iso, cands, pc, p), "20 ppm: the Carboxymethyl immonium confirms against CAM+13C");
+      FASTag::Param da;
+      da.tol_ppm = false;
+      da.frag_tol = 0.02;
+      check(!AT::immoniumConfirms(4, *iso, cands, pc, da), "0.02 Da: the CAM 13C immonium is in the window, not confirmed");
+    }
+  }
+
+  // ---- codex7 review n1: which aliases need a database, from the masses.
+  //      The alias reading's ion at the immonium position (a pair's internal
+  //      a-ion, a 13C immonium) fills the form's immonium window when the two
+  //      m/z are at most the sum of their tolerances apart.
+  {
+    FASTag::Param ppm;  // 20 ppm: 0.0027 Da at the CAM immonium (133.043)
+    FASTag::Param da02;
+    da02.tol_ppm = false;
+    da02.frag_tol = 0.02;
+    FASTag::Param da005 = da02;
+    da005.frag_tol = 0.005;
+    FASTag::Param da03 = da02;
+    da03.frag_tol = 0.3;
+    const auto nd = [&](const FASTag::Param& p) { return AT::databaseAliases(AT::aliasList(cands, AT::edgeToleranceDa(p)), cands, p); };
+    const auto n20 = nd(ppm), n02 = nd(da02), n005 = nd(da005), n03 = nd(da03);
+    check(n20[0] == "C+G:0.0000" && n20[1] == "A+C:0.0000" && n20[2] == "-" && n20[3] == "-" && n20[4] == "-" && n20[5] == "-",
+          "20 ppm: only C+G (CAM) and A+C (Propionamide) need a database: " + n20[0] + " | " + n20[1] + " | " + n20[2] + " | " +
+              n20[4]);
+    check(n02[2] == "N+N:0.0290,M+P:0.0364" && n02[4] == "C[Carbamidomethyl]+13C:0.0193" && n02[3] == "-" &&
+              n02[1].find("S+S:0.0178") != std::string::npos,
+          "0.02 Da: NEM (N+N, M+P), Carboxymethyl (CAM+13C) and S+S need a database too: " + n02[2] + " | " + n02[4]);
+    check(n005[0] == "C+G:0.0000" && n005[2] == "-" && n005[4] == "-", "0.005 Da: NEM and Carboxymethyl separate: " + n005[2]);
+    check(n03[3] == "-", "0.3 Da: Methylthio has no alias at all: " + n03[3]);
+    const AT::VoteContext c20 = AT::voteContext(AT::shadowParam(ppm, cands), cands);
+    const AT::VoteContext c02 = AT::voteContext(AT::shadowParam(da02, cands), cands);
+    check(c20.needs_database[0] && c20.needs_database[1] && !c20.needs_database[2] && !c20.needs_database[3] &&
+              !c20.needs_database[4] && !c20.needs_database[5],
+          "20 ppm context: CAM and Propionamide need a database");
+    check(c02.needs_database[2] && c02.needs_database[4] && !c02.needs_database[3], "0.02 Da context: NEM and Carboxymethyl too");
+
+    // the guard on tallies: a CAM-dominated run and a Methylthio one
+    A::Settings st;
+    AT::Tally cam;
+    cam.spectra = 40;
+    cam.votes[0] = 36;
+    cam.votes[3] = 4;
+    const A::Call raw = AT::callTags(cam, st, c20);
+    const A::Call g = AT::aliasGuard(raw, c20);
+    check(raw.called && raw.cls == A::CARBAMIDOMETHYL, "the votes favour CAM (the vote counting is unchanged)");
+    check(!g.called && g.reason == "alias_needs_database" && g.cls == A::CARBAMIDOMETHYL && g.top == 36 && g.voted == 40,
+          "CAM-dominated run, no database: no_call alias_needs_database, candidate CAM 36 of 40");
+    AT::Tally mes;
+    mes.spectra = 40;
+    mes.votes[3] = 36;
+    mes.votes[0] = 4;
+    const A::Call gm = AT::aliasGuard(AT::callTags(mes, st, c20), c20);
+    check(gm.called && gm.cls == A::METHYLTHIO, "Methylthio-dominated run: still called from the tags alone");
+    AT::Tally nem;
+    nem.spectra = 40;
+    nem.votes[2] = 40;
+    check(AT::aliasGuard(AT::callTags(nem, st, c20), c20).called, "NEM at 20 ppm: called (its aliases separate)");
+    check(AT::aliasGuard(AT::callTags(nem, st, c02), c02).reason == "alias_needs_database", "NEM at 0.02 Da: needs a database");
+
+    // the report rows: needs_database.<form> and the candidate row
+    AT::ReportInfo info;
+    info.tol_da = AT::edgeToleranceDa(ppm);
+    info.tol_ppm = true;
+    const auto rows = AT::rows(cam, g, st, cands, info);
+    std::string nd_cam, nd_mes, cand, cand_n, reagent, reason, keys;
+    for (const auto& r : rows)
+    {
+      if (r.section == "alkt_form" && r.key == "needs_database.Carbamidomethyl") nd_cam = r.value;
+      if (r.section == "alkt_form" && r.key == "needs_database.Methylthio") nd_mes = r.value;
+      if (r.section != "alkylation_tags_call") continue;
+      keys += (keys.empty() ? "" : ",") + r.key;
+      if (r.key == "candidate") { cand = r.value; cand_n = r.n; }
+      if (r.key == "reagent") reagent = r.value;
+      if (r.key == "reason") reason = r.value;
+    }
+    check(nd_cam == "C+G:0.0000" && nd_mes == "-", "rows needs_database: " + nd_cam + " / " + nd_mes);
+    check(keys == "status,reagent,mass,share,voted,reason,candidate" && cand == "Carbamidomethyl" && cand_n == "36" &&
+              reagent == "-" && reason == "alias_needs_database",
+          "alkylation_tags_call names the candidate: " + keys + " " + cand);
+    const auto crows = A::callRows("alkylation_call", A::combineCalls(g, nullptr), st, forms, "votes", true);
+    std::string ckeys, ccand;
+    for (const auto& r : crows)
+    {
+      ckeys += (ckeys.empty() ? "" : ",") + r.key;
+      if (r.key == "candidate") ccand = r.value;
+    }
+    check(ckeys == "status,reagent,mass,share,voted,reason,candidate,source" && ccand == "Carbamidomethyl",
+          "alkylation_call names the candidate: " + ckeys);
   }
 
   if (failures)

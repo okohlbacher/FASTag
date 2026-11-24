@@ -35,15 +35,19 @@ const base = (over: Partial<OverviewInputs> = {}): OverviewInputs => ({
 })
 
 describe('round 10, 4: the alkylation note says where Extension is and what the raise changes', () => {
+  // feedback 202dbcf4: at Characterize's defaults the report needs no
+  // database, so nothing is raised; the note says so and links Extension.
+  // The raise on a shipped proteome: round 9, 4 and the products tests.
   it('before and after the tick, with a link to the field', async () => {
     const mock = installMockBridge()
     await renderCharacterizeApp(mock)
     showStep(4)
     const note = (): HTMLElement => document.getElementById('out-alkylation_out-d')!
-    // Off: nothing is raised yet, so the note says what turning it on would do (round 10 major 1).
-    expect(note().textContent).toBe('Turning it on raises Extension 2 → 3 (Advanced › Tagging); that changes every tag; species and digest are validated at 2.')
+    const tagOnly = 'No database needed: the call is read off the tags; a longer Extension (Advanced › Tagging) gives more votes.'
+    expect(note().textContent).toBe(tagOnly)
     await click(document.getElementById('out-alkylation_out')!)
-    expect(note().textContent).toBe('Extension 2 → 3 (Advanced › Tagging); changes every tag; species and digest are validated at 2.')
+    expect(note().textContent).toBe(tagOnly)
+    expect((document.getElementById('p-extension') as HTMLInputElement | null)?.value ?? '2').toBe('2')
     await click(within(note()).getByRole('button', { name: 'Extension' }))
     await flush()
     await new Promise((r) => setTimeout(r, 0))
@@ -96,6 +100,9 @@ describe('round 10, 8: the needs sentence names what its buttons turn on', () =>
   it('Shortlist, advanced: Reduced FASTA in words and on its one button; no "(see ?)" anywhere', async () => {
     const mock = installMockBridge()
     await renderCharacterizeApp(mock)
+    // The alkylation report (on by default from 1.16) arms Placement on the
+    // database; off, that group names what would arm it.
+    await click(document.getElementById('out-alkylation_out')!)
     const adv = [...document.querySelectorAll<HTMLElement>('summary')].find((s) => /Advanced/.test(s.textContent ?? ''))!
     await click(adv)
     await openGroup('Other analyses')

@@ -104,15 +104,84 @@ describe('result tabs', () => {
     expect(screen.getByRole('tabpanel').textContent).toContain('a.census_summary.tsv')
   })
 
-  it('the empty pane offers both opens, locked while busy', async () => {
+  it('the header offers both opens, locked while busy; the empty pane repeats neither', async () => {
     installMockBridge()
     const openResults = vi.fn()
-    const { rerender } = render(<Harness openResults={openResults} />)
-    await click(screen.getByRole('button', { name: 'Open a tags TSV…' }))
+    const openReport = vi.fn()
+    const { rerender } = render(<Harness openResults={openResults} openReport={openReport} />)
+    await click(screen.getByRole('button', { name: 'Open tags…' }))
     expect(openResults).toHaveBeenCalledTimes(1)
-    rerender(<Harness openResults={openResults} busy />)
-    expect(screen.getByRole('button', { name: 'Open a tags TSV…' }).hasAttribute('disabled')).toBe(true)
+    await click(screen.getByRole('button', { name: 'Open report…' }))
+    expect(openReport).toHaveBeenCalledTimes(1)
+    // C3: one Open of each, the header's; the empty pane only says what to do.
+    expect(screen.getByRole('heading', { name: 'No results yet' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Open a tags TSV/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Open a FASTag report/ })).toBeNull()
+    expect(screen.getAllByRole('button', { name: /^Open (tags|report)…$/ })).toHaveLength(2)
+    rerender(<Harness openResults={openResults} openReport={openReport} busy />)
+    expect(screen.getByRole('button', { name: 'Open tags…' }).hasAttribute('disabled')).toBe(true)
     expect(screen.getByRole('button', { name: 'Open report…' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('C3: no onboarding under the running state; a batch job running gets one line', () => {
+    installMockBridge()
+    const { rerender } = render(<Harness running busy runningState={<div role="region" aria-label="Running">50%</div>} />)
+    expect(screen.getByRole('region', { name: 'Running' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'No results yet' })).toBeNull()
+    expect(screen.getByRole('tabpanel').textContent).toBe('')
+    // A batch: no running panel here, one line and no onboarding.
+    rerender(<Harness running busy />)
+    expect(screen.queryByRole('heading', { name: 'No results yet' })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Tags appear here when the run finishes.' })).toBeTruthy()
+    // Idle: the onboarding again, without buttons of its own.
+    rerender(<Harness />)
+    expect(screen.getByRole('heading', { name: 'No results yet' })).toBeTruthy()
+    expect(screen.getByRole('tabpanel').querySelectorAll('button')).toHaveLength(0)
+  })
+
+  const header = (): HTMLElement => document.querySelector<HTMLElement>('.page-header h2')!
+
+  it('C8: while run B goes, the header names B, never the table kept from run A', () => {
+    installMockBridge()
+    render(
+      <Harness
+        running
+        busy
+        activeInput="/d/B.mzML"
+        speciesRun={{ input: '/d/B.mzML', enabled: false }}
+        results={{ path: '/d/A.tags.tsv', gen: 1, input: '/d/A.mzML' }}
+        runningState={<div>running</div>}
+      />
+    )
+    expect(header().textContent).toBe('B.mzML')
+    expect(header().getAttribute('title')).toBe('/d/B.mzML')
+    expect(document.querySelector('.page-context')?.textContent).toBe('running')
+    // The kept table names itself and its run.
+    const table = screen.getByRole('tabpanel')
+    expect(table.querySelector('h2')?.textContent).toBe('A.tags.tsv')
+    expect(table.textContent).toContain('from the run of /d/A.mzML')
+  })
+
+  it.each([
+    ['QC', 'qc' as Tab, { workflow: { qc: '/d/x/a.qc.tsv' } }, 'a.qc.tsv'],
+    ['Shortlist', 'shortlist' as Tab, { workflow: { shortlist: '/d/x/a.shortlist.tsv' } }, 'a.shortlist.tsv'],
+    ['Glyco', 'glyco' as Tab, { tables: { glyco: '/d/x/a.glyco.tsv' } }, 'a.glyco.tsv'],
+    ['mass-shift survey', 'recon' as Tab, { workflow: { deltaCounts: '/d/x/a.delta_counts.tsv' } }, 'a.delta_counts.tsv']
+  ])('C8: a %s report opened alone is the title, with its full path as tooltip', (_what, tab, extra, name) => {
+    installMockBridge()
+    render(<Harness tab={tab} reports={{ list: [], errors: [], ...extra }} />)
+    expect(header().textContent).toBe(name)
+    expect(header().getAttribute('title')).toBe(`/d/x/${name}`)
+    expect(document.querySelector('.page-context')?.textContent).toBe('opened from disk')
+  })
+
+  it('C8: a tags TSV opened from disk keeps its full path on the header', () => {
+    installMockBridge()
+    render(<Harness results={{ path: '/d/x/a.tags.tsv', gen: 1 }} />)
+    expect(header().textContent).toBe('a.tags.tsv')
+    expect(header().getAttribute('title')).toBe('/d/x/a.tags.tsv')
+    // The header names it: the table has no heading of its own.
+    expect(screen.getByRole('tabpanel').querySelector('h2')).toBeNull()
   })
 
   it('a failure banner opens the log of its batch job and dismisses itself', async () => {

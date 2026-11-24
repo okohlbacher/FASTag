@@ -181,6 +181,9 @@ export interface FeedbackExported {
   // export.json as it is in the zip: the preview shows it, Copy diagnostics copies it.
   json: string
   image: { bytes: number; width: number; height: number } | null
+  // The request number this zip was built for (feedback.rs export_ordered):
+  // Reveal shows the zip of this very request, or refuses.
+  seq: number
 }
 
 export type Include = Share
@@ -198,9 +201,13 @@ export interface FeedbackApi {
   feedbackList: () => Promise<FeedbackSummary[]>
   feedbackDelete: (id: string) => Promise<void>
   feedbackDeleteAll: () => Promise<number>
-  feedbackReveal: (id: string) => Promise<void>
-  // The public export: <id>.feedback.zip and its export.json.
-  feedbackExport: (id: string, include: Include) => Promise<FeedbackExported>
+  // With @p seq (FeedbackExported.seq): that export's zip, or a refusal
+  // once another export replaced it.
+  feedbackReveal: (id: string, seq?: number) => Promise<void>
+  // The public export: export-<n>/<id>.feedback.zip (one file per accepted export) and its export.json.
+  // @p seq numbers the request, increasing (nextExportSeq): the backend
+  // refuses one older than the export its zip holds.
+  feedbackExport: (id: string, include: Include, seq?: number) => Promise<FeedbackExported>
   feedbackSetStatus: (id: string, status: ReportStatus, issueUrl?: string | null) => Promise<void>
   // Opens the issue form with title, report id and kind (text fields only).
   openFeedbackIssue: (draft: { title: string; reportId: string; kind: FeedbackKind }) => Promise<boolean>

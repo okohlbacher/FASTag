@@ -1,10 +1,10 @@
 // The batch queue (moved from App.tsx, P1 PR c).
 
 import type { JSX, RefObject } from 'react'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
+import { shellLine } from '../app/format'
 import { baseName } from '../digestReport'
 import { IconClose, JobIcon } from '../icons'
-import { HelpLink } from '../help/HelpLink'
 import { focusLater } from '../app/focus'
 import { jobWords, type BatchJob } from './batch'
 import type { Results } from './useRun'
@@ -33,6 +33,42 @@ export interface BatchListProps {
   addBatchRef: RefObject<HTMLButtonElement | null>
   // The Add… button, for focus from outside (App.tsx).
   addRef?: RefObject<HTMLButtonElement | null>
+}
+
+// A refused job's recovery beside it (not only in the banner under the
+// queue): the short reason and the conversion command to copy.
+function JobRecovery({ job }: { job: BatchJob }): JSX.Element | null {
+  const [copied, setCopied] = useState<'yes' | 'no' | null>(null)
+  const argv = job.refusal?.command
+  return (
+    <div className="jrecover">
+      <span>Make pseudo-DDA spectra with DIAspeXtract first.</span>
+      {argv && (
+        <button
+          type="button"
+          className="secondary small"
+          aria-label={`Copy the DIAspeXtract command for ${baseName(job.input)}`}
+          title={shellLine(argv)}
+          onClick={() =>
+            navigator.clipboard.writeText(shellLine(argv)).then(
+              () => setCopied('yes'),
+              () => setCopied('no')
+            )
+          }
+        >
+          {copied === 'yes' ? 'Copied' : 'Copy command'}
+        </button>
+      )}
+      {copied === 'no' && <span className="muted">The clipboard refused the command.</span>}
+    </div>
+  )
+}
+
+// A refused job's line: the short reason (the long one is in its title, Log
+// and the banner).
+const refusedWords = (j: BatchJob): string => {
+  const code = /^exit code \d+/.exec(j.reason ?? '')?.[0]
+  return `Failed: raw DIA, not tagged${code ? ` (${code})` : ''}`
 }
 
 export default function BatchList(p: BatchListProps): JSX.Element {
@@ -80,7 +116,9 @@ export default function BatchList(p: BatchListProps): JSX.Element {
               <span className="jn" title={j.input}>
                 {baseName(j.input)}
               </span>
-              <span className="js">{jobWords(j)}</span>
+              <span className="js" title={j.refusal ? jobWords(j) : undefined}>
+                {j.status === 'failed' && j.refusal ? refusedWords(j) : jobWords(j)}
+              </span>
             </>
           )
           const shown = j.status === 'done' && results?.input === j.input && results.path === (j.outputs?.out ?? j.out)
@@ -101,7 +139,10 @@ export default function BatchList(p: BatchListProps): JSX.Element {
                   {body}
                 </button>
               ) : (
-                <span className="jbody">{body}</span>
+                <div className="jbody">
+                  {body}
+                  {j.status === 'failed' && j.refusal && <JobRecovery job={j} />}
+                </div>
               )}
               {j.log && (
                 // This job's own log, also once later jobs have run.
@@ -160,14 +201,13 @@ export default function BatchList(p: BatchListProps): JSX.Element {
       <p className="hint">
         {p.outDir ? (
           <>
-            Each file writes its own <code>&lt;name&gt;.tags.tsv</code> and reports in the output folder.{' '}
+            Each file writes its own <code>&lt;name&gt;.tags.tsv</code> and reports in the output folder.
           </>
         ) : (
           <>
-            Each file writes its own <code>&lt;name&gt;.tags.tsv</code> and reports next to the input.{' '}
+            Each file writes its own <code>&lt;name&gt;.tags.tsv</code> and reports next to the input.
           </>
         )}
-        <HelpLink to="start-batch">About batch runs</HelpLink>
       </p>
     </section>
   )

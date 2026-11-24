@@ -78,14 +78,13 @@ export interface Section {
 const SECTION_DEFS: Omit<Section, 'open'>[] = [
   { title: 'Common', home: 'common', blurb: 'The fragment tolerance of your analyzer and the fixed modifications.', params: ['fragment_tolerance', 'fragment_tolerance_unit', 'fixed_modifications'] },
   { title: 'Tagging', home: 'global', blurb: 'How long the tags are, how good, and how many per spectrum.', params: ['tag_length', 'extension', 'max_evalue', 'max_tags', 'res_conf'] },
-  { title: 'Tag columns and files', home: 'export-tags', blurb: 'Extra columns in the tags table, and the spectra that carry tags.', params: ['proforma', 'usi_collection', 'out_spectra'] },
+  { title: 'Tag columns and files', home: 'export-tags', blurb: 'Extra columns in the tags table, the tags it leaves out, and the spectra that carry tags.', params: ['proforma', 'terminus', 'subsume_tags', 'usi_collection', 'out_spectra'] },
   { title: 'Tagging, advanced', home: 'global', blurb: 'Several seed lengths, gapped tags, and how near-copies of a tag are ranked.', params: ['tag_lengths', 'gaps', 'gap_penalty', 'diversity', 'orientation', 'isobaric_tolerance'] },
-  { title: 'Resolved tags, advanced', home: 'global', blurb: 'How the tags of a spectrum are merged into resolved tags and ranked, for the Spectrum tab.', params: ['resolve_score', 'resolve_threshold', 'resolve_max_evalue', 'resolve_join'] },
   { title: 'Keep only tags found in a database', home: 'global', blurb: 'Write only tags that occur in sequences you supply.', params: ['fasta', 'min_filter_length', 'entrapment_fasta'] },
   { title: 'Run QC', home: 'run-qc', blurb: 'Counts, resolution, charges, labels and instrument of the run, in one report.', params: ['qc_out'] },
   { title: 'Sampling and checks', home: 'global', blurb: 'How much of the run is read, the check for raw DIA data, and the check of the precursor charges.', params: ['subsample_fraction', 'acquisition_check', 'subsample_spectra', 'subsample_seed', 'acquisition_probe_spectra', 'check_header_charge', 'check_header_margin', 'check_header_out'] },
   { title: 'Placement on the database', home: 'mass-shift', blurb: 'Place tags on the proteins of a FASTA and keep the mass left over at each end.', params: ['recon_fasta', 'recon_missed_cleavages', 'recon_out', 'recon_id_out'] },
-  { title: 'Placement, advanced', home: 'mass-shift', blurb: 'Site localization, the shortest tag placed, and single-residue substitutions.', params: ['recon_localize', 'recon_min_length', 'recon_sub_tolerance', 'recon_sub_tolerance_unit'] },
+  { title: 'Placement, advanced', home: 'mass-shift', blurb: 'A shipped proteome, site localization, the shortest tag placed, and single-residue substitutions.', params: ['recon_proteome', 'recon_localize', 'recon_min_length', 'recon_sub_tolerance', 'recon_sub_tolerance_unit'] },
   { title: 'Mass-shift survey', home: 'mass-shift', blurb: 'The mass shifts between tag flanks and the database: a frequency table with sites and UniMod names.', params: ['delta_out', 'delta_spectra_out', 'delta_counts_out', 'massgap_out'] },
   { title: 'Mass-shift survey, advanced', home: 'mass-shift', experimental: true, blurb: 'How shifts are grouped, localized and named.', params: ['delta_select', 'delta_group', 'delta_isobar_tolerance', 'delta_isotope_flank', 'delta_loc_model', 'delta_loc_min_evidence', 'delta_loc_null', 'delta_name_tolerance', 'delta_name_tolerance_unit'] },
   { title: 'Mass-gap report', home: 'mass-shift', blurb: 'Peaks of the mass-gap distribution, explained as UniMod combinations.', params: ['massgap_max_mods', 'massgap_min_bin', 'massgap_min_share', 'massgap_min_spectra', 'massgap_silac_min', 'massgap_silac_share', 'massgap_top', 'massgap_window', 'massgap_window_da'] },
@@ -98,7 +97,7 @@ const SECTION_DEFS: Omit<Section, 'open'>[] = [
   { title: 'Identifiability', home: 'triage', blurb: 'One row per MS/MS spectrum, ranked by how identifiable it is, and marked when your search identified it.', params: ['census', 'census_score', 'census_out', 'census_summary_out', 'census_sorted_out', 'census_ids', 'census_ids_fdr', 'census_triage_evalue'] },
   { title: 'Identifiability, advanced', home: 'triage', blurb: 'How the identification file is joined to the spectra.', params: ['census_ids_accept', 'census_ids_exact'] },
   { title: 'Digest and labels', home: 'characterize', blurb: 'The protease the tags fit and the labels they carry.', params: ['digest_out', 'label_out', 'digest_models', 'digest_models_version', 'digest_calibration', 'digest_detection', 'digest_flank2', 'digest_min_confidence', 'digest_tag_min', 'digest_window', 'digest_background_share', 'digest_silac_min', 'digest_quality'] },
-  { title: 'Alkylation', home: 'characterize', blurb: 'Which reagent alkylated the cysteines, from placements on a shipped proteome.', params: ['alkylation_out', 'alkylation_tags_out', 'alkylation_proteome', 'alkylation_min_share', 'alkylation_min_spectra', 'alkylation_window'] },
+  { title: 'Alkylation', home: 'characterize', blurb: 'Which reagent alkylated the cysteines, read off the tags; a protein database adds a check.', params: ['alkylation_out', 'alkylation_tags_out', 'alkylation_proteome', 'alkylation_min_share', 'alkylation_min_spectra', 'alkylation_window'] },
   { title: 'Glycopeptides', home: 'characterize', blurb: 'Flag spectra that carry oxonium ions.', params: ['glyco', 'glyco_out', 'glyco_min_fraction'] },
   { title: 'Performance', home: 'global', blurb: 'How much of the computer a run may use.', params: ['threads'] },
   { title: 'Fragment tolerance by analyzer', home: 'global', blurb: 'Ion-trap spectra of a mixed run (for example Orbitrap MS1, ion-trap MS2) tagged at their own tolerance; the reports use the fragment tolerance.', params: ['tolerance_by_analyzer', 'fragment_tolerance_itms'] },
@@ -516,6 +515,8 @@ export const BRIEF_HINT: Record<string, string> = {
   threads: 'Processor threads a run uses; 0 uses half the logical cores.',
   // Tag columns and files
   proforma: 'Adds each tag in ProForma 2.0 notation.',
+  terminus: 'Adds the series and terminus a tag’s ends reach, if any.',
+  subsume_tags: 'Leaves out tags that lie wholly in a longer tag at least as significant.',
   usi_collection: 'Adds each spectrum’s USI in this dataset (e.g. PXD000001).',
   out_spectra: 'Also writes the spectra that carry a reported tag.',
   // Sampling and checks
@@ -560,7 +561,7 @@ export const BRIEF_HINT: Record<string, string> = {
   digest_background_share: 'Background composition mixed into every protease model.',
   digest_silac_min: 'K and R tag ends the label report needs for heavy SILAC.',
   // Alkylation and glycopeptides
-  alkylation_proteome: 'The database the alkylation report uses without a placement one.',
+  alkylation_proteome: 'Where the alkylation call is checked (auto: the run\'s database or none).',
   glyco: 'Flags spectra with oxonium ions (glycopeptide sugar fragments).',
   // Peaks, charges and complements
   peaks_per_window: 'Keeps this many of the strongest peaks per 100 Da.',
@@ -596,7 +597,11 @@ const CHOICE_WORDS: Record<string, string> = {
   idXML: 'idXML',
   mzid: 'mzIdentML',
   mzTab: 'mzTab',
-  tsv: 'TSV'
+  tsv: 'TSV',
+  human: 'Human',
+  mouse: 'Mouse',
+  yeast: 'Yeast',
+  ecoli: 'E. coli'
 }
 
 /// A choice of @p name in words: Sage for sage, Lys-C for lys-c, Genus for
@@ -604,7 +609,7 @@ const CHOICE_WORDS: Record<string, string> = {
 export function choiceText(name: string, choice: string): string {
   if (UNIT_PARAMS.has(name)) return choice
   // The choice that is not sent: the CLI decides (shortlist_specificity).
-  if (choice === '') return 'Automatic'
+  if (choice === '') return name === 'recon_proteome' ? 'None' : 'Automatic'
 
   if (Object.prototype.hasOwnProperty.call(CHOICE_WORDS, choice)) return CHOICE_WORDS[choice]
   const s = choice.replace(/_/g, ' ')
@@ -863,9 +868,10 @@ export const CONFLICTS: ((values: Record<string, unknown>, ctx: PreflightContext
           note: 'entrapment_fasta cannot be combined with species: entrapment matches would be counted as species evidence.'
         }
       : null,
-  // "-recon_out needs a database: give -recon_fasta (or -fasta)."
+  // "-recon_out needs a database: give -recon_fasta (or -fasta), or
+  // -recon_proteome for a shipped proteome."
   (values) =>
-    isActive('recon_out', values) && !isActive('recon_fasta', values) && !isActive('fasta', values)
+    isActive('recon_out', values) && !isActive('recon_fasta', values) && !isActive('fasta', values) && !isActive('recon_proteome', values)
       ? { params: ['recon_fasta', 'recon_out', 'fasta'], note: 'The placements need a protein database: choose one in Inputs.', neutral: true }
       : null,
   // "-shortlist_out needs a database: give -recon_fasta (or -fasta)."

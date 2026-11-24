@@ -2,8 +2,13 @@
 // tagged them (`-dump_spectrum`, through spectrum.rs spectrum_peaks), as a
 // stick plot with zoom and pan, the ladder of the chosen tag drawn on them
 // (ladder.ts) with the error of each step, and the tags of the spectrum,
-// any of which redraws the ladder. ◀ and ▶ go to the previous and next
-// tagged spectrum of the file.
+// any of which redraws the ladder. Each ladder's series (b or y, c or z) is
+// called from its peaks: a ions, a terminus only one reading lies at
+// (terminus.ts), the database peptide when the run placed the tags.
+// ◀ and ▶ (Alt+← and Alt+→, Page Up and Page Down) go to the previous and
+// next spectrum in the Tags table's order as it was sorted and filtered when
+// the spectrum was opened; opened from elsewhere (Triage), or a spectrum
+// that order leaves out, each tagged spectrum of the file in file order.
 //
 // The peaks depend on the run's options (tolerance, centroiding,
 // deisotoping, the peak budget), so the dump runs with the parameters the
@@ -11,21 +16,19 @@
 // A file with neither is dumped at FASTag's defaults, and the tab says so.
 // No other reader: without the input there is "Locate input…".
 
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react'
 import { parseDump, type SpectrumPeaks } from './dump'
 import { hasStep, ladderFor, laddersFor, residueMasses, seriesText, tagRowFrom, type Ladder, type SeriesCall } from './ladder'
-import { kindOf, ladderOf, packRows, sequenceOf, settleSeries, stepLabel, type GPath, type StepKind, type TagGraph, type TagIn } from './graph'
-import { fromCli, rankingOf, type CliRows } from './cliGraph'
-import { MergeGraph } from './MergeGraph'
 import { TermSeq } from './TermSeq'
-import { termContext, terminiOf, terminusMark, type Terminus } from './terminus'
-import { PAD, W, fullRange } from './plotScale'
-import { CSTAR_THRESHOLD, schemeGraph } from './stepScore'
-import { dbCall, ladderSteps, likelyPeptide, rulerOf, stepOnRuler, stepsOnRuler, ticksOf, type Candidate, type Ruler } from './peptide'
+import { termContext, terminusMark, terminusOf, type TermContext, type Terminus } from './terminus'
+import { pathOf } from './step'
+import { dbCall, ladderSteps, likelyPeptide, rulerOf, stepOnRuler, ticksOf, type Candidate } from './peptide'
 import { baseName } from '../digestReport'
-import { EValue, columnLabel, hitWords, spectrumHint } from '../ResultsTable'
+import { EValue, columnLabel, hitCellText, spectrumHint } from '../ResultsTable'
+import { dbCellsOf, dbHitTitle } from '../results/dbProteins'
+import { DbAlignment } from './DbAlignment'
 import { HelpLink } from '../help/HelpLink'
-import type { ResultsView } from '../types'
+import type { NavAnswer, ResultsView } from '../types'
 
 export interface SpectrumTarget {
   // The tags file and the spectrum (its native ID).
@@ -33,6 +36,9 @@ export interface SpectrumTarget {
   spectrum: string
   // The file row of the tag that opened it: its ladder is drawn first.
   rowId: number | null
+  // The Tags table's view (sort and filters) it was opened from: ◀ ▶ walk
+  // its order. Null or left out: every tagged spectrum in file order.
+  view?: ResultsView | null
 }
 
 export interface SpectrumSource {
@@ -55,10 +61,6 @@ interface Props {
   // The run's tag placements (-recon_out), when it wrote them: the peptide
   // most tags of the spectrum were placed on is drawn as a ruler.
   placements?: string | null
-  // The run's resolved tags and tag graph (-resolved_out, -tag_graph_out),
-  // when it wrote both: all tags are resolved as FASTag resolved them.
-  resolved?: string | null
-  tagGraph?: string | null
   // Another spectrum of the file (◀ ▶).
   onTarget(t: SpectrumTarget): void
   // The input moved or is unknown: the user picks it.
@@ -85,33 +87,33 @@ const PAGE = 1000
 
 const fmt = (x: number, d = 4): string => x.toFixed(d)
 const ppm = (x: number | null): string => (x == null ? '–' : `${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(1)}`)
-// A run parameter as the text it was given (undefined: not given).
-const paramStr = (v: unknown): string | undefined => (v == null ? undefined : String(v))
 
-/** How the run ranked resolved tags (-resolve_score, -resolve_threshold): as
- *  FASTag recorded it on its -resolved_out rows (scheme, threshold), else from
- *  the run's parameters (the app sends the two only when they are not the
- *  default, so absent is cstar at 3), else not known: tables of a run the app
- *  has no record of, written by a FASTag that did not record the ranking. */
-interface RunRanking {
-  known: boolean
-  scheme?: string
-  threshold?: string
-}
-function runRanking(recorded: { scheme: string; threshold: string } | null, params: Record<string, unknown> | null | undefined): RunRanking {
-  if (recorded) return { known: true, scheme: recorded.scheme, threshold: recorded.threshold === '' ? undefined : recorded.threshold }
-  if (params) return { known: true, scheme: paramStr(params['resolve_score']), threshold: paramStr(params['resolve_threshold']) }
-  return { known: false }
-}
-/** The ranking as the source line names it: "cstar, threshold 3". */
-function rankingText(r: RunRanking): string {
-  if (!r.known) return "not recorded; FASTag's default is cstar"
-  const scheme = r.scheme ?? 'cstar'
-  return scheme === 'evidence' ? scheme : `${scheme}, threshold ${r.threshold ?? CSTAR_THRESHOLD}`
+// The stick plot's frame (SVG user units; the element scales to its box).
+// The left margin is at least PAD.l, wider when a label needs it (leftMargin).
+const W = 1000
+const PAD = { l: 48, r: 12, t: 56, b: 28 }
+// A character of the plot's labels (.sp-series: 12px of the monospace
+// --font-seq, about 0.6 em; 0.62 em leaves room), the gap between a label
+// and the plot, and the room left of the label.
+const LABEL_CHAR = 0.62 * 12
+const LABEL_GAP = 6
+const LABEL_INSET = 4
+
+/** The plot's left margin (SVG user units) that fits each of @p labels, drawn
+ *  right-aligned LABEL_GAP left of the plot: at least PAD.l, so a plot with
+ *  short labels ("b", "y?") keeps its frame. @p measured: the widest label
+ *  as the browser drew it, when it could measure it. */
+export function leftMargin(labels: string[], measured = 0): number {
+  const widest = Math.max(measured, ...labels.map((t) => t.length * LABEL_CHAR))
+  return Math.max(PAD.l, Math.ceil(widest) + LABEL_GAP + LABEL_INSET)
 }
 
-/// The other series of a pair: b <-> y, c <-> z.
-const other = (x: Ladder['series']): Ladder['series'] => (x === 'b' ? 'y' : x === 'y' ? 'b' : x === 'c' ? 'z' : 'c')
+/** The m/z range of the whole spectrum @p mz, with a margin. */
+function fullRange(mz: number[]): [number, number] {
+  if (mz.length === 0) return [0, 1]
+  const pad = Math.max(1, (mz[mz.length - 1] - mz[0]) * 0.03)
+  return [Math.max(0, mz[0] - pad), mz[mz.length - 1] + pad]
+}
 
 /// The ladder with the series the database peptide decides, when the run
 /// placed this spectrum's tags on one (and more of its steps lie on one series).
@@ -123,35 +125,34 @@ function withDb(l: Ladder, cand: Candidate | null, s: SpectrumPeaks | null, resi
 /// A tag's residues from N to C terminus under @p series (b and c read up the
 /// m/z axis, y and z down it); @p asc in ascending m/z.
 export const nToC = (series: Ladder['series'], asc: string[]): string => (series === 'b' || series === 'c' ? asc : [...asc].reverse()).join('')
-/// The series as shown, with the charge: "y", "b? 2+", "b or y".
-const seriesCell = (series: Ladder['series'], call: SeriesCall | undefined, charge: number): string => `${seriesText(series, call)}${charge > 1 ? ` ${charge}+` : ''}`
 const callTitle = (call: SeriesCall | undefined): string | undefined =>
   call ? `${call.level === 'sure' ? 'Ion series' : call.level === 'likely' ? 'Ion series, likely' : 'Ion series not told apart'}: ${call.why}. FASTag writes a tag in ascending m/z without saying whether it read b or y ions; the series decides which way it reads N→C.` : undefined
 
-/** One resultsQuery of this panel. The browser backend lets a query of a
- *  new view spec cancel the view build in flight (browser.rs view_token: the
- *  Tags table's newer filter or sort supersedes the older one), and then
- *  rejects that query with "cancelled". The panel's queries supersede
- *  nothing: one cancelled by another view's query is asked again. */
-async function query(...a: Parameters<typeof window.fastag.resultsQuery>): ReturnType<typeof window.fastag.resultsQuery> {
+/** A call of this panel to the browser backend. The backend lets a query
+ *  of a new view spec cancel the view build in flight (browser.rs
+ *  view_token: the Tags table's newer filter or sort supersedes the older
+ *  one), and then rejects that call with "cancelled". The panel's calls
+ *  supersede nothing: one cancelled by another view's query is asked again. */
+async function retried<T>(call: () => Promise<T>): Promise<T> {
   for (let tries = 1; ; tries++) {
     try {
-      return await window.fastag.resultsQuery(...a)
+      return await call()
     } catch (e) {
       if (String(e) !== 'cancelled' || tries >= 5) throw e
     }
   }
 }
+const query = (...a: Parameters<typeof window.fastag.resultsQuery>): ReturnType<typeof window.fastag.resultsQuery> => retried(() => window.fastag.resultsQuery(...a))
 
 /** The rows of @p spectrum in @p path, best E-value first (@p sort) or in
  *  file order: the exact ID (as a substring, scan=1 would also match
  *  scan=10..19, 100..199, ...), every page of them (a page holds at most
  *  PAGE rows). */
-async function tagsOf(path: string, spectrum: string, sort: ResultsView['sort'] = { column: 'evalue', desc: false }, read: typeof query = query): Promise<TagsOf> {
+async function tagsOf(path: string, spectrum: string, sort: ResultsView['sort'] = { column: 'evalue', desc: false }): Promise<TagsOf> {
   const view: ResultsView = { sort, spectrum, spectrumExact: true }
   const out: TagsOf = { columns: [], rows: [], rowIds: [] }
   for (;;) {
-    const page = await read(path, view, out.rows.length, PAGE)
+    const page = await query(path, view, out.rows.length, PAGE)
     out.columns = page.columns
     page.rows.forEach((r, i) => {
       out.rows.push(r)
@@ -161,65 +162,159 @@ async function tagsOf(path: string, spectrum: string, sort: ResultsView['sort'] 
   }
 }
 
-/** The spectrum before (-1) or after (+1) @p spectrum in the file's order of
- *  tagged spectra, with the count; null at an end. */
-async function neighbour(path: string, spectrum: string, rowId: number | null, dir: -1 | 1): Promise<{ spectrum: string; rowId: number | null } | null> {
-  // The file row the per-spectrum view keeps for this spectrum (its best tag).
-  const mine = await query(path, { ...PER_SPECTRUM, spectrum, spectrumExact: true }, 0, 1)
-  const sp = mine.columns.indexOf('spectrum')
-  const i = mine.rows.findIndex((r) => r[sp] === spectrum)
-  const row = i >= 0 ? (mine.rowIds?.[i] ?? null) : rowId
-  if (row == null) return null
-  const pos = await window.fastag.resultsPosition(path, PER_SPECTRUM, row)
-  if (pos == null || pos < 0) return null
-  const to = pos + dir
-  if (to < 0) return null
-  const page = await query(path, PER_SPECTRUM, to, 1)
-  if (page.rows.length === 0) return null
-  return { spectrum: page.rows[0][page.columns.indexOf('spectrum')] ?? '', rowId: page.rowIds?.[0] ?? null }
+/// Another spectrum ◀ ▶ lead to: its first row in the order walked (its
+/// ladder is drawn first), and that order (null: all tagged spectra).
+export interface Step {
+  spectrum: string
+  rowId: number | null
+  view: ResultsView | null
 }
+/// The order ◀ ▶ walk, where the spectrum shown sits in it and the spectra
+/// either side: one answer of results_neighbours, so all of one snapshot
+/// of the file (browser.rs neighbours).
+interface Order {
+  view: ResultsView
+  pos: number
+  matched: number
+  snapshot: number
+  prev: Step | null
+  next: Step | null
+}
+// A view waiting for the E-value order (browser.rs D5, pending) is not
+// in its final order yet, so its positions are not known: asked again this often.
+export const RANK_WAIT = { ms: 250, tries: 40 }
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
-/** The spectrum's rows of the run's resolved tags and tag graph, in file
- *  order. No Results table opens these two (an open would close the tags
- *  file's): tableQuery reads them without one. */
-async function cliOf(resolved: string, tagGraph: string, spectrum: string): Promise<CliOf> {
-  const r = await tagsOf(resolved, spectrum, null, window.fastag.tableQuery)
-  const n = await tagsOf(tagGraph, spectrum, null, window.fastag.tableQuery)
-  // The ranking FASTag recorded, the same on every row: of a spectrum it
-  // resolved none of, on the table's first row.
-  let ranking = rankingOf(r)
-  if (!ranking && r.rows.length === 0) {
-    ranking = await window.fastag
-      .tableQuery(resolved, {}, 0, 1)
-      .then((pg) => rankingOf(pg))
-      .catch(() => null)
+/// Where a spectrum sits in a view, as far as it is known: at a position of
+/// a ranked (or final) snapshot of the view, confirmed absent from it (in
+/// snapshot @p snapshot), still waiting for its E-value order (D5 pending)
+/// after RANK_WAIT, or a lookup that failed. Pending and failed are not
+/// absence: nothing falls back on them.
+type Lookup = { kind: 'at'; order: Order } | { kind: 'absent'; snapshot: number } | { kind: 'pending' } | { kind: 'failed'; reason: string }
+const reasonOf = (e: unknown): string => (e instanceof Error ? e.message : String(e))
+
+/** Where @p target sits in @p view (its row, else, that row not in the
+ *  view or of another spectrum, the spectrum's first row there) and the
+ *  spectra either side, in one call that the backend answers from one
+ *  snapshot of the file: a file rewritten meanwhile (a rerun) cannot give a
+ *  position of one file and the neighbours of another. A view not in its
+ *  final order yet is asked again, RANK_WAIT. */
+async function lookupIn(path: string, view: ResultsView, target: SpectrumTarget): Promise<Lookup> {
+  const stepView = view === PER_SPECTRUM ? null : view
+  const step = (n: { spectrum: string; rowId: number } | null): Step | null => (n ? { spectrum: n.spectrum, rowId: n.rowId, view: stepView } : null)
+  for (let tries = 1; ; tries++) {
+    let a: NavAnswer
+    try {
+      a = await retried(() => window.fastag.resultsNeighbours(path, view, target.rowId, target.spectrum))
+    } catch (e) {
+      return { kind: 'failed', reason: reasonOf(e) }
+    }
+    if (a.status === 'at') return { kind: 'at', order: { view, pos: a.pos, matched: a.matched, snapshot: a.snapshot, prev: step(a.prev), next: step(a.next) } }
+    if (a.status === 'absent') return { kind: 'absent', snapshot: a.snapshot }
+    if (tries >= RANK_WAIT.tries) return { kind: 'pending' }
+    await sleep(RANK_WAIT.ms)
   }
-  return { resolved: r, nodes: n, ranking }
 }
-type CliOf = { resolved: CliRows; nodes: CliRows; ranking: { scheme: string; threshold: string } | null }
 
-export default function SpectrumPanel({ target, source, tags: tagsFile, placements, resolved, tagGraph, onTarget, onLocate }: Props): JSX.Element {
+/// The order ◀ ▶ walk, and how it was found.
+interface Walk {
+  // Null: none (status ok: the spectrum is in no order walked).
+  order: Order | null
+  // 'absent': the spectrum is confirmed not in the Tags table's view, so
+  // ◀ ▶ walk each tagged spectrum in file order.
+  fellBack: 'absent' | null
+  status: 'ok' | 'pending' | 'failed'
+  reason?: string
+}
+
+/** The order ◀ ▶ walk from @p target: the Tags table's view it was opened
+ *  from (its sort and filters); each tagged spectrum once in file order when
+ *  it was opened without one, or the spectrum is confirmed absent from it.
+ *  A view still waiting for its E-value order, or a lookup that failed, is
+ *  said so: the file order is not walked in its place. Absent from the
+ *  table's view is taken only of the snapshot the file order is then read
+ *  from: of another (the file was rewritten between the two answers), the
+ *  lookup starts again, at most RANK_WAIT.tries times. */
+async function orderOf(path: string, target: SpectrumTarget): Promise<Walk> {
+  for (let tries = 1; ; tries++) {
+    let fellBack: Walk['fellBack'] = null
+    let absentIn: number | null = null
+    if (target.view) {
+      const l = await lookupIn(path, target.view, target)
+      if (l.kind === 'at') return { order: l.order, fellBack: null, status: 'ok' }
+      if (l.kind === 'pending') return { order: null, fellBack: null, status: 'pending' }
+      if (l.kind === 'failed') return { order: null, fellBack: null, status: 'failed', reason: l.reason }
+      fellBack = 'absent'
+      absentIn = l.snapshot
+    }
+    const l = await lookupIn(path, PER_SPECTRUM, target)
+    const of = l.kind === 'at' ? l.order.snapshot : l.kind === 'absent' ? l.snapshot : null
+    if (absentIn != null && of != null && of !== absentIn) {
+      if (tries >= RANK_WAIT.tries) return { order: null, fellBack: null, status: 'failed', reason: 'the tags file kept changing while it was read' }
+      continue
+    }
+    if (l.kind === 'at') return { order: l.order, fellBack, status: 'ok' }
+    if (l.kind === 'pending') return { order: null, fellBack, status: 'pending' }
+    if (l.kind === 'failed') return { order: null, fellBack, status: 'failed', reason: l.reason }
+    return { order: null, fellBack, status: 'ok' }
+  }
+}
+
+/// Where ◀ ▶ lead: undefined while it is looked up, null at an end.
+interface Nav {
+  prev: Step | null | undefined
+  next: Step | null | undefined
+  // The spectrum shown in that order: row (or spectrum) k of n.
+  at: { k: number; n: number; spectra: boolean } | null
+  // loading: being looked up (or superseded); ok: prev and next are known
+  // (null: an end); pending: the E-value order is still being built;
+  // failed: the lookup failed (reason). Only ok has ends.
+  status: 'loading' | 'ok' | 'pending' | 'failed'
+  // The order walked is the Tags table's (false: each tagged spectrum in file order).
+  table: boolean
+  // The spectrum is not in the Tags table's view: file order in its place.
+  fellBack: boolean
+  reason?: string
+}
+const NAV0: Nav = { prev: undefined, next: undefined, at: null, status: 'loading', table: false, fellBack: false }
+
+/** Where ◀ ▶ lead from @p target in @p path; @p live: false once the
+ *  panel shows another spectrum (the lookup stops, as loading). */
+async function navOf(path: string, target: SpectrumTarget, live: () => boolean): Promise<Nav> {
+  if (!live()) return NAV0
+  const w = await orderOf(path, target)
+  const base = { prev: null, next: null, at: null, table: false, fellBack: w.fellBack === 'absent' }
+  if (w.status !== 'ok') return { ...base, status: w.status, reason: w.reason }
+  const o = w.order
+  if (!o) return { ...base, status: 'ok' }
+  if (!live()) return NAV0
+  return {
+    ...base,
+    prev: o.prev,
+    next: o.next,
+    at: { k: o.pos + 1, n: o.matched, spectra: o.view.perSpectrum === 1 },
+    status: 'ok',
+    table: o.view !== PER_SPECTRUM
+  }
+}
+
+const typingIn = (t: EventTarget | null): boolean => t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))
+
+export default function SpectrumPanel({ target, source, tags: tagsFile, placements, onTarget, onLocate }: Props): JSX.Element {
   const tagsPath = tagsFile === undefined ? target.path : tagsFile
   const [peaks, setPeaks] = useState<Peaks>({ state: 'loading' })
   const [tags, setTags] = useState<TagsOf | null>(null)
   const [tagsError, setTagsError] = useState<string | null>(null)
   // The tag whose ladder is drawn: an index into tags.rows.
   const [chosen, setChosen] = useState<number>(0)
-  const [nav, setNav] = useState<{ prev: boolean; next: boolean }>({ prev: false, next: false })
+  const [nav, setNav] = useState<Nav>(NAV0)
+  // The lookup of where ◀ ▶ lead, for a press before it is done.
+  const navRef = useRef<Promise<Nav> | null>(null)
+  // The lookup in flight: a newer one (another spectrum, Try again) supersedes it.
+  const navGen = useRef(0)
   const [navNote, setNavNote] = useState('')
   const [retry, setRetry] = useState(0)
-  // Every tag at once, resolved by the tag graph (graph.ts or FASTag's,
-  // cliGraph.ts), as tables or as the merge graph; a cutoff on E-value.
-  const [mode, setMode] = useState<'one' | 'all' | 'graph'>('one')
-  const allTags = mode !== 'one'
-  const [maxE, setMaxE] = useState('1')
-  const [join, setJoin] = useState(false)
-  // The resolved tag selected, of the graph it was chosen in: a graph built
-  // anew (another spectrum, cutoff, Join, the peptide read) selects its best.
-  const [chosenContig, setChosenContig] = useState<{ g: TagGraph; i: number } | null>(null)
   const [cand, setCand] = useState<Candidate | null>(null)
-  // The spectrum's rows of the run's -resolved_out and -tag_graph_out.
-  const [cli, setCli] = useState<CliOf | { error: string } | null>(null)
 
   // The dump.
   useEffect(() => {
@@ -249,13 +344,15 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
     let live = true
     setTags(null)
     setTagsError(null)
-    setNav({ prev: false, next: false })
+    setNav(NAV0)
     setCand(null)
-    setCli(null)
-    // The tags first, then FASTag's tag graph, then where ◀ ▶ lead: one
-    // view build at a time, so the panel's own queries do not cancel each
-    // other (see query()).
+    navRef.current = null
+    const gen = ++navGen.current
+    // The tags first, then where ◀ ▶ lead: one view build at a time, so the
+    // panel's own queries do not cancel each other (see query()).
     if (!tagsPath) return
+    let done: (n: Nav) => void = () => undefined
+    navRef.current = new Promise<Nav>((r) => (done = r))
     tagsOf(tagsPath, target.spectrum)
       .then((t) => {
         if (!live) return
@@ -264,24 +361,26 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
         setChosen(at >= 0 ? at : 0)
       })
       .catch((e: unknown) => live && setTagsError(e instanceof Error ? e.message : String(e)))
-      .then(() => (resolved && tagGraph ? cliOf(resolved, tagGraph, target.spectrum) : null))
-      .then(
-        (c) => live && setCli(c),
-        (e: unknown) => live && setCli({ error: e instanceof Error ? e.message : String(e) })
-      )
-      .then(() => Promise.all([neighbour(tagsPath, target.spectrum, target.rowId, -1), neighbour(tagsPath, target.spectrum, target.rowId, 1)]))
-      .then(([p, n]) => live && setNav({ prev: !!p, next: !!n }))
-      .catch(() => live && setNav({ prev: false, next: false }))
-      // Last, the peptide the run placed this spectrum's tags on (first
-      // page). No Results table has -recon_out open while the Spectrum tab
-      // shows: resultsQuery would refuse it ("cancelled"), tableQuery reads it.
+      // The peptide the run placed this spectrum's tags on (first page). No
+      // Results table has -recon_out open while the Spectrum tab shows:
+      // resultsQuery would refuse it ("cancelled"), tableQuery reads it.
       .then(() => (placements ? window.fastag.tableQuery(placements, { spectrum: target.spectrum, spectrumExact: true }, 0, PAGE) : null))
       .then((pg) => live && pg && setCand(likelyPeptide(pg.columns, pg.rows)))
       .catch(() => undefined)
+      // Last, where ◀ ▶ lead (it may wait for the E-value order); one
+      // lookup after the other.
+      .then(() => navOf(tagsPath, target, () => live && navGen.current === gen))
+      .catch((e: unknown): Nav => ({ ...NAV0, prev: null, next: null, status: 'failed', reason: reasonOf(e) }))
+      .then((n) => {
+        done(n)
+        if (live && navGen.current === gen) setNav(n)
+      })
     return () => {
       live = false
+      done(NAV0)
     }
-  }, [tagsPath, placements, resolved, tagGraph, target.spectrum, target.rowId])
+    // target.view: the order is the one it was opened with.
+  }, [tagsPath, placements, target.spectrum, target.rowId, target.view])
 
   const residues = useMemo(() => {
     const f = source.params?.['fixed_modifications']
@@ -289,149 +388,43 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
   }, [source.params])
 
   const spectrum = peaks.state === 'ok' ? peaks.spectrum : null
-  const row = tags && tags.rows[chosen] ? tagRowFrom(tags.columns, tags.rows[chosen]) : null
-  const lads = spectrum && row ? laddersFor(row, spectrum, residues) : null
-  const byDb = (l: Ladder): Ladder => withDb(l, cand, spectrum, residues)
-  const ladder = lads ? byDb(lads.best) : null
-  // Each ladder with a step on the peaks gets its own line (#127).
-  const one = lads ? lads.both.filter((l) => l === lads.best || hasStep(l)).map((l) => (l === lads.best ? (ladder as Ladder) : byDb(l))) : []
-
-  const cutoff = maxE.trim() === '' ? Infinity : Number(maxE)
-  const badCutoff = !Number.isFinite(cutoff) && cutoff !== Infinity
-  // FASTag's tag graph is still being read: nothing resolved meanwhile.
-  const cliPending = !!(resolved && tagGraph) && cli === null
-  // The ranking of the run, for FASTag's resolution and the GUI's.
-  const recorded = cli && !('error' in cli) ? cli.ranking : null
-  const ranked = useMemo(() => runRanking(recorded, source.params), [recorded, source.params])
-  const merged = useMemo(() => {
-    if (!allTags || !spectrum || !tags || cliPending) return null
-    // FASTag's graph when the run wrote it and it fits the peaks; its rows
-    // name the spectrum's tags in -out (file) order.
-    const order = tags.rows.map((_, i) => i).sort((a, b) => (tags.rowIds[a] ?? a) - (tags.rowIds[b] ?? b))
-    const tg = tags.columns.indexOf('tag')
-    const fit = cli && !('error' in cli) ? fromCli(cli.resolved, cli.nodes, spectrum, residues, order.map((i) => ({ index: i, tag: tags.rows[i][tg] ?? '' }))) : null
-    // FASTag wrote no row for a spectrum with tags: it resolved none of them
-    // (all above -resolve_max_evalue, or off the peaks). Not a resolution to
-    // show as FASTag's: the GUI resolves them, with its cutoff to change.
-    const none = !!fit?.ok && fit.graph.paths.length === 0 && fit.graph.placements.length === 0 && tags.rows.length > 0
-    const run = none ? null : fit
-    // Why the GUI resolves although the run wrote FASTag's graph.
-    const why =
-      cli && 'error' in cli
-        ? `FASTag's tag graph could not be read (${cli.error})`
-        : fit && !fit.ok
-          ? `FASTag's tag graph does not fit the peaks (${fit.error})`
-          : none
-            ? `FASTag resolved none of the ${tags.rows.length.toLocaleString('en-US')} tags (E-value above -resolve_max_evalue ${String(source.params?.['resolve_max_evalue'] ?? 1)}, or not on the peaks)`
-            : null
-    const ev = tags.columns.indexOf('evalue')
-    const ins: TagIn[] = []
-    let above = 0
-    tags.rows.forEach((r, i) => {
-      const tr = tagRowFrom(tags.columns, r)
-      if (!tr) return
-      // A blank, missing or invalid E-value is no evidence (not zero).
-      const cell = ev >= 0 ? (r[ev] ?? '').trim() : ''
-      const evalue = cell !== '' && Number.isFinite(Number(cell)) && Number(cell) >= 0 ? Number(cell) : null
-      if (!badCutoff && cutoff !== Infinity && (evalue == null || evalue > cutoff)) return void above++
-      ins.push({ row: tr, evalue, index: i })
-    })
-    // Ranked as the run ranked them (its -resolve_score and -resolve_threshold;
-    // FASTag's default cstar at 3, stepScore.ts, when that is not known).
-    const gui = run?.ok ? null : schemeGraph(ins, spectrum, residues, join, ranked.scheme, ranked.threshold)
-    const graph = run?.ok ? run.graph : (gui as NonNullable<typeof gui>).graph
-    // The database peptide, when the run placed this spectrum's tags, decides the series
-    // (and with it its complements and which tags read the same residues).
-    if (cand) settleSeries(graph, spectrum, (p: GPath) => dbCall(cand, p.steps, p.charge, p.series, residues, spectrum))
-    const all = graph.paths.map((p) => ladderOf(p, spectrum))
-    const span = spectrum.mz.length ? spectrum.mz[spectrum.mz.length - 1] - spectrum.mz[0] : 1
-    const byRun = !!run?.ok
-    const used = byRun ? new Set(graph.placements.flatMap((p) => p.rows)).size : ins.length
-    // The ranking the GUI took, for the source line.
-    const ranking = gui
-      ? `ranking ${gui.scheme}${gui.threshold == null ? '' : `, threshold ${gui.threshold}`}${gui.note ? `; ${gui.note}, so ${gui.scheme}` : ''}${ranked.known ? '' : "; the run's ranking is not recorded, so FASTag's default"}`
-      : null
-    return { graph, all, allRows: packRows(graph, spectrum, span * 0.01).rows, above: byRun ? 0 : above, used, byRun, why, ranking }
-  }, [allTags, spectrum, tags, cutoff, badCutoff, residues, join, cand, cli, cliPending, ranked, source.params])
-  const contigAt = merged && chosenContig?.g === merged.graph && chosenContig.i < merged.graph.paths.length ? chosenContig.i : 0
-  const choose = useCallback((i: number): void => setChosenContig(merged ? { g: merged.graph, i } : null), [merged])
-  const sel = merged ? (merged.graph.paths[contigAt] ?? null) : null
-  // Where each resolved tag lies against the peptide's termini: as FASTag
-  // wrote it (-resolved_out terminus), else computed as FASTag does.
+  // The run's termini and isotope offsets, for the series call and the terminus mark.
   const tctx = useMemo(() => termContext(source.params, residues), [source.params, residues])
-  const termini = useMemo((): Terminus[] => (merged && spectrum ? terminiOf(merged.graph.paths, spectrum, residues, tctx) : []), [merged, spectrum, residues, tctx])
+  const row = useMemo(() => (tags && tags.rows[chosen] ? tagRowFrom(tags.columns, tags.rows[chosen]) : null), [tags, chosen])
+  const { ladder, one } = useMemo(() => {
+    const lads = spectrum && row ? laddersFor(row, spectrum, residues, tctx) : null
+    if (!lads) return { ladder: null, one: [] as Ladder[] }
+    const best = withDb(lads.best, cand, spectrum, residues)
+    // Each ladder with a step on the peaks gets its own line (#127).
+    return { ladder: best, one: lads.both.filter((l) => l === lads.best || hasStep(l)).map((l) => (l === lads.best ? best : withDb(l, cand, spectrum, residues))) }
+  }, [spectrum, row, residues, tctx, cand])
+  // Where the tag drawn lies against the peptide's termini, under its series.
+  const term = useMemo((): Terminus | undefined => (spectrum && ladder ? terminusOf(pathOf(ladder), spectrum, residues, tctx) : undefined), [spectrum, ladder, residues, tctx])
   const termMarks = useMemo(() => {
-    const t = termini[contigAt]
-    const mk = sel && spectrum && t ? terminusMark(sel, t, spectrum, residues, tctx) : null
+    const mk = spectrum && ladder && term ? terminusMark(pathOf(ladder), term, spectrum, residues, tctx) : null
     return mk ? [mk] : []
-  }, [termini, contigAt, sel, spectrum, residues, tctx])
+  }, [spectrum, ladder, term, residues, tctx])
   // The peptide's fragments in the layer of the tag drawn.
-  const ruler = useMemo(() => {
-    const of = sel ?? ladder
-    return cand && of && of.charge > 0 ? rulerOf(cand, of.series, of.charge, residues) : null
-  }, [cand, sel, ladder, residues])
-  // The plot draws the paths of the first MAX_ROWS rows, and the chosen one.
-  const view = useMemo(() => {
-    if (!merged || !spectrum || !sel) return null
-    const { graph, all, allRows } = merged
-    const idx = all.map((_, i) => i).filter((i) => allRows[i] < MAX_ROWS || i === contigAt)
-    const dots: PlotDot[] = []
-    idx.forEach((i, k) => {
-      for (const j of graph.paths[i].joined) dots.push({ mz: spectrum.mz[j], line: k })
-    })
-    const base = Math.max(1, ...spectrum.int)
-    const pct = (i: number): string => `${((100 * spectrum.int[i]) / base).toFixed(0)}%`
-    const kinds = idx.map((i) => graph.paths[i].steps.map((st): StepKind => (i === contigAt ? 'same' : kindOf(st, graph.paths[i], sel, spectrum))))
-    return {
-      lines: idx.map((i) => all[i]),
-      rows: idx.map((i) => Math.min(allRows[i], MAX_ROWS)),
-      dots,
-      kinds,
-      faint: idx.map((i) => graph.paths[i].steps.map((st) => (st.readings[0].evalue ?? Infinity) > 1)),
-      strong: idx.map((i) => graph.paths[i].steps.map((st) => (st.readings[0].evalue ?? Infinity) <= 0.01)),
-      titles: idx.map((i, k) =>
-        graph.paths[i].steps.map(
-          (st, j) =>
-            `#${i + 1} ${seriesCell(graph.paths[i].series, graph.paths[i].call, graph.paths[i].charge)}: ` +
-            st.readings.map((r) => `${r.label}: E-value ${r.evalue ?? 'none'}, ${r.deltaPpm.toFixed(1)} ppm`).join(' · ') +
-            ` · peaks ${fmt(spectrum.mz[st.u])} (${pct(st.u)} of the base peak) and ${fmt(spectrum.mz[st.v])} (${pct(st.v)})` +
-            (i === contigAt ? '' : kinds[k][j] === 'same' ? ` · as #${contigAt + 1} reads it` : kinds[k][j] === 'differs' ? ` · differs from #${contigAt + 1}` : '') +
-            (ruler && graph.paths[i].series === ruler.series && graph.paths[i].charge === ruler.charge ? (stepOnRuler(st, ruler, spectrum) ? ' · as on the peptide' : ' · not on the peptide') : '')
-        )
-      ),
-      hidden: all.length - idx.length
-    }
-  }, [merged, spectrum, contigAt, sel, ruler])
-  // Resolving, no path is no ladder: never the chosen tag's, as if it were resolved.
-  const lines = view ? view.lines : merged ? [] : one
-  const shownLadder = merged ? (merged.all[contigAt] ?? null) : ladder
-  // Mass errors of the tag drawn, and of the steps that differ from it.
+  const ruler = useMemo(() => (cand && ladder && ladder.charge > 0 ? rulerOf(cand, ladder.series, ladder.charge, residues) : null), [cand, ladder, residues])
+  // Mass errors of the tag drawn.
   const strip = useMemo((): ErrorStrip | null => {
-    if (!spectrum || !shownLadder || !shownLadder.complete) return null
+    if (!spectrum || !ladder || !ladder.complete) return null
     const ppmUnit = spectrum.toleranceUnit === 'ppm'
     const mzOf = (p: Ladder['positions'][number]): number => p.mz ?? p.expected
     const steps: StripPoint[] = []
-    const drift: StripPoint[] = [{ mz: mzOf(shownLadder.positions[0]), value: 0 }]
+    const drift: StripPoint[] = [{ mz: mzOf(ladder.positions[0]), value: 0 }]
     let cum = 0
-    let from = shownLadder.positions[0]
-    for (const p of shownLadder.positions.slice(1)) {
+    let from = ladder.positions[0]
+    for (const p of ladder.positions.slice(1)) {
       if (p.peak == null || p.deltaMz == null) continue
       cum += p.deltaMz
       steps.push({ mz: (mzOf(from) + mzOf(p)) / 2, value: ppmUnit ? (p.deltaPpm ?? 0) : p.deltaMz })
       drift.push({ mz: mzOf(p), value: ppmUnit ? (cum / mzOf(p)) * 1e6 : cum })
       from = p
     }
-    const others: StripPoint[] = []
-    if (view && merged)
-      view.lines.forEach((l, k) =>
-        view.kinds[k].forEach((kind, j) => {
-          const p = l.positions[j + 1]
-          if (kind === 'differs' && p.deltaMz != null) others.push({ mz: (mzOf(l.positions[j]) + mzOf(p)) / 2, value: ppmUnit ? (p.deltaPpm ?? 0) : p.deltaMz })
-        })
-      )
     const onPeptide: StripPoint[] = []
-    if (ruler && ruler.series === shownLadder.series && ruler.charge === shownLadder.charge) {
-      const peaks = shownLadder.positions.map((p) => p.peak).filter((p): p is number => p != null)
+    if (ruler && ruler.series === ladder.series && ruler.charge === ladder.charge) {
+      const peaks = ladder.positions.map((p) => p.peak).filter((p): p is number => p != null)
       ticksOf(ruler, peaks, spectrum).forEach((t, k) => {
         if (t < 0) return
         const x = spectrum.mz[peaks[k]]
@@ -439,29 +432,102 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
         onPeptide.push({ mz: x, value: ppmUnit ? (d / x) * 1e6 : d })
       })
     }
-    return { unit: spectrum.toleranceUnit, tolerance: spectrum.tolerance, steps, drift, others, onPeptide }
-  }, [spectrum, shownLadder, view, merged, ruler])
+    return { unit: spectrum.toleranceUnit, tolerance: spectrum.tolerance, steps, drift, onPeptide }
+  }, [spectrum, ladder, ruler])
   const plotRuler = useMemo((): PlotRuler | null => {
     if (!ruler || !spectrum) return null
+    // Bold: the residues the tag drawn reads as the peptide has them.
     const on = ruler.residues.map(() => false)
-    const steps = sel ? sel.steps : []
-    for (const st of steps) {
+    for (const st of ladder ? ladderSteps(ladder) : []) {
       if (!stepOnRuler(st, ruler, spectrum)) continue
       const [a, b] = ticksOf(ruler, [st.u, st.v], spectrum)
       for (let k = a; k < b; k++) on[k] = true
     }
     return { label: `${ruler.series}${ruler.charge > 1 ? ` ${ruler.charge}+` : ''} DB`, ticks: ruler.ticks, residues: ruler.residues, on }
-  }, [ruler, spectrum, sel])
+  }, [ruler, spectrum, ladder])
 
+  // Where ◀ ▶ lead once more, after the E-value order was not ready or the
+  // lookup failed (the tags are read already: only the lookup runs).
+  function retryNav(): void {
+    if (!tagsPath) return
+    const gen = ++navGen.current
+    setNav(NAV0)
+    setNavNote('')
+    const p = navOf(tagsPath, target, () => navGen.current === gen).catch((e: unknown): Nav => ({ ...NAV0, prev: null, next: null, status: 'failed', reason: reasonOf(e) }))
+    navRef.current = p
+    void p.then((n) => navGen.current === gen && setNav(n))
+  }
+  // In which order ◀ ▶ walk, for their tooltips and the notes: the order
+  // walked once it is known; before, the one it was opened with.
+  const tableOrder = 'in the Tags table order'
+  const fileOrder = 'with tags, in file order'
+  const fellBackWords = `${fileOrder} (this spectrum is not in the Tags table's filtered view)`
+  const orderWords = (n: Nav): string => (n.status !== 'ok' ? (target.view ? tableOrder : fileOrder) : n.table ? tableOrder : n.fellBack ? fellBackWords : fileOrder)
+  // Why ◀ ▶ do not lead anywhere yet (pending, failed); null: they may.
+  const navBlocked = (n: Nav): string | null =>
+    n.status === 'pending'
+      ? `The E-value order of ${target.view ? 'the Tags table' : 'the tagged spectra'} is still being built; try again in a moment.`
+      : n.status === 'failed'
+        ? `Could not look up the neighbouring spectra: ${n.reason ?? 'unknown error'}.`
+        : null
+  const endNote = (n: Nav, dir: -1 | 1): string => {
+    const end = dir < 0 ? 'first' : 'last'
+    return n.table ? `This is the ${end} spectrum in the Tags table order.` : `This is the ${end} tagged spectrum${n.fellBack ? " in file order (this spectrum is not in the Tags table's filtered view)" : ''}.`
+  }
+  const blocked = navBlocked(nav)
+  // Said once it is known, as the end notes are when pressed.
+  useEffect(() => {
+    if (blocked) setNavNote(blocked)
+  }, [blocked])
   async function go(dir: -1 | 1): Promise<void> {
-    const n = tagsPath ? await neighbour(tagsPath, target.spectrum, target.rowId, dir).catch(() => null) : null
-    if (!n) {
-      setNavNote(dir < 0 ? 'This is the first tagged spectrum.' : 'This is the last tagged spectrum.')
+    const pending = navRef.current
+    const r = pending ? await pending : null
+    // Superseded (another spectrum is shown) or nothing to walk.
+    if (!r || r.status === 'loading') return
+    const why = navBlocked(r)
+    if (why) {
+      setNavNote(why)
       return
     }
-    setNavNote(`Spectrum ${n.spectrum}`)
-    onTarget({ path: target.path, spectrum: n.spectrum, rowId: n.rowId })
+    const n = dir < 0 ? r.prev : r.next
+    if (!n) {
+      setNavNote(endNote(r, dir))
+      return
+    }
+    setNavNote(`Spectrum ${spectrumHint(n.spectrum) || n.spectrum}`)
+    onTarget({ path: target.path, spectrum: n.spectrum, rowId: n.rowId, view: n.view })
   }
+  // Alt+← and Alt+→, Page Up and Page Down, with the focus anywhere in the
+  // panel but a text field (the plot keeps ← and → to pan, the tags list its
+  // scroll), or on what holds the panel (the view, the page: WebKit does not
+  // focus a button clicked), not in another part of the window.
+  const rootRef = useRef<HTMLDivElement>(null)
+  const keyRef = useRef<(e: globalThis.KeyboardEvent) => void>(() => undefined)
+  keyRef.current = (e) => {
+    const t = e.target
+    const root = rootRef.current
+    if (e.defaultPrevented || typingIn(t) || e.metaKey || e.ctrlKey || e.shiftKey || !root) return
+    if (!(t instanceof Node && (root.contains(t) || t.contains(root)))) return
+    const page = !e.altKey && (e.key === 'PageUp' || e.key === 'PageDown')
+    if (page && t instanceof Element && t.closest('.sp-tags-wrap')) return
+    const dir = page ? (e.key === 'PageUp' ? -1 : 1) : e.altKey && e.key === 'ArrowLeft' ? -1 : e.altKey && e.key === 'ArrowRight' ? 1 : 0
+    if (dir === 0) return
+    e.preventDefault()
+    if (blocked) {
+      setNavNote(blocked)
+      return
+    }
+    if (nav.status === 'ok' && (dir < 0 ? nav.prev : nav.next) === null) {
+      setNavNote(endNote(nav, dir))
+      return
+    }
+    void go(dir)
+  }
+  useEffect(() => {
+    const on = (e: globalThis.KeyboardEvent): void => keyRef.current(e)
+    document.addEventListener('keydown', on)
+    return () => document.removeEventListener('keydown', on)
+  }, [])
 
   async function locate(): Promise<void> {
     const p = await window.fastag.pickInput()
@@ -482,10 +548,44 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
         </span>
       )}
       <span className="spacer" />
-      <button type="button" className="secondary" disabled={!nav.prev} onClick={() => void go(-1)} aria-label="Previous tagged spectrum">
+      {nav.at && (
+        <span
+          className="hint"
+          data-testid="nav-at"
+          title={
+            nav.table
+              ? 'Where this spectrum is in the Tags table order'
+              : `Where this spectrum is among the tagged spectra of the file${nav.fellBack ? ", in file order (this spectrum is not in the Tags table's filtered view)" : ''}`
+          }
+        >
+          {nav.at.spectra ? 'spectrum' : 'tag'} {nav.at.k.toLocaleString('en-US')} of {nav.at.n.toLocaleString('en-US')}
+        </span>
+      )}
+      {blocked && (
+        <button type="button" className="secondary" onClick={retryNav} title={blocked} aria-label="Look up the previous and next spectrum again">
+          Try again
+        </button>
+      )}
+      <button
+        type="button"
+        className="secondary"
+        disabled={!!blocked || nav.prev === null}
+        onClick={() => void go(-1)}
+        aria-label="Previous tagged spectrum"
+        aria-keyshortcuts="Alt+ArrowLeft PageUp"
+        title={blocked ?? `Previous spectrum ${orderWords(nav)} (Alt+← or Page Up)`}
+      >
         ◀ prev
       </button>
-      <button type="button" className="secondary" disabled={!nav.next} onClick={() => void go(1)} aria-label="Next tagged spectrum">
+      <button
+        type="button"
+        className="secondary"
+        disabled={!!blocked || nav.next === null}
+        onClick={() => void go(1)}
+        aria-label="Next tagged spectrum"
+        aria-keyshortcuts="Alt+ArrowRight PageDown"
+        title={blocked ?? `Next spectrum ${orderWords(nav)} (Alt+→ or Page Down)`}
+      >
         next ▶
       </button>
       <span className="sr-only" role="status" aria-live="polite">
@@ -554,72 +654,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
   } else {
     body = (
       <>
-        <div className="sp-mode" role="group" aria-label="Tags drawn">
-          <label>
-            <input type="radio" name="sp-mode" checked={mode === 'one'} onChange={() => setMode('one')} /> Chosen tag
-          </label>
-          <label>
-            <input type="radio" name="sp-mode" checked={mode === 'all'} onChange={() => setMode('all')} /> All tags, resolved
-          </label>
-          <label>
-            <input type="radio" name="sp-mode" checked={mode === 'graph'} onChange={() => setMode('graph')} /> Merge graph
-          </label>
-          {allTags && !merged?.byRun && (
-            <label>
-              E-value ≤{' '}
-              <input
-                type="text"
-                inputMode="decimal"
-                size={8}
-                placeholder="any"
-                value={maxE}
-                aria-invalid={badCutoff || undefined}
-                aria-label="Largest E-value of the tags used"
-                onChange={(e) => setMaxE(e.target.value)}
-              />
-            </label>
-          )}
-          {allTags && !merged?.byRun && (
-            <label title="Also continue a tag with another that only touches it at a peak (no single tag spans the junction; marked with a hollow dot)">
-              <input type="checkbox" checked={join} onChange={(e) => setJoin(e.target.checked)} /> Join tags that only touch
-            </label>
-          )}
-          {merged && (
-            <span className="hint" data-testid="merge-summary">
-              {merged.used} tags ({merged.graph.placements.length} distinct) → {merged.graph.paths.length} resolved
-              {view && view.hidden > 0 ? ` · ${view.hidden} only in the table` : ''}
-              {merged.graph.offPeaks.length > 0 ? ` · ${merged.graph.offPeaks.length} not on the peaks (not drawn)` : ''}
-              {merged.above > 0 ? ` · ${merged.above} above the cutoff` : ''}
-              {badCutoff && !merged.byRun ? ' · the cutoff is not a number' : ''}
-            </span>
-          )}
-          {merged && (
-            <span className="hint" data-testid="merge-source">
-              {merged.byRun ? `Resolved by FASTag (ranking ${rankingText(ranked)})` : `Resolved in the GUI (${merged.ranking})${merged.why ? `: ${merged.why}` : ''}`}
-            </span>
-          )}
-        </div>
-        <StickPlot
-          spectrum={peaks.spectrum}
-          ladder={shownLadder}
-          lines={lines}
-          rows={view?.rows}
-          dots={view?.dots}
-          faint={view?.faint}
-          strong={view?.strong}
-          kinds={view?.kinds}
-          titles={view?.titles}
-          ruler={plotRuler}
-          strip={strip}
-          marks={termMarks}
-        />
-        {merged && (
-          <p className="hint sp-legend">
-            <span className="sp-key same" /> the selected tag, and steps other tags read the same way · <span className="sp-key differs" /> steps that differ from it (at most one
-            of the two is right) · <span className="sp-key other" /> elsewhere · <em>italic</em>: readings not told apart · thick: E-value ≤ 0.01, faint: &gt; 1
-          </p>
-        )}
-        {merged && mode === 'graph' && spectrum && <MergeGraph graph={merged.graph} spectrum={spectrum} chosen={contigAt} onChoose={choose} termini={termini} />}
+        <StickPlot spectrum={peaks.spectrum} ladder={ladder} lines={one} ruler={plotRuler} strip={strip} marks={termMarks} />
         {cand && (
           <p className="hint sp-peptide" data-testid="peptide">
             Tags placed on <strong className="mono">{cand.peptide}</strong>
@@ -629,22 +664,14 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
             {plotRuler ? '; its fragments are the top row of the plot' : ''}.
           </p>
         )}
-        {shownLadder && (
-          <LadderLine
-            ladder={shownLadder}
-            tag={merged ? sequenceOf(merged.graph.paths[contigAt]) : nToC(shownLadder.series, shownLadder.residues)}
-            terminus={merged ? termini[contigAt] : undefined}
-            written={merged ? undefined : row?.tag}
-            unit={peaks.spectrum.toleranceUnit}
-          />
-        )}
+        {ladder && <LadderLine ladder={ladder} tag={nToC(ladder.series, ladder.residues)} terminus={term} written={row?.tag} unit={peaks.spectrum.toleranceUnit} />}
         {!row && tags && tags.rows.length > 0 && <p className="hint">This file has no nterm_mass, cterm_mass or charge column: no ladder can be drawn.</p>}
       </>
     )
   }
 
   return (
-    <div className="sp" role="region" aria-label="Spectrum">
+    <div className="sp" role="region" aria-label="Spectrum" ref={rootRef}>
       {header}
       {caveats.map((c) => (
         <p className="hint sp-caveat" key={c}>
@@ -652,211 +679,22 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
         </p>
       ))}
       {body}
+      {tags && <DbAlignment columns={tags.columns} rows={tags.rows} tags={tagsPath} params={source.params} chosen={chosen} onChoose={setChosen} />}
       <section className="sp-tags" aria-label="Tags of this spectrum">
         <h3>
           Tags of this spectrum{tags ? ` (n=${tags.rows.length.toLocaleString('en-US')})` : ''}
-          {tagsPath && <span className="hint">{allTags ? ' · resolved into the largest supported tags; choose one to see the tags behind it' : ' · choose one to draw its ladder'}</span>}
+          {tagsPath && <span className="hint"> · choose one to draw its ladder</span>}
         </h3>
         {!tagsPath ? (
           <p className="hint">Tags file not opened: open the run's tags table to see the tags of this spectrum.</p>
         ) : tagsError ? (
           <p className="hint">Cannot read the tags: {tagsError}</p>
-        ) : !tags || (allTags && cliPending) ? (
+        ) : !tags ? (
           <p className="hint">Reading…</p>
-        ) : merged ? (
-          <>
-            <PathTable graph={merged.graph} chosen={contigAt} onChoose={choose} ruler={ruler} spectrum={spectrum} termini={termini} />
-            {sel && spectrum && (
-              <Pileup
-                graph={merged.graph}
-                at={contigAt}
-                spectrum={spectrum}
-                ruler={ruler}
-                onTag={(i) => {
-                  setChosen(i)
-                  setMode('one')
-                }}
-              />
-            )}
-          </>
         ) : (
-          <TagsTable tags={tags} chosen={chosen} onChoose={setChosen} spectrum={spectrum} residues={residues} cand={cand} />
+          <TagsTable tags={tags} chosen={chosen} onChoose={setChosen} spectrum={spectrum} residues={residues} ctx={tctx} cand={cand} />
         )}
       </section>
-    </div>
-  )
-}
-
-/// The resolved tags of a spectrum (the paths of its tag graph), best
-/// evidence first.
-function PathTable(p: { graph: TagGraph; chosen: number; onChoose(i: number): void; ruler: Ruler | null; spectrum: SpectrumPeaks | null; termini: Terminus[] }): JSX.Element {
-  const g = p.graph
-  return (
-    <div className="sp-tags-wrap">
-      <table className="history-table sp-tags-table" role="grid" aria-readonly="true" aria-label="Resolved tags of this spectrum">
-        <thead>
-          <tr>
-            <th scope="col">Resolved tag (N→C)</th>
-            <th scope="col">Series</th>
-            <th scope="col" className="num">Steps</th>
-            <th scope="col" className="num" title="Best E-value on any step, and the weakest step or junction of the tag (– when a junction has no tag over it)">E-value best – weakest</th>
-            {p.ruler && <th scope="col" className="num" title="Steps the database peptide of this spectrum confirms: both peaks on its fragments, the same residue between them">On peptide</th>}
-            <th scope="col" className="num" title="Distinct tags that build it, and those lying inside it">Tags</th>
-            <th scope="col">Notes</th>
-          </tr>
-        </thead>
-        <tbody>
-          {g.paths.map((c, i) => {
-            const notes: string[] = []
-            const forks = c.relations.filter((r) => r.kind === 'fork').map((r) => `#${r.path + 1}`)
-            if (forks.length > 0) notes.push(`conflicts with ${forks.join(', ')}`)
-            const touch = c.relations.filter((r) => r.kind === 'touch').map((r) => `#${r.path + 1}`)
-            if (touch.length > 0) notes.push(`touches ${touch.join(', ')}`)
-            if (c.joined.length > 0) notes.push(`${c.joined.length} joined`)
-            if (c.sameAs.length > 0) notes.push(`the same residues as ${c.sameAs.map((q) => `#${q.path + 1} (${seriesCell(g.paths[q.path].series, g.paths[q.path].call, g.paths[q.path].charge)}; ${q.steps} of ${c.steps.length} steps)`).join(', ')}`)
-            const layer = p.ruler && p.spectrum && c.series === p.ruler.series && c.charge === p.ruler.charge
-            return (
-              <tr key={i} tabIndex={i === p.chosen ? 0 : -1} aria-selected={i === p.chosen} className={i === p.chosen ? 'on' : undefined} onClick={() => p.onChoose(i)}>
-                <td role="gridcell" className="mono">
-                  <span className="muted">#{i + 1} </span>
-                  <TermSeq seq={sequenceOf(c)} t={p.termini[i]} />
-                  {c.call.level === 'open' && sequenceOf({ ...c, series: other(c.series) }) !== sequenceOf(c) && (
-                    <span className="muted sp-as" title="b or y is not told apart: the other series reads the other way">
-                      {' '}
-                      as {c.series}; as {other(c.series)}: {sequenceOf({ ...c, series: other(c.series) })}
-                    </span>
-                  )}
-                </td>
-                <td role="gridcell" title={callTitle(c.call)} data-series-level={c.call.level}>
-                  {seriesCell(c.series, c.call, c.charge)}
-                </td>
-                <td role="gridcell" className="num">{c.steps.length}</td>
-                <td role="gridcell" className="num">
-                  {c.best == null ? '–' : <EValue text={String(c.best)} />}
-                  {c.weakest != null && c.weakest !== c.best && (
-                    <>
-                      {' – '}
-                      <EValue text={String(c.weakest)} />
-                    </>
-                  )}
-                </td>
-                {p.ruler && (
-                  <td role="gridcell" className="num" title={layer ? undefined : 'Choose this tag to compare it with the peptide in its own ion series'}>
-                    {layer && p.ruler && p.spectrum ? `${stepsOnRuler(c, p.ruler, p.spectrum)} of ${c.steps.length}` : '·'}
-                  </td>
-                )}
-                <td role="gridcell" className="num">
-                  {c.chain.length}
-                  {c.inside.length > 0 ? ` + ${c.inside.length}` : ''}
-                </td>
-                <td role="gridcell">{notes.join(' · ')}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-      {g.paths.length === 0 && <p className="hint">No tag lies on the peaks under this cutoff.</p>}
-    </div>
-  )
-}
-
-// The most tags that differ from the chosen one listed in the pileup.
-const PILE_DIFFER = 12
-
-/// The tags behind one resolved tag, aligned peak by peak: one column per
-/// stretch between two neighbouring peaks any of them lies on, in m/z order
-/// (as in the plot), a tag's step spanning the columns between its two peaks.
-function Pileup(p: { graph: TagGraph; at: number; spectrum: SpectrumPeaks; ruler: Ruler | null; onTag(row: number): void }): JSX.Element {
-  const { graph: g, spectrum: s } = p
-  const sel = g.paths[p.at]
-  const members = [...sel.chain.map((i) => ({ i, role: 'builds it' })), ...sel.inside.map((i) => ({ i, role: 'inside it' }))]
-  const mine = new Set(members.map((m) => m.i))
-  const differing = g.placements
-    .map((pl, i) => ({ i, pl }))
-    .filter(({ i, pl }) => !mine.has(i) && pl.steps.some((st) => kindOf(st, pl, sel, s) === 'differs'))
-    .sort((a, b) => (a.pl.evalue ?? Infinity) - (b.pl.evalue ?? Infinity))
-  const shown = [...members, ...differing.slice(0, PILE_DIFFER).map(({ i }) => ({ i, role: 'differs' }))]
-  const peaks = [...new Set([...sel.peaks, ...shown.flatMap((m) => g.placements[m.i].peaks)])].sort((a, b) => a - b)
-  // Grid line of a peak: two label columns come first.
-  const line = (peak: number): number => peaks.indexOf(peak) + 3
-  const cell = (row: number, u: number, v: number, text: string, cls: string, title: string): JSX.Element => (
-    <span key={`${row}:${u}:${v}`} className={`sp-pile-step ${cls}`} style={{ gridRow: row, gridColumn: `${line(u)} / ${line(v)}` }} title={title}>
-      {text}
-    </span>
-  )
-  const out: JSX.Element[] = []
-  // Row 1: the m/z of each peak, at the right end of the column that ends there.
-  out.push(
-    <span key="h" className="sp-pile-label muted" style={{ gridRow: 1, gridColumn: 1 }}>
-      m/z
-    </span>,
-    <span key="h0" className="sp-pile-mz" style={{ gridRow: 1, gridColumn: 2 }}>
-      {s.mz[peaks[0]].toFixed(1)}
-    </span>,
-    ...peaks.slice(1).map((pk, k) => (
-      <span key={`h${pk}`} className="sp-pile-mz" style={{ gridRow: 1, gridColumn: k + 3 }} title={`m/z ${fmt(s.mz[pk])}`}>
-        {s.mz[pk].toFixed(1)}
-      </span>
-    ))
-  )
-  let row = 2
-  const ruler = p.ruler && p.ruler.series === sel.series && p.ruler.charge === sel.charge ? p.ruler : null
-  if (ruler) {
-    out.push(
-      <span key="pl" className="sp-pile-label" style={{ gridRow: row, gridColumn: '1 / 3' }} title="The database peptide the run placed this spectrum's tags on: its residues between the peaks that lie on its fragments">
-        Peptide (database)
-      </span>
-    )
-    const t = ticksOf(ruler, peaks, s)
-    let from = -1
-    peaks.forEach((pk, k) => {
-      if (t[k] < 0) return
-      if (from >= 0 && t[k] > t[from]) out.push(cell(row, peaks[from], pk, ruler.residues.slice(t[from], t[k]).join(''), 'pep', `Peptide residues between m/z ${fmt(s.mz[peaks[from]])} and ${fmt(s.mz[pk])}`))
-      from = k
-    })
-    row++
-  }
-  out.push(
-    <span key="rl" className="sp-pile-label" style={{ gridRow: row, gridColumn: '1 / 3' }}>
-      <strong>
-        Resolved #{p.at + 1} ({seriesCell(sel.series, sel.call, sel.charge)})
-      </strong>
-    </span>,
-    ...sel.steps.map((st) => cell(row, st.u, st.v, stepLabel(st), `resolved${st.readings.length > 1 ? ' ambig' : ''}`, st.readings.map((r) => `${r.label}: E-value ${r.evalue ?? 'none'}`).join(' · ')))
-  )
-  row++
-  for (const m of shown) {
-    const pl = g.placements[m.i]
-    out.push(
-      <button key={`b${m.i}`} type="button" className="link mono sp-pile-label" style={{ gridRow: row, gridColumn: 1 }} title={`${pl.tags.join(', ')}: draw it alone`} onClick={() => p.onTag(pl.rows[0])}>
-        {pl.tags[0]}
-        {pl.rows.length > 1 ? ` ×${pl.rows.length}` : ''}
-      </button>,
-      <span key={`e${m.i}`} className="sp-pile-e" style={{ gridRow: row, gridColumn: 2 }} title={m.role}>
-        {pl.evalue == null ? '–' : <EValue text={String(pl.evalue)} />} <span className="muted">{m.role}</span>
-      </span>,
-      ...pl.steps.map((st) => {
-        const kind = kindOf(st, pl, sel, s)
-        const resolved = sel.steps.find((x) => x.u === st.u && x.v === st.v)
-        const ambig = st.readings.length > 1 || (kind === 'same' && (resolved?.readings.length ?? 1) > 1)
-        return cell(row, st.u, st.v, stepLabel(st), `${kind}${ambig ? ' ambig' : ''}`, `${st.readings.map((r) => `${r.label}: E-value ${r.evalue ?? 'none'}, ${r.deltaPpm.toFixed(1)} ppm`).join(' · ')} · m/z ${fmt(s.mz[st.u])} to ${fmt(s.mz[st.v])}${kind === 'differs' ? ' · differs from the resolved tag' : ''}`)
-      })
-    )
-    row++
-  }
-  return (
-    <div className="sp-pile-wrap" data-testid="pileup">
-      <h3>
-        Tags behind resolved tag #{p.at + 1}
-        <span className="hint">
-          {' '}
-          · left to right by m/z{sel.call.level === 'open' ? ' (C→N if y ions, N→C if b ions: not told apart)' : sel.series === 'y' || sel.series === 'z' ? ` (as ${sel.series} ions that is C→N)` : ''}; a tag opens alone
-        </span>
-      </h3>
-      <div className="sp-pile" role="group" aria-label={`Tags behind resolved tag ${p.at + 1}`} style={{ gridTemplateColumns: `max-content max-content repeat(${Math.max(1, peaks.length - 1)}, minmax(2.4em, max-content))` }}>
-        {out}
-      </div>
-      {differing.length > PILE_DIFFER && <p className="hint">The {PILE_DIFFER} best of {differing.length} tags that differ from it.</p>}
     </div>
   )
 }
@@ -870,6 +708,7 @@ function TagsTable(p: {
   onChoose(i: number): void
   spectrum: SpectrumPeaks | null
   residues: ReturnType<typeof residueMasses>
+  ctx: TermContext
   cand?: Candidate | null
 }): JSX.Element {
   const { tags, chosen } = p
@@ -906,7 +745,7 @@ function TagsTable(p: {
         <tbody>
           {rows.map((r, i) => {
             const tr = tagRowFrom(tags.columns, r)
-            const l = tr && p.spectrum ? withDb(ladderFor(tr, p.spectrum, p.residues), p.cand ?? null, p.spectrum, p.residues) : null
+            const l = tr && p.spectrum ? withDb(ladderFor(tr, p.spectrum, p.residues, p.ctx), p.cand ?? null, p.spectrum, p.residues) : null
             return (
               <tr
                 key={i}
@@ -917,8 +756,13 @@ function TagsTable(p: {
                 onKeyDown={(e) => key(e, i)}
               >
                 {show.map((c) => (
-                  <td key={c} role="gridcell" className={c === 'tag' ? 'mono' : NUMERIC.has(c) ? 'num' : undefined}>
-                    {c === 'evalue' ? <EValue text={r[col(c)] ?? ''} /> : c === 'fasta_hit' ? hitWords(r[col(c)] ?? '') : (r[col(c)] ?? '')}
+                  <td
+                    key={c}
+                    role="gridcell"
+                    className={c === 'tag' ? 'mono' : NUMERIC.has(c) ? 'num' : undefined}
+                    title={c === 'fasta_hit' ? dbHitTitle(r[col(c)] ?? '', dbCellsOf(tags.columns, r)) : undefined}
+                  >
+                    {c === 'evalue' ? <EValue text={r[col(c)] ?? ''} /> : c === 'fasta_hit' ? hitCellText(tags.columns, r, r[col(c)] ?? '') : (r[col(c)] ?? '')}
                   </td>
                 ))}
                 <td role="gridcell">{!l ? '–' : l.complete ? `${seriesText(l.series, l.call)} on ${l.matched}/${l.positions.length} peaks` : `not on the peaks (${l.matched}/${l.positions.length})`}</td>
@@ -996,18 +840,6 @@ export function LadderLine({ ladder, tag, unit, written, terminus }: { ladder: L
 // the C-terminal one (y, z) on the lower.
 const LINE_Y = (series: Ladder['series']): number => (series === 'b' || series === 'c' ? 18 : 42)
 const ROW_H = 24
-// The most rows of resolved tags drawn above the peaks.
-const MAX_ROWS = 8
-export interface PlotLink {
-  mz: number
-  // Indices into lines.
-  a: number
-  b: number
-}
-export interface PlotDot {
-  mz: number
-  line: number
-}
 /// The database peptide's fragments in one layer, drawn as the top row.
 export interface PlotRuler {
   label: string
@@ -1028,52 +860,44 @@ export interface ErrorStrip {
   steps: StripPoint[]
   // The same, summed from the tag's first peak.
   drift: StripPoint[]
-  // Steps of other tags that differ from the tag drawn.
-  others: StripPoint[]
   // Its peaks against the peptide's fragments.
   onPeptide: StripPoint[]
 }
 const STRIP_H = 64
 
+/** A residue step's tooltip: the m/z of its two peaks and how far their
+ *  distance is from the residue's (observed minus expected), e.g.
+ *  "G: m/z 158.0920 → 215.1135, Δ +0.0012 Da (+5.6 ppm)". */
+export function stepWords(res: string, a: Ladder['positions'][number], b: Ladder['positions'][number], unit: string): string {
+  const at = (p: Ladder['positions'][number]): string => (p.mz != null ? fmt(p.mz) : `${fmt(p.expected)} (no peak)`)
+  const both = a.peak != null && b.peak != null && b.deltaMz != null
+  const da = both ? `${b.deltaMz! >= 0 ? '+' : '−'}${Math.abs(b.deltaMz!).toFixed(4)} Da` : ''
+  const delta = !both ? '' : unit === 'Da' ? `, Δ ${da} (${ppm(b.deltaPpm)} ppm)` : `, Δ ${ppm(b.deltaPpm)} ppm (${da})`
+  return `${res}: m/z ${at(a)} → ${at(b)}${delta}`
+}
+
 export function StickPlot({
   spectrum,
   ladder,
   lines = ladder ? [ladder] : [],
-  rows,
-  links = [],
-  dots = [],
-  faint,
-  strong,
-  kinds,
-  titles,
   ruler = null,
   strip = null,
   marks = []
 }: {
   spectrum: SpectrumPeaks
   ladder: Ladder | null
+  // The ladders drawn, each on its own line: b/c on the upper, y/z on the lower.
   lines?: Ladder[]
-  // The plot row of each line (all tags); by default b/c on the upper, y/z on the lower.
-  rows?: number[]
-  // The tag graph's extras: a connector where an alternative leaves or rejoins
-  // another line, a hollow dot at a joined junction, faint steps (E > 1),
-  // a tooltip per step.
-  links?: PlotLink[]
-  dots?: PlotDot[]
-  faint?: boolean[][]
-  strong?: boolean[][]
-  kinds?: StepKind[][]
-  titles?: string[][]
   ruler?: PlotRuler | null
   strip?: ErrorStrip | null
-  // Ticks at the terminus of the selected resolved tag (terminus.ts terminusMark), drawn when in view.
+  // Ticks at the terminus of the tag drawn (terminus.ts terminusMark), drawn when in view.
   marks?: { mz: number; label: string; words: string; away: boolean }[]
 }): JSX.Element {
   const { mz, int } = spectrum
   // By default b/c on the upper line, y/z on the lower; two ladders judged the same series (or not told apart) one above the other.
   const byRow = lines.map((l) => (LINE_Y(l.series) === 18 ? 0 : 1))
   if (lines.length === 2 && byRow[0] === byRow[1]) byRow.splice(0, 2, 0, 1)
-  const rowOf = (i: number): number => rows?.[i] ?? byRow[i]
+  const rowOf = (i: number): number => byRow[i]
   const nRows = Math.max(2, ...lines.map((_, i) => rowOf(i) + 1))
   // The peptide ruler takes the first row.
   const top0 = 18 + (ruler ? ROW_H : 0)
@@ -1093,12 +917,36 @@ export function StickPlot({
   let top = 0
   for (let i = 0; i < mz.length; i++) if (inView(mz[i]) && int[i] > top) top = int[i]
   if (top <= 0) top = 1
-  const X = (x: number): number => PAD.l + ((x - lo) / (hi - lo)) * (W - PAD.l - PAD.r)
+  // The error strip: zero in the middle, the scale wide enough for every value.
+  const sMax = strip ? Math.max(strip.tolerance, ...[...strip.steps, ...strip.drift, ...strip.onPeptide].map((q) => Math.abs(q.value))) * 1.1 || 1 : 1
+  const num = (v: number): string => (strip?.unit === 'Da' ? v.toFixed(3) : v.toFixed(1))
+  // The labels left of the plot: each line's series ("b or y?"), the
+  // ruler's ("y 2+ DB"), the strip's scale. The margin fits the widest, as
+  // estimated (monospace) or as the browser measured it.
+  const leftLabels = [...lines.map((l) => seriesText(l.series, l.call)), ...(ruler ? [ruler.label] : []), ...(strip ? [`+${num(sMax)}`, `−${num(sMax)}`] : [])]
+  const leftKey = leftLabels.join('\n')
+  const [measured, setMeasured] = useState(0)
+  useLayoutEffect(() => {
+    let w = 0
+    svgRef.current?.querySelectorAll<SVGTextContentElement>('[data-left]').forEach((t) => {
+      if (typeof t.getComputedTextLength === 'function') w = Math.max(w, t.getComputedTextLength())
+    })
+    setMeasured((m) => (Math.abs(m - w) > 0.5 ? w : m))
+  }, [leftKey])
+  const padL = leftMargin(leftLabels, measured)
+  const X = (x: number): number => padL + ((x - lo) / (hi - lo)) * (W - padL - PAD.r)
   const Y = (y: number): number => HP - PAD.b - (y / top) * (HP - padT - PAD.b)
   const peaksOf = (l: Ladder | null | undefined): Set<number> => new Set(l?.positions.map((p) => p.peak).filter((p): p is number => p != null))
   const onLadder = peaksOf(ladder)
   // Peaks only the other series' line lies on.
   const onOther = new Set([...lines.filter((l) => l !== ladder).flatMap((l) => [...peaksOf(l)])].filter((i) => !onLadder.has(i)))
+  // The residue step hovered or focused (a line and its step k: positions k, k + 1).
+  const [hl, setHl] = useState<{ line: number; step: number } | null>(null)
+  const linesKey = lines.map((l) => `${l.series}:${l.positions.map((p) => p.expected).join(',')}`).join('|')
+  useEffect(() => setHl(null), [linesKey])
+  const hq = hl ? lines[hl.line]?.positions : undefined
+  const litPeaks = new Set([hq?.[hl!.step]?.peak, hq?.[hl!.step + 1]?.peak].filter((p): p is number => p != null))
+  const unit = spectrum.toleranceUnit
 
   const zoom = (factor: number, at = (lo + hi) / 2): void => {
     const span = Math.min(full[1] - full[0], Math.max(0.5, (hi - lo) * factor))
@@ -1116,7 +964,7 @@ export function StickPlot({
     const r = svgRef.current?.getBoundingClientRect()
     if (!r || r.width === 0) return (lo + hi) / 2
     const u = ((clientX - r.left) / r.width) * W
-    return lo + ((u - PAD.l) / (W - PAD.l - PAD.r)) * (hi - lo)
+    return lo + ((u - padL) / (W - padL - PAD.r)) * (hi - lo)
   }
   function onWheel(e: WheelEvent<SVGSVGElement>): void {
     e.preventDefault()
@@ -1131,12 +979,14 @@ export function StickPlot({
     const r = svgRef.current?.getBoundingClientRect()
     if (!d || !r || r.width === 0) return
     const span = d.range[1] - d.range[0]
-    const dx = -((e.clientX - d.x) / r.width) * (W / (W - PAD.l - PAD.r)) * span
+    const dx = -((e.clientX - d.x) / r.width) * (W / (W - padL - PAD.r)) * span
     const a = Math.max(full[0], Math.min(full[1] - span, d.range[0] + dx))
     setRange([a, a + span])
   }
   function onKey(e: KeyboardEvent<SVGSVGElement>): void {
     const k = e.key
+    // Alt+← and Alt+→ go to another spectrum (the panel's keys).
+    if (e.altKey) return
     if (k === '+' || k === '=') zoom(0.8)
     else if (k === '-' || k === '_') zoom(1.25)
     else if (k === 'ArrowLeft') pan(-(hi - lo) * 0.1)
@@ -1163,15 +1013,10 @@ export function StickPlot({
   for (let t = Math.ceil(lo / step) * step; t <= hi; t += step) ticks.push(t)
 
   const lp = ladder?.positions ?? []
-  // Another line's step against the tag drawn (all tags): same, differs or elsewhere.
-  const kindCls = (li: number, k: number): string => (kinds && lines[li] !== ladder ? ` ${kinds[li]?.[k] ?? 'other'}` : '')
-  // The error strip: zero in the middle, the scale wide enough for every value.
   const sTop = HP + 6
   const sH = STRIP_H - 14
   const sMid = sTop + sH / 2
-  const sMax = strip ? Math.max(strip.tolerance, ...[...strip.steps, ...strip.drift, ...strip.others, ...strip.onPeptide].map((q) => Math.abs(q.value))) * 1.1 || 1 : 1
   const SY = (v: number): number => sMid - (v / sMax) * (sH / 2)
-  const num = (v: number): string => (strip?.unit === 'Da' ? v.toFixed(3) : v.toFixed(1))
   const tip = (what: string, q: StripPoint): string => `${what}: ${q.value >= 0 ? '+' : '−'}${num(Math.abs(q.value))} ${strip?.unit ?? ''} at m/z ${fmt(q.mz, 2)}`
   return (
     <div className="sp-plot">
@@ -1188,8 +1033,8 @@ export function StickPlot({
         <button type="button" className="secondary" onClick={() => setRange(full)}>
           Whole spectrum
         </button>
-        <span className="hint">
-          m/z {fmt(lo, 1)}–{fmt(hi, 1)} · wheel or +/− zooms, drag or ←/→ pans
+        <span className="hint" title="The wheel or + and − zoom; drag or ← and → pan.">
+          m/z {fmt(lo, 1)}–{fmt(hi, 1)}
         </span>
       </div>
       <svg
@@ -1208,7 +1053,7 @@ export function StickPlot({
         onPointerCancel={() => (drag.current = null)}
         onKeyDown={onKey}
       >
-        <line x1={PAD.l} x2={W - PAD.r} y1={HP - PAD.b} y2={HP - PAD.b} className="sp-axis" />
+        <line x1={padL} x2={W - PAD.r} y1={HP - PAD.b} y2={HP - PAD.b} className="sp-axis" data-axis="" />
         {ticks.map((t) => (
           <g key={t}>
             <line x1={X(t)} x2={X(t)} y1={HP - PAD.b} y2={HP - PAD.b + 4} className="sp-axis" />
@@ -1225,12 +1070,12 @@ export function StickPlot({
               x2={X(x)}
               y1={HP - PAD.b}
               y2={Y(int[i])}
-              className={onLadder.has(i) ? 'sp-peak on' : onOther.has(i) ? 'sp-peak on alt' : 'sp-peak'}
+              className={`${onLadder.has(i) ? 'sp-peak on' : onOther.has(i) ? 'sp-peak on alt' : 'sp-peak'}${litPeaks.has(i) ? ' hl' : ''}`}
               data-peak={onLadder.has(i) ? 'ladder' : onOther.has(i) ? 'other' : undefined}
             />
           ) : null
         )}
-        {/* The terminus of the selected resolved tag (b0/c0 or y0/z0), when in view. */}
+        {/* The terminus of the tag drawn (b0/c0 or y0/z0), when in view. */}
         {marks.map((m) =>
           inView(m.mz) ? (
             <g key={m.label} className={`sp-term-mark${m.away ? ' away' : ''}`} data-testid="terminus-mark" role="img" aria-label={`${m.label} at m/z ${fmt(m.mz)}: ${m.words}`}>
@@ -1242,48 +1087,75 @@ export function StickPlot({
             </g>
           ) : null
         )}
-        {lp.map((p, k) => {
-          const x = p.mz ?? p.expected
-          if (!inView(x)) return null
-          return p.peak == null ? (
-            <line key={`m${k}`} x1={X(x)} x2={X(x)} y1={HP - PAD.b} y2={ladder ? lineY(Math.max(0, lines.indexOf(ladder))) : padT} className="sp-missing" />
-          ) : null
-        })}
         {lines.map((l, li) => {
           const y = lineY(li)
           const alt = l !== ladder ? ' alt' : ''
           const q = l.positions
           const shown = q.some((p) => inView(p.mz ?? p.expected))
+          // The step hovered or focused: its two peaks and drop lines stand out.
+          const lit = (k: number): boolean => hl != null && hl.line === li && (k === hl.step || k === hl.step + 1)
           return (
             <g key={li} data-series={l.series} className={`sp-line${alt}`}>
               {shown && (
-                <text x={PAD.l - 6} y={y + 4} className="sp-series" textAnchor="end">
-                  {seriesText(l.series, l.call).replace(' or ', '/')}
+                <text x={padL - LABEL_GAP} y={y + 4} className="sp-series" textAnchor="end" data-left="">
+                  {seriesText(l.series, l.call)}
                   {l.call && <title>{callTitle(l.call)}</title>}
                 </text>
               )}
-              {/* A dashed line from the tag line down to each peak it lies on;
-                  with many lines (all tags) only from the chosen one. */}
+              {/* A position with no peak: flagged from this line down to the axis. */}
               {q.map((p, k) =>
-                p.peak != null && inView(p.mz ?? p.expected) && (lines.length <= 2 || l === ladder) ? (
-                  <line key={`d${k}`} x1={X(p.mz ?? p.expected)} x2={X(p.mz ?? p.expected)} y1={y} y2={Y(int[p.peak])} className={`sp-drop${alt}`} data-drop={l.series} />
+                p.peak == null && inView(p.expected) ? (
+                  <line key={`m${k}`} x1={X(p.expected)} x2={X(p.expected)} y1={HP - PAD.b} y2={y} className={`sp-missing${alt}`} data-missing={l.series}>
+                    <title>{`No peak at m/z ${fmt(p.expected)} (${seriesText(l.series, l.call)})`}</title>
+                  </line>
                 ) : null
               )}
-              {/* Each residue spans the two peaks whose difference it is. */}
+              {/* A dashed line from the tag line down to each peak it lies on. */}
+              {q.map((p, k) =>
+                p.peak != null && inView(p.mz ?? p.expected) ? (
+                  <line
+                    key={`d${k}`}
+                    x1={X(p.mz ?? p.expected)}
+                    x2={X(p.mz ?? p.expected)}
+                    y1={y}
+                    y2={Y(int[p.peak])}
+                    className={`sp-drop${alt}${lit(k) ? ' hl' : ''}`}
+                    data-drop={l.series}
+                  />
+                ) : null
+              )}
+              {/* Each residue spans the two peaks whose difference it is;
+                  hovering or focusing it picks out those two peaks. */}
               {l.residues.map((res, k) => {
                 const a = q[k]
                 const b = q[k + 1]
                 if (!a || !b) return null
                 const xa = X(a.mz ?? a.expected)
                 const xb = X(b.mz ?? b.expected)
-                if (Math.max(xa, xb) < PAD.l || Math.min(xa, xb) > W - PAD.r) return null
+                if (Math.max(xa, xb) < padL || Math.min(xa, xb) > W - PAD.r) return null
+                const words = stepWords(res, a, b, unit)
+                const on = hl != null && hl.line === li && hl.step === k
+                const pick = (): void => setHl({ line: li, step: k })
+                const drop = (): void => setHl((h) => (h && h.line === li && h.step === k ? null : h))
                 return (
-                  <g key={`r${k}`} className={faint?.[li]?.[k] ? 'sp-faint' : undefined} data-kind={kinds && l !== ladder ? kinds[li]?.[k] : undefined}>
-                    {titles?.[li]?.[k] && <title>{titles[li][k]}</title>}
-                    <line x1={xa} x2={xb} y1={y} y2={y} className={`sp-step${alt}${kindCls(li, k)}${strong?.[li]?.[k] ? ' strong' : ''}`} />
-                    <line x1={xa} x2={xa} y1={y - 4} y2={y + 4} className={`sp-step${alt}${kindCls(li, k)}`} />
-                    <line x1={xb} x2={xb} y1={y - 4} y2={y + 4} className={`sp-step${alt}${kindCls(li, k)}`} />
-                    <text x={(xa + xb) / 2} y={y - 5} className={`sp-res-label${kindCls(li, k)}${res.startsWith('{') ? ' ambig' : ''}`} textAnchor="middle">
+                  <g
+                    key={`r${k}`}
+                    className={`sp-step-g${on ? ' hl' : ''}`}
+                    data-step={k}
+                    tabIndex={0}
+                    role="img"
+                    aria-label={words}
+                    onPointerEnter={pick}
+                    onPointerLeave={drop}
+                    onFocus={pick}
+                    onBlur={drop}
+                  >
+                    <title>{words}</title>
+                    <rect x={Math.min(xa, xb)} y={y - 16} width={Math.abs(xb - xa)} height={22} className="sp-step-hit" />
+                    <line x1={xa} x2={xb} y1={y} y2={y} className={`sp-step${alt}`} />
+                    <line x1={xa} x2={xa} y1={y - 4} y2={y + 4} className={`sp-step${alt}`} />
+                    <line x1={xb} x2={xb} y1={y - 4} y2={y + 4} className={`sp-step${alt}`} />
+                    <text x={(xa + xb) / 2} y={y - 5} className="sp-res-label" textAnchor="middle">
                       {res}
                     </text>
                   </g>
@@ -1295,7 +1167,7 @@ export function StickPlot({
         {ruler && (
           <g className="sp-ruler" data-ruler="">
             <title>The database peptide the run placed this spectrum&apos;s tags on: where its fragments fall (a candidate, not an identification)</title>
-            <text x={PAD.l - 6} y={22} className="sp-series" textAnchor="end">
+            <text x={padL - LABEL_GAP} y={22} className="sp-series" textAnchor="end" data-left="">
               {ruler.label}
             </text>
             {ruler.ticks.map((t, k) => (t != null && inView(t) ? <line key={`t${k}`} x1={X(t)} x2={X(t)} y1={12} y2={24} className="sp-ruler-tick" /> : null))}
@@ -1313,16 +1185,16 @@ export function StickPlot({
         )}
         {strip && (
           <g className="sp-strip" data-strip="">
-            <rect x={PAD.l} y={SY(strip.tolerance)} width={W - PAD.l - PAD.r} height={SY(-strip.tolerance) - SY(strip.tolerance)} className="sp-strip-band" />
-            <line x1={PAD.l} x2={W - PAD.r} y1={sMid} y2={sMid} className="sp-axis" />
-            <text x={PAD.l - 6} y={sTop + 8} className="sp-tick" textAnchor="end">
+            <rect x={padL} y={SY(strip.tolerance)} width={W - padL - PAD.r} height={SY(-strip.tolerance) - SY(strip.tolerance)} className="sp-strip-band" />
+            <line x1={padL} x2={W - PAD.r} y1={sMid} y2={sMid} className="sp-axis" />
+            <text x={padL - LABEL_GAP} y={sTop + 8} className="sp-tick" textAnchor="end" data-left="">
               +{num(sMax)}
             </text>
-            <text x={PAD.l - 6} y={sTop + sH} className="sp-tick" textAnchor="end">
+            <text x={padL - LABEL_GAP} y={sTop + sH} className="sp-tick" textAnchor="end" data-left="">
               −{num(sMax)}
             </text>
             <text x={W - PAD.r} y={H - 2} className="sp-tick" textAnchor="end">
-              mass error ({strip.unit}; band: the run&apos;s tolerance) ● each step · line: summed from the first peak{strip.others.length > 0 ? ' · ○ steps that differ' : ''}
+              mass error ({strip.unit}; band: the run&apos;s tolerance) ● each step · line: summed from the first peak
               {strip.onPeptide.length > 0 ? ' · × peak against the peptide' : ''}
             </text>
             {strip.drift.length > 1 && (
@@ -1333,13 +1205,6 @@ export function StickPlot({
                   .join(' ')}
                 className="sp-strip-drift"
               />
-            )}
-            {strip.others.map((q, k) =>
-              inView(q.mz) ? (
-                <circle key={`o${k}`} cx={X(q.mz)} cy={SY(q.value)} r={3} className="sp-strip-other">
-                  <title>{tip('A step that differs', q)}</title>
-                </circle>
-              ) : null
             )}
             {strip.onPeptide.map((q, k) =>
               inView(q.mz) ? (
@@ -1359,8 +1224,6 @@ export function StickPlot({
             )}
           </g>
         )}
-        {links.map((l, k) => (inView(l.mz) ? <line key={`k${k}`} x1={X(l.mz)} x2={X(l.mz)} y1={lineY(l.a)} y2={lineY(l.b)} className="sp-link" data-link="" /> : null))}
-        {dots.map((d, k) => (inView(d.mz) ? <circle key={`j${k}`} cx={X(d.mz)} cy={lineY(d.line)} r={4} className="sp-joined" data-joined="" /> : null))}
       </svg>
     </div>
   )

@@ -12,11 +12,10 @@ import { test, expect, goTo, openApp, mockState } from './fixtures'
 const TSV = readFileSync(fileURLToPath(new URL('../fixtures/ecoli.tags.tsv', import.meta.url)), 'utf8')
 const ROWS = TSV.split('\n').filter(Boolean).slice(1).map((l) => l.split('\t'))
 const TOTAL = ROWS.length.toLocaleString('en-US')
-// The tagged spectra in file order (◀ ▶), and the tags of each.
-const SPECTRA = [...new Set(ROWS.map((r) => r[0]))]
+// The tags of each spectrum.
 const count = (s: string): number => ROWS.filter((r) => r[0] === s).length
 
-async function openTags(page: Page, fixture: 'spectrum' | 'spectrum-1.11' | 'spectrum-resolved'): Promise<void> {
+async function openTags(page: Page, fixture: 'spectrum' | 'spectrum-1.11'): Promise<void> {
   await openApp(page, fixture)
   await goTo(page, 'Results')
   await page.getByRole('button', { name: 'Open tags…' }).click()
@@ -24,6 +23,26 @@ async function openTags(page: Page, fixture: 'spectrum' | 'spectrum-1.11' | 'spe
 }
 
 const firstRow = (page: Page) => page.locator('.rt-rows .rt-row').first()
+/// The spectra in the order ◀ ▶ walk from the Tags table (feedback
+/// 20261124T073446Z_08bc8de4): its rows as sorted and filtered, each run
+/// of rows of one spectrum once (▶ goes to the next row of another
+/// spectrum). Read through the bridge with the view the table last asked for.
+async function tableOrder(page: Page): Promise<string[]> {
+  const calls = await mockState<{ path: string; view: Record<string, unknown> }[]>(page, 'resultsQueryCalls')
+  const last = [...calls].reverse().find((c) => !c.view.spectrumExact)!
+  const rows = await page.evaluate(
+    async ({ path, view }) => {
+      const out: string[] = []
+      for (;;) {
+        const pg = await window.fastag.resultsQuery(path, view, out.length, 1000)
+        pg.rows.forEach((r) => out.push(r[pg.columns.indexOf('spectrum')]))
+        if (pg.rows.length === 0 || out.length >= pg.matchedRows) return out
+      }
+    },
+    { path: last.path, view: last.view }
+  )
+  return rows.filter((sp, i) => i === 0 || rows[i - 1] !== sp)
+}
 // The heading shows the scan (scan=…), its title the full native ID.
 const heading = (page: Page) => page.locator('.sp-head h2')
 
@@ -54,9 +73,10 @@ test('Enter on a row opens its spectrum: FASTag\'s processed peaks with the tag\
   await expect(tags.getByText(/^not on the peaks/)).toHaveCount(0)
 })
 
-test('another tag redraws the ladder; zoom; ◀ ▶ walk the tagged spectra in file order', async ({ page }) => {
+test('another tag redraws the ladder; zoom; ◀ ▶ walk the Tags table order', async ({ page }) => {
   await openTags(page, 'spectrum')
   await firstRow(page).click()
+  const order = await tableOrder(page)
   await page.getByRole('button', { name: 'Open in Spectrum' }).click()
   await expect(page.getByTestId('ladder-verdict')).toBeVisible()
   const shown = (await heading(page).getAttribute('title'))!
@@ -76,11 +96,13 @@ test('another tag redraws the ladder; zoom; ◀ ▶ walk the tagged spectra in f
   await expect(range).not.toHaveText(whole!)
   await page.getByRole('button', { name: 'Whole spectrum' }).click()
   await expect(range).toHaveText(whole!)
-  // ▶ then ◀ (by file order of the tagged spectra).
-  const i = SPECTRA.indexOf(shown)
-  if (i + 1 < SPECTRA.length) {
+  // ▶ then ◀ (by the Tags table's order: the first row opened it).
+  expect(order[0]).toBe(shown)
+  await expect(page.getByRole('button', { name: 'Previous tagged spectrum' })).toBeDisabled()
+  const i = 0
+  if (i + 1 < order.length) {
     await page.getByRole('button', { name: 'Next tagged spectrum' }).click()
-    await expect(heading(page)).toHaveAttribute('title', SPECTRA[i + 1])
+    await expect(heading(page)).toHaveAttribute('title', order[i + 1])
     await expect(page.getByTestId('ladder-verdict')).toHaveText(/^on \d+ of/)
     await page.getByRole('button', { name: 'Previous tagged spectrum' }).click()
     await expect(heading(page)).toHaveAttribute('title', shown)
@@ -90,13 +112,18 @@ test('another tag redraws the ladder; zoom; ◀ ▶ walk the tagged spectra in f
 test('five spectra in a row: every tag of each on its peaks, walking ◀ or ▶', async ({ page }) => {
   await openTags(page, 'spectrum')
   await firstRow(page).click()
+  const order = await tableOrder(page)
   await page.getByRole('button', { name: 'Open in Spectrum' }).click()
-  // From wherever the best tag is, walk five spectra forward or back.
-  const start = SPECTRA.indexOf((await heading(page).getAttribute('title'))!)
-  const dir = start + 5 < SPECTRA.length ? 1 : -1
+  // From the first row of the table, walk five spectra forward in its order,
+  // with ▶ and the keys (Page Down, Alt+→).
+  const start = order.indexOf((await heading(page).getAttribute('title'))!)
+  expect(start).toBe(0)
   for (let k = 1; k <= 5; k++) {
-    await page.getByRole('button', { name: dir > 0 ? 'Next tagged spectrum' : 'Previous tagged spectrum' }).click()
-    const s = SPECTRA[start + dir * k]
+    if (k === 1) await page.getByRole('button', { name: 'Next tagged spectrum' }).click()
+    else if (k === 2) await page.keyboard.press('PageDown')
+    else if (k === 3) await page.keyboard.press('Alt+ArrowRight')
+    else await page.getByRole('button', { name: 'Next tagged spectrum' }).click()
+    const s = order[start + k]
     await expect(heading(page)).toHaveAttribute('title', s)
     const tags = page.getByRole('region', { name: 'Tags of this spectrum' })
     await expect(tags.locator('tbody tr')).toHaveCount(count(s))
@@ -119,96 +146,24 @@ test('with FASTag 1.11 (no -dump_spectrum): no Spectrum tab, and the row action 
   expect(await mockState<unknown[]>(page, 'spectrumCalls')).toEqual([])
 })
 
-test('a double-click on a row opens its spectrum; all tags resolved by the tag graph, a cutoff on E-value', async ({ page }) => {
+test('a double-click on a row opens its spectrum: one view, the chosen tag drawn, its series called on the plot', async ({ page }) => {
   await openTags(page, 'spectrum')
   const spectrum = (await firstRow(page).locator('[role=gridcell]').first().getAttribute('title'))!
   await firstRow(page).dblclick()
   await expect(page.getByRole('tab', { name: 'Spectrum' })).toHaveAttribute('aria-selected', 'true')
   await expect(heading(page)).toHaveAttribute('title', spectrum)
-  await page.getByLabel('All tags, resolved').check()
-  // The default cutoff is E <= 1.
-  const summary = page.getByTestId('merge-summary')
-  await expect(summary).toContainText(/\d+ tags \(\d+ distinct\) → \d+ resolved/)
-  await expect(summary).toContainText('above the cutoff')
-  // Without a cutoff the row orders of a gapped tag are one distinct tag.
-  await page.getByLabel('Largest E-value of the tags used').fill('')
-  await expect(summary).toContainText(/\d+ tags \(\d+ distinct\)/)
-  const [, n, distinct] = /(\d+) tags \((\d+) distinct\)/.exec((await summary.textContent()) ?? '')!
-  expect(Number(distinct)).toBeLessThan(Number(n))
-  await page.getByLabel('Join tags that only touch').check()
-  await expect(summary).toContainText('resolved')
-  // A member tag leads back to the one-tag view.
-  const member = page.getByTestId('pileup').getByRole('button').first()
-  const tag = ((await member.textContent()) ?? '').replace(/ ×\d+$/, '')
-  await member.click()
-  await expect(page.getByLabel('Chosen tag')).toBeChecked()
-  await expect(page.getByTestId('ladder')).toContainText(tag)
-})
-
-test('with the run\'s resolved tags and tag graph, all tags are resolved as FASTag did; the merge graph selects a resolved tag', async ({ page }) => {
-  await openTags(page, 'spectrum-resolved')
-  // The two tables of the run, dropped beside its tags.
-  await page.evaluate(() => {
-    ;(window as unknown as { __fastagE2E: { drop(r: unknown): void } }).__fastagE2E.drop({
-      spectra: [], batch: false, fasta: null, taxdb: null, results: null, sdrf: null, ignored: [],
-      reports: [
-        { kind: 'resolved', path: '/data/run01.resolved.tsv' },
-        { kind: 'taggraph', path: '/data/run01.taggraph.tsv' }
-      ]
-    })
-  })
-  await expect(page.getByText(/No tab shows|Not a file FASTag opens/)).toHaveCount(0)
-  await expect(page.getByText(`Showing ${TOTAL} of ${TOTAL}`)).toBeVisible()
-  // A spectrum the fixture wrote the tables for.
-  const [id] = await mockState<string[]>(page, 'resolvedSpectra')
-  const box = page.getByLabel('Spectrum contains', { exact: true })
-  await box.fill(id)
-  await box.press('Enter')
-  await page.locator('.rt-rows .rt-row').filter({ has: page.locator(`[role=gridcell][title="${id}"]`) }).first().dblclick()
-  await expect(heading(page)).toHaveAttribute('title', id)
-  await expect(page.getByRole('tab', { name: 'Spectrum' })).toHaveAttribute('aria-selected', 'true')
-  await page.getByLabel('Merge graph').check()
-  await expect(page.getByTestId('merge-source')).toHaveText(/^Resolved by FASTag/)
-  // FASTag's own resolution: the GUI's cutoff does not apply.
-  await expect(page.getByLabel('Largest E-value of the tags used')).toHaveCount(0)
-  const graph = page.getByTestId('merge-graph')
-  // Laid out around #1: the tags that build it under a residue ruler.
-  await expect(graph.getByTestId('merge-graph-ruler')).toBeVisible()
-  await expect(graph.locator('[data-band=chain]').first()).toBeVisible()
-  const table = page.getByRole('grid', { name: 'Resolved tags of this spectrum' })
-  // FASTag's ranking (the fixture swapped the GUI's first two), read without
-  // a Results table open on its tables.
-  const [first] = await mockState<string[]>(page, 'resolvedFirst')
-  await expect(table.locator('tbody tr').first().locator('td').first()).toContainText(`#1 ${first}`)
-  expect((await mockState<{ path: string }[]>(page, 'tableQueryCalls')).map((c) => c.path)).toContain('/data/run01.taggraph.tsv')
-  // One tab stop in the graph.
-  await expect(graph.locator('[tabindex="0"]')).toHaveCount(1)
-  const n = await table.locator('tbody tr').count()
-  // The bar of the last resolved tag selects it and re-anchors the graph on it; the ladder drawn is its.
-  await graph.getByRole('button', { name: new RegExp(`^\\S+, resolved tag ${n}\\b`) }).first().click()
-  await expect(table.locator('tbody tr').nth(n - 1)).toHaveAttribute('aria-selected', 'true')
-  await expect(graph.getByRole('button', { name: new RegExp(`builds resolved tag ${n}\\b`) }).first()).toHaveAttribute('aria-pressed', 'true')
-  const seq = ((await table.locator('tbody tr').nth(n - 1).locator('td').first().textContent()) ?? '').replace(/^#\d+ /, '').split(' ')[0]
-  await expect(page.getByTestId('ladder')).toContainText(seq)
-  // From the keyboard too.
-  await graph.getByRole('button', { name: /^\S+, resolved tag 1\b/ }).first().focus()
-  await page.keyboard.press('Enter')
-  await expect(table.locator('tbody tr').first()).toHaveAttribute('aria-selected', 'true')
-  // ▶ to a tagged spectrum FASTag resolved nothing of: resolved in the GUI, and why; ◀ back selects #1 again, not the rank chosen before.
-  await graph.getByRole('button', { name: new RegExp(`^\\S+, resolved tag ${n}\\b`) }).first().click()
-  await expect(table.locator('tbody tr').nth(n - 1)).toHaveAttribute('aria-selected', 'true')
-  const resolvedIds = await mockState<string[]>(page, 'resolvedSpectra')
-  const next = SPECTRA[SPECTRA.indexOf(id) + 1]
-  expect(resolvedIds).not.toContain(next)
-  await page.getByRole('button', { name: 'Next tagged spectrum' }).click()
-  await expect(heading(page)).toHaveAttribute('title', next)
-  await expect(page.getByTestId('merge-source')).toHaveText(new RegExp(`^Resolved in the GUI \\(ranking cstar, threshold 3\\): FASTag resolved none of the ${count(next)} tags`))
-  await expect(page.getByLabel('Largest E-value of the tags used')).toBeVisible()
-  // The tags above the GUI's cutoff are counted (FASTag's -resolve_max_evalue 1 kept none of them).
-  await expect(page.getByTestId('merge-summary')).toContainText('above the cutoff')
-  await page.getByRole('button', { name: 'Previous tagged spectrum' }).click()
-  await expect(heading(page)).toHaveAttribute('title', id)
-  await expect(page.getByTestId('merge-source')).toHaveText(/^Resolved by FASTag/)
-  await expect(table.locator('tbody tr').first()).toHaveAttribute('aria-selected', 'true')
-  await expect(graph.getByRole('button', { name: /builds resolved tag 1\b/ }).first()).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('ladder-verdict')).toBeVisible()
+  // One view: no choice of which tags are drawn.
+  await expect(page.getByRole('group', { name: 'Tags drawn' })).toHaveCount(0)
+  await expect(page.getByRole('grid', { name: 'Tags of this spectrum' })).toBeVisible()
+  // The plot labels each line with its series as called: b, y, b?, y?, or "b or y?" when not told apart.
+  // (The label's own text, without its <title> tooltip.)
+  const labels = await page.locator('.sp-line .sp-series').evaluateAll((els) => els.map((e) => e.firstChild?.textContent ?? ''))
+  expect(labels.length).toBeGreaterThan(0)
+  for (const l of labels) expect(l).toMatch(/^(b|y|c|z)\??$|^(b or y|c or z)\?$/)
+  // No label left of the plot is cut at its edge (report 20261124T073546Z_233cbfac):
+  // the browser's own box of each starts inside the SVG.
+  const left = await page.locator('.sp-svg [data-left]').evaluateAll((els) => els.map((e) => (e as SVGGraphicsElement).getBBox().x))
+  expect(left.length).toBeGreaterThan(0)
+  for (const x of left) expect(x).toBeGreaterThanOrEqual(0)
 })

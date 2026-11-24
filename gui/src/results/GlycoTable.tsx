@@ -62,7 +62,7 @@ function GlycoBody({ t, minFraction }: { t: Glyco; minFraction: number | null })
   }, [t, flaggedOnly, ion, text])
   const cols: Column[] = [
     // The scan, as Tags and Triage show it; the native ID is the tooltip.
-    { id: 'spectrum', label: 'Spectrum', mono: true, text: (i) => spectrumHint(t.spectrum[i]) || t.spectrum[i], key: (i) => t.spectrum[i], cellTitle: (i) => t.spectrum[i] },
+    { id: 'spectrum', label: 'Spectrum', mono: true, text: (i) => spectrumHint(t.spectrum[i]) || t.spectrum[i], key: (i) => t.spectrum[i], cellTitle: (i) => t.spectrum[i], spectrum: (i) => t.spectrum[i] },
     { id: 'n', label: 'Oxonium ions', num: true, text: (i) => String(t.nOxonium[i]), key: (i) => t.nOxonium[i] },
     { id: 'frac', label: 'Oxonium / base peak', num: true, title: 'Summed oxonium intensity over the base peak (can exceed 1)', text: (i) => (Number.isNaN(t.frac[i]) ? '' : t.frac[i].toFixed(3)), key: (i) => t.frac[i] },
     { id: 'flag', label: 'Flagged', text: (i) => (t.flagged[i] ? 'yes' : '') },
@@ -77,7 +77,7 @@ function GlycoBody({ t, minFraction }: { t: Glyco; minFraction: number | null })
   const ionIds = useMemo(() => Uint32Array.from(t.ionCounts, (_, i) => i), [t])
   return (
     <div className="glyco-view">
-      <ReportHeader title="Glycopeptides: oxonium ions per spectrum" paths={[t.path]} help={{ to: 'files-glyco', label: 'How to read glyco flags' }} />
+      <ReportHeader title="Glycopeptides: oxonium ions per spectrum" paths={[t.path]} />
       {t.warnings.map((w) => (
         <div className="caveat" key={w}>
           {w}

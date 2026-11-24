@@ -152,7 +152,6 @@ describe('P0a: partial outputs after a cancel or failure', () => {
     expect(screen.queryByRole('button', { name: 'Open it anyway' })).toBeNull()
     expect(logText(c)).toContain('Removed the partial output /d/a.tags.tsv')
     expect(logText(c)).toContain('Removed the partial output /d/a.digest.tsv')
-    expect(c.querySelector('.last-run')?.textContent).toMatch(/Cancelled .* · partial outputs removed/)
     expect(c.querySelector('[role="status"].sr-only')?.textContent).toBe('Cancelled a.mzML, partial outputs removed.')
     expect(screen.queryByRole('alert')).toBeNull()
   })
@@ -267,25 +266,13 @@ describe('P0a: existing outputs are confirmed before the run, never after', () =
     expect((screen.getByRole('button', { name: /^Run 1 remaining file$/ }) as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('after a restart, the last run reads as cancelled from the run record', async () => {
-    const mock = installMockBridge()
-    mock.history = [rec('cancelled', '/d/a.tags.tsv')]
-    const c = await renderApp()
-    const last = c.querySelector('.last-run')?.textContent ?? ''
-    expect(last).toContain('a.mzML')
-    expect(last).toMatch(/Cancelled in an earlier session, .* · 1:30 · partial outputs removed/)
-    expect(c.querySelector('.last-run-name.cancelled')).not.toBeNull()
-    // Its parameters are not known: no "all defaults" claim.
-    expect(c.querySelector('.last-run-params')).toBeNull()
-  })
-
   it('a tags file whose recorded run was cancelled opens as incomplete, not as a table', async () => {
     const mock = installMockBridge()
     mock.history = [rec('cancelled', '/d/a.tags.tsv')]
     const c = await renderApp()
     mock.nextPickResults = '/d/a.tags.tsv'
     await goTo('results') // the empty Tags pane (P2a: its own view)
-    await click(screen.getByRole('button', { name: 'Open a tags TSV…' }))
+    await click(screen.getByRole('button', { name: 'Open tags…' }))
     const panel = c.querySelector('.tabpanel')?.textContent ?? ''
     expect(panel).toContain('The run that wrote /d/a.tags.tsv was cancelled')
     expect(mock.resultsQueryCalls).toHaveLength(0)
@@ -299,7 +286,7 @@ describe('P0a: existing outputs are confirmed before the run, never after', () =
     await renderApp()
     mock.nextPickResults = '/d/a.tags.tsv'
     await goTo('results') // the empty Tags pane (P2a: its own view)
-    await click(screen.getByRole('button', { name: 'Open a tags TSV…' }))
+    await click(screen.getByRole('button', { name: 'Open tags…' }))
     await screen.findByText('Showing 3 of 3')
   })
 })
@@ -347,9 +334,9 @@ describe('P0a: open buttons while busy', () => {
   it('the empty pane cannot open a tags file or a report while a run writes', async () => {
     const mock = installMockBridge()
     await renderApp()
-    const openTags = (): HTMLButtonElement => screen.getByRole('button', { name: 'Open a tags TSV…' }) as HTMLButtonElement
+    const openTags = (): HTMLButtonElement => screen.getByRole('button', { name: 'Open tags…' }) as HTMLButtonElement
     const openReport = (): HTMLButtonElement =>
-      screen.getByRole('button', { name: 'Open a FASTag report…' }) as HTMLButtonElement
+      screen.getByRole('button', { name: 'Open report…' }) as HTMLButtonElement
     await goTo('results') // the empty Tags pane (P2a: its own view)
     expect(openTags().disabled).toBe(false)
     await pickSingle(mock, '/d/a.mzML')

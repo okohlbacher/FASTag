@@ -18,6 +18,7 @@ import type {
   IniExport,
   ResultsHead,
   FastagApi,
+  NavAnswer,
   ResultsPage,
   OutputsCheck,
   ResultsView,
@@ -27,10 +28,13 @@ import type {
   Settings,
   SpeciesReport,
   SpectrumDump,
+  FastaDatabase,
+  FastaSegment,
   SpectrumSupport,
   TaxdbInfo,
   TaxonomyStatus,
-  TaxonomyDump
+  TaxonomyDump,
+  DataStatus
 } from './types'
 import { parseSpecies } from './results/species'
 import { frame, unframe } from './feedback/frame'
@@ -137,7 +141,10 @@ const api: FastagApi = {
   },
   resultsPosition: (path: string, view: ResultsView, row: number) =>
     invoke<number | null>('results_position', { path, view, row }),
+  resultsNeighbours: (path: string, view: ResultsView, row: number | null, spectrum: string) =>
+    invoke<NavAnswer>('results_neighbours', { path, view, row, spectrum }),
   revealOutput: (path: string, folder: boolean) => invoke<void>('reveal_output', { path, folder }),
+  openOutput: (path: string) => invoke<void>('open_output', { path }),
   onMenu: (cb) => subscribe<string>('fastag:menu', cb),
   // An export is a job (GUI-DESIGN 6.1 item 11) with a Channel of its own.
   exportResults: (
@@ -170,10 +177,13 @@ const api: FastagApi = {
   spectrumSupport: () => invoke<SpectrumSupport>('spectrum_support'),
   spectrumPeaks: (input: string, nativeId: string, params: Record<string, unknown> | null) =>
     invoke<SpectrumDump>('spectrum_peaks', { input, nativeId, params }),
+  fastaSegment: (tags: string, database: FastaDatabase, identifier: string, start: number, end: number) =>
+    invoke<FastaSegment>('fasta_segment', { tags, database, identifier, start, end }),
   report: (path: string) => invoke<string | null>('report_text', { path }),
   reportHead: (path: string) => invoke<string | null>('report_head', { path }),
   taxdbInfo: (explicit?: string) => invoke<TaxdbInfo | null>('taxdb_info', { explicit }),
   taxonomyStatus: (explicit?: string) => invoke<TaxonomyStatus>('taxonomy_status', { explicit }),
+  dataStatus: () => invoke<DataStatus>('data_status'),
 
   loadSettings: () => invoke<Settings>('load_settings'),
   saveLast: (values: Record<string, unknown>) => invoke<boolean>('save_last', { values }),
@@ -211,8 +221,8 @@ const api: FastagApi = {
   feedbackList: () => invoke<FeedbackSummary[]>('feedback_list'),
   feedbackDelete: (id) => invoke<void>('feedback_delete', { id }),
   feedbackDeleteAll: () => invoke<number>('feedback_delete_all'),
-  feedbackReveal: (id) => invoke<void>('feedback_reveal', { id }),
-  feedbackExport: (id, include) => invoke<FeedbackExported>('feedback_export', { id, include }),
+  feedbackReveal: (id, seq) => invoke<void>('feedback_reveal', { id, seq: seq ?? null }),
+  feedbackExport: (id, include, seq) => invoke<FeedbackExported>('feedback_export', { id, include, seq: seq ?? null }),
   feedbackSetStatus: (id, status, issueUrl) => invoke<void>('feedback_set_status', { id, status, issueUrl: issueUrl ?? null }),
   // Built from a fixed template here (as openTaxon): the renderer passes
   // the title, id and kind, never a URL (the opener is scoped to it too).

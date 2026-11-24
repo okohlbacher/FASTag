@@ -46,7 +46,7 @@ const steps = (page: Page) => page.getByRole('navigation', { name: 'Setup steps'
 /// Confirm the selected task (Continue) when none is confirmed yet.
 export async function confirmTask(page: Page): Promise<void> {
   const locked = await steps(page).locator('button[data-step-btn="2"]').getAttribute('aria-disabled')
-  if (locked === 'true') await page.locator('.wizard-foot button.continue').click()
+  if (locked === 'true') await page.locator('.view-setup .actionbar button.continue').click()
 }
 
 /// Go to Setup step @p name, confirming the selected task first.

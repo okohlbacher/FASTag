@@ -9,12 +9,13 @@
 // fix), warn (shown, Run unaffected), info.
 
 import type { ParamValue } from '../ParamField'
-import { PARAM_BY_NAME } from '../paramLayout'
+import { inertBecause, isActive, PARAM_BY_NAME, sentValues } from '../paramLayout'
 import { value, type Report } from '../digestReport'
 import { INSTRUMENTS, presetText } from '../setup/presets'
 import { familyOf, instrumentFromReports, instrumentText, presetFor, type Family } from './instrument'
 import { PROBE_FORMAT, type ProbeInstrument, type ProbeReport } from './probe'
-import type { TaxonomyStatus } from '../types'
+import type { DataStatus, TaxonomyStatus } from '../types'
+import { PRODUCT_OF } from '../setup/products'
 import { TAXONOMY_ASSET } from '../releaseAssets'
 
 export type Level = 'block' | 'flag' | 'warn' | 'info'
@@ -112,6 +113,197 @@ export function noTaxdbCheck(values: Record<string, ParamValue>, taxonomy: Taxon
   }
 }
 
+/// A shipped data file a run needs (FASTag.cpp): the digest tables of the
+/// mass-gap and digest reports and of the hand-off's protease check, and the
+/// alkylation report's and -recon_proteome's proteome.
+export interface DataNeed {
+  // The output that needs it (its option).
+  option: string
+  // The file: a digest table, or <name>.fasta.gz.
+  file: string
+  // For a proteome: its name (human, mouse, yeast, ecoli).
+  proteome?: string
+}
+
+// auto reads no proteome (the tags alone, or -recon_fasta / -fasta), on an
+// engine that says so (DataStatus.autoDbFree true); one that reports another
+// reading (false) reads human. Unknown (null: no -data_paths) is not taken as
+// human: the CLI of 0dfac519 already reads auto database-free without it.
+const SHIPPED_PROTEOME_NAMES = new Set(['human', 'mouse', 'yeast', 'ecoli'])
+const HANDOFF = ['shortlist_out', 'fasta_out', 'search_config_out']
+
+/// The shipped data @p values need, by the CLI's rules (FASTag.cpp, where
+/// the digest data and the proteomes are read). An option that gives its own
+/// file (-digest_models, -digest_calibration, a protein database for the
+/// alkylation report) needs none. @p engine is what the engine said
+/// (DataStatus): one that reports reading -alkylation_proteome auto as the
+/// shipped human proteome (autoDbFree false) needs it; one that does not say
+/// (null: no -data_paths) or is not known yet (none) needs nothing for auto.
+export function shippedDataNeeds(values: Record<string, ParamValue>, engine?: Pick<DataStatus, 'autoDbFree'> | null): DataNeed[] {
+  // As the run sends them (paramLayout sentValues): an inert option (the
+  // mass-gap report without placements) is not sent, so it reads nothing.
+  const on = (n: string): boolean => isActive(n, values) && !inertBecause(n, values)
+  const text = (n: string): string => String(values[n] ?? PARAM_BY_NAME.get(n)?.default ?? '').trim()
+  const needs: DataNeed[] = []
+  if (on('massgap_out')) needs.push({ option: 'massgap_out', file: 'massgap_mods.tsv' })
+  const v2 = text('digest_models_version') === 'v2'
+  if (on('digest_out')) {
+    if (!on('digest_models')) needs.push({ option: 'digest_out', file: v2 ? 'digest_models_v2.tsv' : 'digest_models.tsv' })
+    const minConf = Number(text('digest_min_confidence'))
+    if ((v2 || (Number.isFinite(minConf) && minConf > 0)) && !on('digest_calibration'))
+      needs.push({ option: 'digest_out', file: 'digest_calibration.tsv' })
+  }
+  const handoff = HANDOFF.filter(on)
+  // With -digest_out the hand-off uses that report's models (above).
+  if (handoff.length && !on('digest_out')) needs.push({ option: handoff[0], file: 'digest_models.tsv' })
+  // -recon_proteome (feedback 422372a2): the placements read a shipped
+  // proteome when no -recon_fasta is given and there is no hand-off (it
+  // needs a FASTA file; the CLI then ignores -recon_proteome). The
+  // alkylation report's placement check reads the same file.
+  const reconProt = text('recon_proteome').toLowerCase()
+  const reconShipped = on('recon_out') && !on('recon_fasta') && !handoff.length && SHIPPED_PROTEOME_NAMES.has(reconProt)
+  if (reconShipped) needs.push({ option: 'recon_proteome', file: `${reconProt}.fasta.gz`, proteome: reconProt })
+  // The alkylation report reads a shipped proteome only when one is named
+  // (auto, the default, reads none; an engine before 1.16 reads it as human)
+  // and it places its tags on its own database: no -recon_fasta, no
+  // placements, no hand-off.
+  const given = (text('alkylation_proteome') || 'auto').toLowerCase()
+  const prot = given === 'auto' && engine?.autoDbFree === false ? 'human' : given
+  if (on('alkylation_out') && !on('recon_fasta') && !on('recon_out') && !handoff.length && SHIPPED_PROTEOME_NAMES.has(prot)) {
+    needs.push({ option: 'alkylation_out', file: `${prot}.fasta.gz`, proteome: prot })
+  }
+  return needs
+}
+
+/// Whether @p data has what @p need asks for.
+function hasData(need: DataNeed, data: DataStatus): boolean {
+  if (need.proteome) return data.proteomes.includes(need.proteome)
+  const f = data.files
+  const has: Record<string, boolean> = {
+    'digest_models.tsv': f.digestModels,
+    'digest_models_v2.tsv': f.digestModelsV2,
+    'massgap_mods.tsv': f.massgapMods,
+    'digest_calibration.tsv': f.calibration
+  }
+  return has[need.file] ?? false
+}
+
+const productText = (option: string): string => {
+  const l = PRODUCT_OF.get(option)?.label ?? option
+  return `the ${l.charAt(0).toLowerCase()}${l.slice(1)}`
+}
+
+/// Where the file was looked for, in words.
+function lookedIn(need: DataNeed, data: DataStatus): string {
+  if (need.proteome)
+    return data.alkylationDir
+      ? `It is not in ${data.alkylationDir}.`
+      : data.digestDir
+        ? `There is no alkylation folder beside FASTag's digest data in ${data.digestDir}.`
+        : 'There is no alkylation folder beside the FASTag program.'
+  if (data.fromEnv && !data.digestDir) return `FASTAG_DIGEST_DIR names ${data.searched[0] ?? 'a folder'}, which is not a folder.`
+  if (data.digestDir) return `It is not in ${data.digestDir}${data.fromEnv ? ' (the folder FASTAG_DIGEST_DIR names)' : ''}.`
+  return `It is not found next to the FASTag program (looked in ${data.searched.join(', ')}).`
+}
+
+const LEGACY_AUTO =
+  'This FASTag program is older than the app: with Alkylation proteome auto and no protein database it places the tags on the shipped human proteome, where the current FASTag reads no database and calls the reagent from the tags alone.'
+
+/// An engine from before 1.16 (no -data_paths) with the human proteome at
+/// hand: the alkylation report of an auto run places on it.
+function legacyAutoCheck(): Check {
+  return {
+    id: 'legacy-auto-human',
+    level: 'flag',
+    title: 'The alkylation report will use the human proteome',
+    detail: `${LEGACY_AUTO} Its call then includes a placement check on human proteins, which fits only a human sample. Use the FASTag the app ships for the call from the tags alone, or name the proteome of your sample (or give a protein database).`,
+    faq: 'faq-shipped-data',
+    source: 'the FASTag program and the settings'
+  }
+}
+
+/// The run needs FASTag's shipped data and it is not there (an engine from a
+/// build tree or a copied binary, FASTAG_BIN): FASTag would stop with exit
+/// 6 a moment after Run. One check per output that needs it; none while
+/// @p data is not known.
+export function missingDataChecks(values: Record<string, ParamValue>, data: DataStatus | null | undefined): Check[] {
+  if (!data) return []
+  const on = (n: string): boolean => isActive(n, values) && !inertBecause(n, values)
+  const checks: Check[] = []
+  const seen = new Set<string>()
+  for (const need of shippedDataNeeds(values, data)) {
+    if (seen.has(need.option)) continue
+    // An engine that says it reads auto as the human proteome.
+    const legacyAuto = need.option === 'alkylation_out' && need.proteome === 'human' && data.autoDbFree === false && (String(values['alkylation_proteome'] ?? '').trim() || 'auto').toLowerCase() === 'auto'
+    if (hasData(need, data)) {
+      // It has the proteome: the run goes, but on a database the user did
+      // not choose, where the app's copy promises the call from the tags.
+      if (legacyAuto) checks.push(legacyAutoCheck())
+      continue
+    }
+    seen.add(need.option)
+    const handoff = HANDOFF.includes(need.option)
+    // -recon_proteome: the placements need it; without it they are off
+    // (Mass-shift survey) or read -fasta.
+    const recon = need.option === 'recon_proteome'
+    const what = handoff ? 'the database reduction' : productText(recon ? 'recon_out' : need.option)
+    const Cap = what.charAt(0).toUpperCase() + what.slice(1)
+    const how = need.proteome
+      ? `${legacyAuto ? `${LEGACY_AUTO} Use the FASTag the app ships, or ` : ''}${legacyAuto ? 'give' : 'Give'} a protein database (FASTA) for the run, or use an installed FASTag (it has the proteomes in share/FASTag/alkylation), or set FASTAG_ALKYLATION_DIR to a folder that holds ${need.file} (data/alkylation in the FASTag sources) and start FASTag again.`
+      : `Use an installed FASTag (cmake --install puts it in <prefix>/share/FASTag/digest), or set FASTAG_DIGEST_DIR to a folder that holds it (data/digest in the FASTag sources) and start FASTag again.`
+    const without = handoff
+      ? 'Or run without the protein shortlist, the reduced FASTA and the search-engine configuration.'
+      : recon
+        ? 'Or choose no shipped proteome: the placements then wait for a protein database.'
+        : `Or run without ${what}.`
+    checks.push({
+      id: `no-shipped-data-${need.option}`,
+      level: 'block',
+      title: need.proteome
+        ? `${Cap} ${recon ? 'need' : 'needs'} the shipped ${need.proteome} proteome (${need.file})`
+        : `${Cap} needs FASTag's shipped data (${need.file})`,
+      detail: `${lookedIn(need, data)} FASTag would stop before tagging. ${how} ${without}`,
+      faq: 'faq-shipped-data',
+      source: 'the settings and the installed files',
+      fix: handoff ? undefined : recon ? { label: 'Use no shipped proteome', params: { recon_proteome: '' } } : { label: `Run without ${what}`, params: { [need.option]: '' } }
+    })
+  }
+  // Codex n5: an engine without -data_paths does not say how it reads auto
+  // (the CLI of 0dfac519 reads no database, an older one the human
+  // proteome): shown, never blocking, since a valid run needs no proteome.
+  const autoShipped = on('alkylation_out') && !on('recon_fasta') && !on('recon_out') && !HANDOFF.some(on)
+  if (data.autoDbFree === null && autoShipped && (String(values['alkylation_proteome'] ?? '').trim() || 'auto').toLowerCase() === 'auto')
+    checks.push({
+      id: 'auto-reading-unknown',
+      level: 'warn',
+      title: 'This FASTag program does not say how it reads Alkylation proteome auto',
+      detail:
+        'It has no -data_paths, so the app cannot tell whether its alkylation report calls the reagent from the tags alone (as the current FASTag does) or places the tags on the shipped human proteome (as FASTag before the call from the tags did). The run is not held. Use the FASTag the app ships for the call from the tags alone, or name the proteome of your sample.',
+      faq: 'faq-shipped-data',
+      source: 'the FASTag program and the settings'
+    })
+  return checks
+}
+
+/// Codex finding 5: the shipped-proteome placements (-recon_proteome) on a
+/// FASTag program whose --helphelp does not list the option (an older
+/// FASTAG_BIN): the run would be refused at the option, whatever the data.
+/// @p options: the engine's options, null while unknown (no check).
+export function reconProteomeCapabilityCheck(values: Record<string, ParamValue>, options: readonly string[] | null | undefined): Check | null {
+  if (!options || options.includes('recon_proteome')) return null
+  if (!('recon_proteome' in sentValues(values))) return null
+  return {
+    id: 'no-recon-proteome-option',
+    level: 'block',
+    title: 'This FASTag program has no shipped proteomes for the placements',
+    detail:
+      'The run would send -recon_proteome, which this FASTag program (older than the app) does not know: it would stop before tagging. Use the FASTag the app ships, give a protein database (FASTA) for the placements, or choose no shipped proteome.',
+    faq: 'faq-shipped-data',
+    source: 'the FASTag program and the settings',
+    fix: { label: 'Use no shipped proteome', params: { recon_proteome: '' } }
+  }
+}
+
 /// ETD/ECD spectra are read as b/y ions, so their tags are unreliable:
 /// under the ion series by (the default; ax, removed, reads by too), or
 /// under auto on an input without activation metadata (MGF and mzPeak are
@@ -173,14 +365,20 @@ function etdAdvice(input: string, hybrid: boolean): string {
 /// The checks before a run of @p input with @p values. @p probe: the probe's
 /// output, null when there is none (no -probe_input, or not run yet);
 /// @p probeError: why the probe failed; @p taxonomy: where the taxonomy index
-/// is (species.rs taxonomy_status), undefined while unknown.
+/// is (species.rs taxonomy_status), undefined while unknown; @p data: where
+/// the shipped digest data and proteomes are (data.rs data_status),
+/// undefined while unknown; @p options: the engine's options (--helphelp),
+/// null or undefined while unknown. @p values are those the run is sent
+/// with (tasks.ts runValues), so the checks see the command launch runs.
 export function preStartChecks(o: {
   input: string
   values: Record<string, ParamValue>
   supported: boolean
+  options?: readonly string[] | null
   probe: ProbeReport | null
   probeError?: string | null
   taxonomy?: TaxonomyStatus | null
+  data?: DataStatus | null
 }): PreStart {
   const { values, probe } = o
   const checks: Check[] = []
@@ -189,6 +387,11 @@ export function preStartChecks(o: {
   // From the settings and the install: needs no probe.
   const taxdb = noTaxdbCheck(values, o.taxonomy)
   if (taxdb) checks.push(taxdb)
+  // An engine without -recon_proteome refuses the option: that block, and
+  // the data checks of the run without it.
+  const noReconProteome = reconProteomeCapabilityCheck(values, o.options)
+  if (noReconProteome) checks.push(noReconProteome)
+  checks.push(...missingDataChecks(noReconProteome ? { ...values, recon_proteome: '' } : values, o.data))
 
   // From the settings alone: needs no probe.
   if (values['species'] === true && unit === 'Da') {

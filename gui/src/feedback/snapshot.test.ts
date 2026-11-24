@@ -85,4 +85,17 @@ describe('feedback state snapshot', () => {
     const removed = buildDraft(s, { ...emptyText(), title: 't' }, { image: null, removed: true, removedReason: 'removed by the user', shapes: [] })
     expect(removed.capture.status).toBe('removed')
   })
+
+  it('a captured screenshot is shared by default; unticked or absent, it is not', () => {
+    const frozen: Frozen = { attemptId: 'cap-2', status: 'ok', method: 'native', api: null, error: null, image: null, width: 40, height: 30, scale: 1, capturedUtc: '2026-11-24T10:00:00Z' }
+    const s: Session = { frozen, state: state(), log: [], platform: null, run: null, bin: null }
+    const image = document.createElement('canvas')
+    image.width = 40
+    image.height = 30
+    const t = { ...emptyText(), title: 't' }
+    expect(t.share).toEqual({ screenshot: true, diagnostics: true, log: false })
+    expect(buildDraft(s, t, { image, removed: false, shapes: [] }).share.screenshot).toBe(true)
+    expect(buildDraft(s, { ...t, share: { ...t.share, screenshot: false } }, { image, removed: false, shapes: [] }).share.screenshot).toBe(false)
+    expect(buildDraft(s, t, { image: null, removed: true, removedReason: 'removed by the user', shapes: [] }).share.screenshot).toBe(false)
+  })
 })

@@ -66,8 +66,9 @@ test('Generate tags after Characterize leaves the Species tab for the requested 
   const calls = await mockState<RunCall[]>(page, 'runCalls')
   expect(calls).toHaveLength(2)
   expect(calls[0].params).toMatchObject({ species: true })
-  // Off by default: the shipped proteome needs tags of 8+ residues.
-  expect(calls[0].params.alkylation_out ?? '').toBe('')
+  // On by default from 1.16: its call is read off the tags, no proteome.
+  expect(String(calls[0].params.alkylation_out)).toMatch(/run01\.alkylation\.tsv$/)
+  expect(calls[1].params.alkylation_out ?? '').toBe('')
   expect(calls[1].params).toMatchObject({ res_conf: true, species: false, digest_out: '', label_out: '' })
 
   await goTo(page, 'Setup')
@@ -78,25 +79,35 @@ test('Generate tags after Characterize leaves the Species tab for the requested 
   expect(await mockState<RunCall[]>(page, 'runCalls')).toHaveLength(2)
 })
 
-test('Mass-shift survey: the database is required, and the placements cannot be unchecked while the mass-shift table needs them', async ({ page }) => {
+test('Mass-shift survey: without a database only the tags run; a shipped proteome or a FASTA turns the shift reports on; the placements stay while the mass-shift table needs them', async ({ page }) => {
   await openApp(page)
   await chooseTask(page, 'Mass-shift survey')
   await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  // The database sits beside the spectra, in Inputs.
+  // The database sits beside the spectra, in Inputs: a FASTA or a shipped proteome, not required (feedback 422372a2).
   await expect(page.locator('#step-2')).toContainText('Protein database')
-  await expect(page.locator('#step-2 .badge.todo')).toHaveText('required')
-  await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeDisabled()
-  await expect(page.locator('.runbar')).toContainText('The placements need a protein database')
-  await page.locator('.runbar').getByRole('button', { name: 'Go to Inputs' }).click()
+  await expect(page.locator('#step-2 #p-recon_proteome')).toBeVisible()
+  await expect(page.locator('#step-2 .badge.todo')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
+  await expect(page.locator('.plan-line')).toContainText('tags table only · 4 reports off: no protein database')
   await toStep(page, 'Outputs & run')
+  await expect(page.locator('#out-recon_out')).toBeDisabled()
+  await expect(page.locator('#out-recon_out')).not.toBeChecked()
+  await expect(page.locator('#out-recon_out-d')).toHaveText('needs a protein database')
+  await toStep(page, 'Inputs')
+  await page.locator('#p-recon_proteome').selectOption('human')
+  await toStep(page, 'Outputs & run')
+  await expect(page.locator('#out-recon_out')).toBeChecked()
   await expect(page.locator('#out-recon_out')).toBeDisabled()
   await expect(page.locator('#out-recon_out-d')).toContainText('needed by Mass-shift table')
   await expect(page.locator('#step-4')).toContainText('run01.delta.tsv')
+  await expect(page.locator('.plan-line')).not.toContainText('no protein database')
   await toStep(page, 'Inputs')
+  await page.locator('#p-recon_proteome').selectOption('')
   await page.locator('#p-recon_fasta').fill('/data/human.fasta')
   await toStep(page, 'Outputs & run')
   await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
+  await expect(page.locator('#out-recon_out')).toBeChecked()
   // Unchecking the mass-shift table frees the placements.
   await page.locator('#out-delta_spectra_out').uncheck()
   await page.locator('#out-delta_counts_out').uncheck()
@@ -109,14 +120,15 @@ test('the workflow row counts what differs, and Reset takes it back', async ({ p
   await chooseTask(page, 'Characterize a run')
   await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await expect(plan(page)).toContainText('Characterize a run on run01.mzML · 4 reports · 10% of spectra')
+  await expect(plan(page)).toContainText('Characterize a run on run01.mzML · 5 reports · all spectra')
   await toStep(page, 'Settings')
   await expect(page.locator('.origin-name')).toHaveText('Characterize a run')
   // Spectra to read is a select: All spectra, 10%, 25%, Custom.
   await page.locator('#p-subsample_fraction').selectOption({ label: '25%' })
   await expect(page.locator('.origin-name')).toContainText('(modified)')
   await page.getByRole('button', { name: 'Reset to Characterize a run' }).click()
-  await expect(page.locator('#p-subsample_fraction')).toHaveValue('0.1')
+  // All spectra from 1.16.
+  await expect(page.locator('#p-subsample_fraction')).toHaveValue('0')
   await expect(page.locator('.origin-name')).toHaveText('Characterize a run')
 })
 
@@ -177,7 +189,7 @@ test('arrowing through the tiles by keyboard browses them; only Continue replace
   await page.keyboard.press('ArrowRight')
   await page.keyboard.press('ArrowRight')
   await expect(page.locator('button.task-tile[data-task="species"]')).toBeFocused()
-  await expect(page.locator('#task-detail')).toContainText('Which organisms does my sample contain?')
+  await expect(page.locator('#task-detail')).toContainText('Only the species, ranked at a rank you choose.')
   // Browsing changed nothing.
   await expect(page.locator('#p-tag_length')).toHaveValue('5')
   await expect(page.locator('button.task-tile[data-task="export-tags"]')).toHaveAttribute('aria-current', 'true')
@@ -201,4 +213,50 @@ test('Batch is an input mode: Add files/folder, an output folder and an optional
   await expect(page.locator('#step-2')).toContainText('beside each input file')
   await expect(page.locator('#out-name')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Or choose one file…' })).toHaveCount(0)
+})
+
+// C11: with Help open at 1024x700 the action bar has no room for the
+// still-missing chip, the plan and Back/Run/Next in one row. The left group
+// (chip and plan) takes its own row; nothing overlaps; the three buttons stay
+// together in one row. A toast floats above the bar, never over Run.
+test('the action bar wraps the plan above Back, Run and Next with Help open at 1024x700, and toasts sit above it', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 700 })
+  await openApp(page)
+  await chooseTask(page, 'Mass-shift survey')
+  await page.getByRole('button', { name: 'Help', exact: true }).click()
+  await expect(page.locator('#help-panel')).toBeVisible()
+  const bar = page.locator('.view-setup .actionbar')
+  await expect(bar.locator('.still-missing')).toBeVisible()
+  await expect(plan(page)).toBeVisible()
+  const box = async (sel: string) => (await bar.locator(sel).boundingBox())!
+  const nav = await Promise.all(['button.back', 'button.run-btn', 'button.next'].map(box))
+  const planButtons = await Promise.all(
+    ['Copy command line', 'Export INI…'].map(async (name) => (await plan(page).getByRole('button', { name }).boundingBox())!)
+  )
+  const chip = await box('.still-missing')
+  const hit = (a: { x: number; y: number; width: number; height: number }, b: typeof a): boolean =>
+    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+  for (const n of nav) {
+    for (const p of [...planButtons, chip]) expect(hit(n, p)).toBe(false)
+  }
+  // One row: the same top for Back, Run and Next, left to right.
+  expect(Math.abs(nav[0].y - nav[1].y)).toBeLessThan(2)
+  expect(Math.abs(nav[1].y - nav[2].y)).toBeLessThan(2)
+  expect(nav[0].x + nav[0].width).toBeLessThanOrEqual(nav[1].x)
+  expect(nav[1].x + nav[1].width).toBeLessThanOrEqual(nav[2].x)
+  // The plan stays inside the bar, not drawn past its right edge.
+  const barBox = (await bar.boundingBox())!
+  for (const p of planButtons) expect(p.x + p.width).toBeLessThanOrEqual(barBox.x + barBox.width)
+
+  // A finished run's toast over Setup: above the bar, not over Next or Run.
+  await page.getByRole('button', { name: 'Close Help' }).click()
+  await chooseTask(page, 'Generate tags')
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
+  await goTo(page, 'Setup')
+  const toast = page.getByRole('status', { name: 'Run finished' })
+  await expect(toast).toBeVisible()
+  const t = (await toast.boundingBox())!
+  const b2 = (await bar.boundingBox())!
+  expect(t.y + t.height).toBeLessThanOrEqual(b2.y + 0.5)
 })

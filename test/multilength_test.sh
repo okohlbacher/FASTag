@@ -149,7 +149,9 @@ decisive() {
 }
 
 # ------------------------------------------------------------------ file mode
-ARGS=(-extension 2 -fragment_tolerance 0.3 -fragment_tolerance_unit Da -threads 2)
+# -subsume_tags off: the rows checked are mergeLengths' (subsume_cli_test checks
+# what -subsume_tags on leaves out of them).
+ARGS=(-extension 2 -fragment_tolerance 0.3 -fragment_tolerance_unit Da -threads 2 -subsume_tags off)
 # Unsorted and with a duplicate: the run must still use 3, 4, 5 in that order.
 "$BIN" -in "$IN" -out "$TMP/multi.tsv" -tag_lengths 5 3 4 3 "${ARGS[@]}" >"$TMP/multi.log" 2>&1 \
   || fail "multi-length run exited $? ($(tail -1 "$TMP/multi.log"))"
@@ -236,7 +238,7 @@ BLOCKS="$TMP/blocks"
 } > "$BLOCKS"
 # No gaps: on these ideal ladders, gap readings put distinct tags on the same
 # printed masses, which the printed values cannot tell apart.
-SARGS=(-stream -extension 1 -gaps 0 -fragment_tolerance 0.02 -fragment_tolerance_unit Da)
+SARGS=(-stream -extension 1 -gaps 0 -fragment_tolerance 0.02 -fragment_tolerance_unit Da -subsume_tags off)
 "$BIN" "${SARGS[@]}" -tag_lengths 3 4 < "$BLOCKS" > "$TMP/s.multi" 2>/dev/null || fail "multi-length -stream failed"
 "$BIN" "${SARGS[@]}" -tag_length 3 < "$BLOCKS" > "$TMP/s.3" 2>/dev/null || fail "-stream -tag_length 3 failed"
 "$BIN" "${SARGS[@]}" -tag_length 4 < "$BLOCKS" > "$TMP/s.4" 2>/dev/null || fail "-stream -tag_length 4 failed"

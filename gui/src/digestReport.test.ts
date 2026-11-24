@@ -4,6 +4,7 @@ import nocallTsv from './fixtures/digest_nocall.tsv?raw'
 import labelTsv from './fixtures/label.tsv?raw'
 import massgapTsv from './fixtures/massgap.tsv?raw'
 import alkylationTsv from './fixtures/alkylation.tsv?raw'
+import alkylationTagsTsv from './fixtures/alkylation-tags.tsv?raw'
 import {
   ALPHABET,
   alkylationCall,
@@ -218,6 +219,9 @@ describe('alkylation (1.12 -alkylation_out)', () => {
       mass: null,
       share: null,
       binned: 0,
+      voted: 0,
+      // A format 1 report has no tag call, so nothing abstained.
+      abstained: 0,
       reason: 'few_cys_spectra',
       databaseSource: 'proteome',
       format: 1
@@ -228,6 +232,20 @@ describe('alkylation (1.12 -alkylation_out)', () => {
     const c = alkylationCall(parseReport(called(alkylationTsv), 'a'))
     expect(c).toMatchObject({ status: 'call', reagent: 'Carbamidomethyl', mass: 57.021464, share: 0.9375, binned: 32 })
     expect(c.reason).toBeUndefined()
+  })
+
+  // gui/src/fixtures/alkylation-tags.tsv: FASTag 1.15.7 on PXD000001 (TMT
+  // Erwinia) with -alkylation_proteome human, tags of 3 residues: the
+  // placement call cannot place (tags_too_short), the tag call has 8 votes
+  // (few_cys_spectra), so the report's call is the tag call's no call.
+  it('reads the placement call of a report with a database beside the call of the report', () => {
+    const c = alkylationCall(parseReport(alkylationTagsTsv, 'a'))
+    expect(c).toMatchObject({ status: 'no_call', reason: 'few_cys_spectra', source: 'tags', binned: 8, databaseSource: 'bundled:human' })
+    expect(c.placement).toEqual({ status: 'no_call', reagent: undefined, share: null, binned: 0, voted: 0, reason: 'tags_too_short' })
+    // the share's denominator is the share row's n (format 3: votes plus conflicts)
+    expect(c.voted).toBe(8)
+    // Format 1 has no placement call of its own: its call is that.
+    expect(alkylationCall(parseReport(alkylationTsv, 'a')).placement).toBeUndefined()
   })
 
   it('reads a call of none without a mass', () => {

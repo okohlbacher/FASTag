@@ -1,4 +1,4 @@
-// A resolved tag's sequence with its termini (terminus.ts): N– before it when
+// A tag's sequence with its termini (terminus.ts): N– before it when
 // its N side is the peptide's N terminus, –C after it for the C terminus;
 // N–(K) and (K)–C, muted, when one residue lies between.
 

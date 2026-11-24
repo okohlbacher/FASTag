@@ -2,7 +2,7 @@ import { useState, type JSX, type ReactNode } from 'react'
 import SequenceLogo, { LogoLegend } from './SequenceLogo'
 import { HelpButton, HelpLink } from './help/HelpLink'
 import ReportHeader from './results/ReportHeader'
-import { alkylationReason } from './results/overview'
+import { alkylationReason, CANDIDATE_HINT, CANDIDATE_NOTE } from './results/overview'
 import { labelCall } from './results/calls'
 import {
   alkylationCall,
@@ -588,23 +588,65 @@ function GapHistogram({ bins }: { bins: GapBin[] }): JSX.Element {
   )
 }
 
+// What a call of each source has been tested on (doc/ALKYLATION-REPORT.md,
+// "What a call means"). The held-out test ran on report format 2; format 3
+// (alias check, per-vote twin guard, conflicts in the share) and format 4
+// (immonium rule) changed the votes and were not tested again, so a later
+// report names the format the result belongs to.
+const TAG_HELD_OUT = '40 of 57 runs called, 37 right, at tag length 4 and Extension 6'
+function tagTested(format: number | null): string {
+  if (format == null || format <= 2)
+    return `Tag call: passed a held-out test at the margin (${TAG_HELD_OUT}); a call to check, not a setting to copy.`
+  return `Tag call: its held-out test passed at the margin on report format 2 (${TAG_HELD_OUT}); this report is format ${format}, whose voting rules were not tested again: a call to check, not a setting to copy.`
+}
+const PLACEMENT_UNTESTED = 'Not validated on held-out data: a call to check, not a setting to copy.'
+
 /// The alkylation report (-alkylation_out): the reagent called, or why no
-/// call was made, from placements on a shipped proteome or the FASTA given.
+/// call was made. Format 2 reads the call off the tags (their votes), with a
+/// database also from the placements (source); format 1 from placements on
+/// a shipped proteome or the FASTA given (spectra with one cysteine).
 function Alkylation({ report }: { report: Report }): JSX.Element {
   const c = alkylationCall(report)
   const db = value(report, 'alk_run', 'database')
+  const fromTags = c.source === 'tags' || c.source === 'tags+placement'
+  const p = c.placement
+  const reagentOf = (r: string | undefined): string | undefined => (r === 'none' ? 'none (not alkylated)' : r)
   return (
     <section className="dg-block card" aria-labelledby="dg-alk">
       <Heading id="dg-alk" title="Alkylation" report={report} help="digest-gaps" />
       <dl className="stats">
         <Stat label={c.status === 'call' ? 'Reagent' : 'No call'} big>
-          {c.status === 'call' ? (c.reagent === 'none' ? 'none (not alkylated)' : c.reagent) : alkylationReason(c.reason)}
+          {c.status === 'call'
+            ? reagentOf(c.reagent)
+            : c.reason === 'alias_needs_database'
+              ? CANDIDATE_NOTE(c.candidate ?? 'a reagent')
+              : alkylationReason(c.reason, c.source)}
         </Stat>
-        {c.binned != null && <Stat label="Spectra with one cysteine">{fmt(c.binned)}</Stat>}
+        {c.binned != null && <Stat label={fromTags ? 'Votes from tags' : 'Spectra with one cysteine'}>{fmt(c.binned)}</Stat>}
         {c.share != null && c.status === 'call' && <Stat label="Share">{pct(c.share)}</Stat>}
+        {p && (
+          <Stat label="Placement call">
+            {p.status === 'call' ? `${reagentOf(p.reagent)}${p.binned != null ? ` (${fmt(p.binned)} spectra with one cysteine)` : ''}` : `no call: ${alkylationReason(p.reason)}`}
+          </Stat>
+        )}
         {db && <Stat label="Database">{db}</Stat>}
       </dl>
-      <p className="hint">Not validated on held-out data: a call to check, not a setting to copy.</p>
+      {c.reason === 'alias_needs_database' && (
+        <p className="hint" data-testid="alk-candidate-hint">
+          {c.candidate ?? 'This reagent'}&apos;s cysteine has the mass of two residues (carbamidomethyl C = C + G,
+          propionamide C = A + C), so no spectrum tells them apart without a protein database.{' '}
+          {c.databaseSource && c.databaseSource !== 'none'
+            ? `The placements on the database do not confirm it (${alkylationReason(p?.reason)}).`
+            : `To confirm it, ${CANDIDATE_HINT}.`}
+        </p>
+      )}
+      <p className="hint">
+        {c.source === 'tags'
+          ? tagTested(c.format)
+          : c.source === 'tags+placement'
+            ? `${tagTested(c.format)} The placement call is not validated and the combination is a rule of this version.`
+            : PLACEMENT_UNTESTED}
+      </p>
       <RawRows report={report} />
     </section>
   )
@@ -621,7 +663,7 @@ export default function DigestPanel({ reports, errors, onOpen }: Props): JSX.Ele
     <div className="digest">
       {/* The tab's title row, as every report tab has (round 4, 19). */}
       {shown.length > 0 && (
-        <ReportHeader title="Digest and labels" paths={shown.map((r) => r.path)} help={{ to: 'digest', label: 'How to read these reports' }} />
+        <ReportHeader title="Digest and labels" paths={shown.map((r) => r.path)} />
       )}
       {errors.map((e) => (
         <p className="warn" key={e} role="alert">

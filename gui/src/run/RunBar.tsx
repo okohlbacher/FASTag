@@ -1,6 +1,8 @@
-// The run bar under the setup form (moved from App.tsx, P1 PR c;
-// doc/GUI-WORKFLOWS.md 3): the plan line with Copy command line and Export
-// INI…, what a run is doing, why it cannot start, and Run or Cancel.
+// The run bar: the action bar of Setup steps 2-4 and of Batch (moved from
+// App.tsx, P1 PR c; doc/GUI-WORKFLOWS.md 3, doc/GUI-SETUP-WIZARD.md 1): at
+// the left what is missing and the plan line with Copy command line and
+// Export INI…; at the right ‹ Back, Run, and the step's Next. One button is
+// filled: Next while the wizard has a next step, else Run.
 
 import { useEffect, useState, type JSX, type ReactNode } from 'react'
 import type { Progress } from '../runJob'
@@ -11,6 +13,146 @@ import type { SpeciesFix } from '../setup/presets'
 import { isMac, keyText } from '../setup/shortcuts'
 import { duration } from '../app/format'
 
+/// The wizard's part of the action bar (Setup).
+export interface ActionNav {
+  /// At the left: "Still missing: …", or what is chosen.
+  status?: ReactNode
+  back?(): void
+  /// The step's filled button (Next: …); Run is then secondary.
+  next?: { label: string; onClick(): void }
+}
+
+/// The action bar of Setup while the Batch view holds the queue: Back, Next
+/// and, in Run's slot, the queue's run (App.tsx).
+/// What blocks the queue (Preflight) shows above, the plan beside the
+/// status, as in the run bar.
+export function NavBar({ nav, run, preflight, plan }: { nav: ActionNav; run?: ReactNode; preflight?: ReactNode; plan?: ReactNode }): JSX.Element {
+  return (
+    <div className="actionbar">
+      <div className="actionbar-col page-col">
+        {preflight}
+        <div className="actionbar-row">
+          <div className="actionbar-lead">
+            {nav.status}
+            {plan}
+          </div>
+          <div className="actionbar-nav">
+            <NavButtons nav={nav} run={run} />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function NavButtons({ nav, run }: { nav: ActionNav; run?: ReactNode }): JSX.Element {
+  return (
+    <>
+      {nav.back && (
+        <button type="button" className="ghost back" onClick={nav.back}>
+          ‹ Back
+        </button>
+      )}
+      {run}
+      {nav.next && (
+        <button type="button" className="primary next" onClick={nav.next.onClick}>
+          {nav.next.label}
+        </button>
+      )}
+    </>
+  )
+}
+
+/// What blocks a run, and the way to each fix (Go to Inputs, Go to
+/// Settings, one-click fixes): the run bar's, and the Setup footer's beside
+/// the queue's Run while the Batch view holds the queue (App.tsx).
+export function Preflight({
+  invalid,
+  refused,
+  fixes,
+  onFix,
+  goTo,
+  id
+}: {
+  invalid: Record<string, string>
+  refused: Conflict[]
+  fixes: SpeciesFix[]
+  onFix(values: Record<string, ParamValue>): void
+  goTo?(c: Conflict): { label: string; go(): void } | null
+  id?: string
+}): JSX.Element {
+  const nInvalid = Object.keys(invalid).length
+  return (
+        <div className="preflight" role="status" id={id}>
+          {nInvalid > 0 && (
+            <p className="warn">
+              <IconError />
+              <span>
+                {nInvalid} {nInvalid === 1 ? 'value' : 'values'} to fix before running:{' '}
+                {Object.entries(invalid).map(([n, why]) => `${humanName(n)} (${why})`).join('; ')}.
+              </span>
+            </p>
+          )}
+          {refused.map((c) => {
+            const to = goTo?.(c)
+            const link = to ? (
+              <>
+                {' '}
+                <button type="button" className="link small" onClick={to.go}>
+                  {to.label}
+                </button>
+              </>
+            ) : null
+            return (
+            <div key={c.params.join(',') + c.note}>
+              {c.neutral ? (
+                <p className="hint">
+                  <span>{c.note}</span>
+                  {link}
+                </p>
+              ) : (
+                <p className="warn">
+                  <IconError />
+                  <span>{c.note}</span>
+                  {link}
+                </p>
+              )}
+              {c.fix && (
+                <div className="row fixes">
+                  <button type="button" className="small" onClick={() => onFix(c.fix!.values)}>
+                    {c.fix.label}
+                  </button>
+                  {c.alt && (
+                    <button type="button" className="secondary small" onClick={() => onFix(c.alt!.values)}>
+                      {c.alt.label}
+                    </button>
+                  )}
+                </div>
+              )}
+              {/* The species reach conflict: one-click fixes. */}
+              {c.params.includes('species') && c.params.includes('extension') && fixes.length > 0 && (
+                <div className="row fixes">
+                  {fixes.map((f, i) => (
+                    <button
+                      key={f.label}
+                      type="button"
+                      className={i === 0 ? 'small' : 'secondary small'}
+                      onClick={() => onFix(f.values)}
+                      title={f.note}
+                    >
+                      {f.label}
+                      {f.note ? ` (${f.note})` : ''}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            )
+          })}
+        </div>
+  )
+}
+
 export interface RunBarProps {
   // What a screen reader hears of a run.
   announce: string
@@ -20,7 +162,6 @@ export interface RunBarProps {
   running: boolean
   busy: boolean
   batchRunning: boolean
-  cancelling: boolean
   progress: Progress | null
   phase: string | null
   // When the run in flight started (ms since the epoch).
@@ -47,12 +188,19 @@ export interface RunBarProps {
   inspectorHeld?: boolean
   // ... because the checks are not known yet (--helphelp or the probe runs).
   inspectorChecking?: boolean
+  // ... of which this many are blocks, which no Run anyway overrides.
+  inspectorBlocks?: number
+  /// The Setup step shown (the checks and their Run anyway are on step 2).
+  step?: number
+  /// Show the checks: Inputs, focus on the first held check.
+  onReviewChecks?(): void
   onRun(): void
   onRunBatch(only?: 'failed'): void
-  onCancel(): void
   /// The plan row (setup/PlanFooter.tsx): what a run does, Copy command
   /// line and Export INI…; shown while no run goes.
   plan?: ReactNode
+  /// Setup: the still-missing status, Back and Next.
+  nav?: ActionNav
 }
 
 export default function RunBar(p: RunBarProps): JSX.Element {
@@ -76,8 +224,53 @@ export default function RunBar(p: RunBarProps): JSX.Element {
   // The time left at the run's weighted rate (progress.rs), once measured.
   const eta = running && progress?.etaSec != null ? ` · about ${duration(progress.etaSec * 1000)} left` : ''
 
+  const nav = p.nav ?? {}
+  // Run is the filled button unless the wizard offers a next step, or a run
+  // goes (an inert Running… is not the screen's action; the pill's Cancel
+  // is).
+  const runClass = nav.next || busy ? 'run-btn' : 'primary run-btn'
+  // After a batch whose failed jobs are all that is left, Retry failed is
+  // the one action: it takes the filled slot, and no inert Run 0 is shown.
+  const retryOnly = !busy && remaining === 0 && p.failedJobs > 0
+  const runButtons =
+    jobs > 0 ? (
+      retryOnly ? (
+        <button className={runClass} onClick={() => p.onRunBatch('failed')} disabled={!p.binOk || blocked}>
+          Retry failed
+        </button>
+      ) : (
+        <>
+          {!busy && p.failedJobs > 0 && (
+            <button className="secondary" onClick={() => p.onRunBatch('failed')} disabled={!p.binOk || blocked}>
+              Retry failed
+            </button>
+          )}
+          <button
+            className={runClass}
+            onClick={() => p.onRunBatch()}
+            disabled={p.batchRunning || running || !p.binOk || blocked || remaining === 0}
+          >
+            {p.batchRunning ? 'Running batch…' : remaining === 0 ? 'All files run' : `Run ${remaining} remaining ${remaining === 1 ? 'file' : 'files'}`}
+          </button>
+        </>
+      )
+    ) : (
+      <button
+        className={runClass}
+        onClick={p.onRun}
+        disabled={!p.canRun}
+        data-run=""
+        aria-describedby={[held ? 'run-held' : '', single && p.input && !p.out ? 'run-output-required' : ''].filter(Boolean).join(' ') || undefined}
+        aria-keyshortcuts={isMac() ? 'Meta+Enter' : 'Control+Enter'}
+        title={`Run (${keyText(isMac() ? '⏎' : 'Enter')})`}
+      >
+        {running ? 'Running…' : 'Run'}
+      </button>
+    )
+
   return (
-    <div className="runbar">
+    <div className="runbar actionbar">
+      <div className="actionbar-col page-col">
       {/* Always in the page, so its changes are announced. */}
       {!p.announceElsewhere && (
         <p className="sr-only" role="status">
@@ -121,78 +314,11 @@ export default function RunBar(p: RunBarProps): JSX.Element {
         </div>
       )}
 
-      {!busy && blocked && (
-        <div className="preflight" role="status">
-          {nInvalid > 0 && (
-            <p className="warn">
-              <IconError />
-              <span>
-                {nInvalid} {nInvalid === 1 ? 'value' : 'values'} to fix before running:{' '}
-                {Object.entries(invalid).map(([n, why]) => `${humanName(n)} (${why})`).join('; ')}.
-              </span>
-            </p>
-          )}
-          {refused.map((c) => {
-            const to = p.goTo?.(c)
-            const link = to ? (
-              <>
-                {' '}
-                <button type="button" className="link small" onClick={to.go}>
-                  {to.label}
-                </button>
-              </>
-            ) : null
-            return (
-            <div key={c.params.join(',') + c.note}>
-              {c.neutral ? (
-                <p className="hint">
-                  <span>{c.note}</span>
-                  {link}
-                </p>
-              ) : (
-                <p className="warn">
-                  <IconError />
-                  <span>{c.note}</span>
-                  {link}
-                </p>
-              )}
-              {c.fix && (
-                <div className="row fixes">
-                  <button type="button" className="small" onClick={() => p.onFix(c.fix!.values)}>
-                    {c.fix.label}
-                  </button>
-                  {c.alt && (
-                    <button type="button" className="secondary small" onClick={() => p.onFix(c.alt!.values)}>
-                      {c.alt.label}
-                    </button>
-                  )}
-                </div>
-              )}
-              {/* The species reach conflict: one-click fixes. */}
-              {c.params.includes('species') && c.params.includes('extension') && fixes.length > 0 && (
-                <div className="row fixes">
-                  {fixes.map((f, i) => (
-                    <button
-                      key={f.label}
-                      type="button"
-                      className={i === 0 ? 'small' : 'secondary small'}
-                      onClick={() => p.onFix(f.values)}
-                      title={f.note}
-                    >
-                      {f.label}
-                      {f.note ? ` (${f.note})` : ''}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            )
-          })}
-        </div>
-      )}
-      {!busy && p.plan}
-      {!busy && !blocked && single && !p.input && <p className="hint">Choose an input file to run.</p>}
-      {!busy && !blocked && jobs === 0 && p.batchMode && <p className="hint">Add files or a folder to run.</p>}
+      {!busy && blocked && <Preflight invalid={invalid} refused={refused} fixes={fixes} onFix={p.onFix} goTo={p.goTo} />}
+      {/* What is missing shows once, at the left of the bar (Setup); the
+          Batch view has no wizard, so it says it here. */}
+      {!busy && !blocked && !nav.status && single && !p.input && <p className="hint">Choose an input file to run.</p>}
+      {!busy && !blocked && !nav.status && jobs === 0 && p.batchMode && <p className="hint">Add files or a folder to run.</p>}
       {!busy && single && !!p.input && !p.out && <p className="warn" id="run-output-required">Choose a run name in Outputs before running.</p>}
       {/* No live region of its own: the checks' summary (InspectorPanel) is
           announced; Run's aria-describedby names this line. */}
@@ -204,50 +330,38 @@ export default function RunBar(p: RunBarProps): JSX.Element {
       {held && !p.inspectorChecking && (
         <p className="warn" id="run-held">
           <IconError />
-          <span>Run waits for the checks before the run: fix them, or answer a red flag with Run anyway.</span>
+          <span>
+            {(p.inspectorBlocks ?? 0) > 0
+              ? 'Run waits for the checks before the run: an input check blocks the run; fix the file or settings it names.'
+              : 'Run waits for the checks before the run: fix them, or choose Run anyway beside each red flag in Inputs.'}
+          </span>
+          {/* The checks are on Inputs: a way there from Settings and Outputs. */}
+          {p.onReviewChecks && p.step !== 2 && (
+            <>
+              {' '}
+              <button type="button" className="link small" onClick={p.onReviewChecks}>
+                Review input checks
+              </button>
+            </>
+          )}
         </p>
       )}
 
-        <div className="row actions">
-          {jobs > 0 ? (
-            <>
-              <button
-                className="primary"
-                onClick={() => p.onRunBatch()}
-                disabled={p.batchRunning || running || !p.binOk || blocked || remaining === 0}
-              >
-                {p.batchRunning ? 'Running batch…' : `Run ${remaining} remaining ${remaining === 1 ? 'file' : 'files'}`}
-              </button>
-              {!busy && p.failedJobs > 0 && (
-                <button className="secondary" onClick={() => p.onRunBatch('failed')} disabled={!p.binOk || blocked}>
-                  Retry failed
-                </button>
-              )}
-            </>
-          ) : (
-            <button
-              className="primary"
-              onClick={p.onRun}
-              disabled={!p.canRun}
-              data-run=""
-              aria-describedby={[held ? 'run-held' : '', single && p.input && !p.out ? 'run-output-required' : ''].filter(Boolean).join(' ') || undefined}
-              aria-keyshortcuts={isMac() ? 'Meta+Enter' : 'Control+Enter'}
-              title={`Run (${keyText(isMac() ? '⏎' : 'Enter')})`}
-            >
-              {running ? 'Running…' : 'Run'}
-            </button>
-          )}
-          {busy ? (
-            <button
-              className="secondary"
-              onClick={p.onCancel}
-              aria-keyshortcuts={isMac() ? 'Meta+.' : 'Control+.'}
-              disabled={!running || p.cancelling}
-            >
-              Cancel
-            </button>
-          ) : null}
+      {/* Two groups: what is missing and the plan at the left, the buttons
+          at the right. When both no longer fit in one row, the left group
+          takes its own row above, so the buttons never move or overlap. */}
+      <div className="row actions actionbar-row">
+        <div className="actionbar-lead">
+          {!busy && nav.status}
+          {!busy && p.plan}
         </div>
+        <div className="actionbar-nav">
+        {/* No Cancel here: the run status pill in the app bar holds the
+            run's one Cancel on every view. */}
+        <NavButtons nav={busy ? {} : nav} run={runButtons} />
+        </div>
+      </div>
+      </div>
     </div>
   )
 }

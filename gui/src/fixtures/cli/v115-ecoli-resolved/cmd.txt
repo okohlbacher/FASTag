@@ -1,2 +1,0 @@
-FASTag -in test/fixtures/Ecoli_MS2_small.mzML -out run.tags.tsv -tolerance_by_analyzer off -fragment_tolerance 0.3 -fragment_tolerance_unit Da -threads 4 -resolved_out run.resolved.tsv -tag_graph_out run.taggraph.tsv
-FASTag -in test/fixtures/Ecoli_MS2_small.mzML -tolerance_by_analyzer off -fragment_tolerance 0.3 -fragment_tolerance_unit Da -dump_spectrum 'controllerType=0 controllerNumber=1 scan=11586' > dump.jsonl

@@ -9,9 +9,15 @@
 
     windows_installed_check.ps1 -Installer <setup.exe> [-Scope AllUsers|CurrentUser]
                                 [-Out <dir>] [-Keep] [-DirOut <file>]
-                                [-ThermoRaw <file.raw>]
+                                [-ThermoRaw <file.raw>] [-RequireTaxonomyIndex]
+                                [-TaxonomyManifest <manifest.json>]
 
   -DirOut: a file the install folder is written to (for the steps after).
+  -RequireTaxonomyIndex: the installed app must carry the k-mer index
+  (resources\fastag\share\FASTag\taxonomy\tax_k7.taxdb), as a release does:
+  each file -TaxonomyManifest pins (default: the newest
+  data\taxonomy\manifests\*.json beside this script) a regular file with
+  the manifest's size and sha256.
 
   Checks, each with the exit code printed in hex (0xC0000142 is
   STATUS_DLL_INIT_FAILED, 0xC0000135 STATUS_DLL_NOT_FOUND):
@@ -35,7 +41,9 @@ param(
   [string]$Out = (Join-Path ([IO.Path]::GetTempPath()) 'fastag-installed-check'),
   [switch]$Keep,
   [string]$DirOut = '',
-  [string]$ThermoRaw = $env:FASTAG_THERMO_SMOKE_RAW
+  [string]$ThermoRaw = $env:FASTAG_THERMO_SMOKE_RAW,
+  [switch]$RequireTaxonomyIndex,
+  [string]$TaxonomyManifest = ''
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'windows_install_lib.ps1')
@@ -53,6 +61,25 @@ foreach ($f in @('LICENSE', 'THIRD-PARTY-NOTICES.txt', 'GUI-THIRD-PARTY-NOTICES.
                  'LICENSES\ThermoRawFileReader-License.doc', 'LICENSES\ThermoRawFileReader-License.txt',
                  'share\OpenMS\openms_thermo_bridge\managed\ThermoFisher.CommonCore.RawFileReader.dll')) {
   if (-not (Test-Path (Join-Path $R $f))) { Fail "the installed app has no resources\fastag\$f" }
+}
+$taxdb = Join-Path $R 'share\FASTag\taxonomy\tax_k7.taxdb'
+if ($RequireTaxonomyIndex) {
+  if (-not (Test-Path $taxdb) -or (Get-Item $taxdb).Length -eq 0) { Fail "the installed app has no resources\fastag\share\FASTag\taxonomy\tax_k7.taxdb (-species would fail)" }
+  if (-not $TaxonomyManifest) {
+    $mans = Join-Path $PSScriptRoot '..\data\taxonomy\manifests'
+    $TaxonomyManifest = Get-ChildItem -Path $mans -Filter '*.json' -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1 -ExpandProperty FullName
+  }
+  if (-not $TaxonomyManifest -or -not (Test-Path $TaxonomyManifest)) { Fail "no taxonomy manifest to check the installed index against (-TaxonomyManifest, or data\taxonomy\manifests beside tools\)" }
+  $pin = Get-Content -Raw $TaxonomyManifest | ConvertFrom-Json
+  foreach ($f in $pin.files.PSObject.Properties) {
+    $p = Join-Path $R "share\FASTag\taxonomy\$($f.Name)"
+    $it = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
+    if (-not $it -or $it.PSIsContainer -or ($it.Attributes -band [IO.FileAttributes]::ReparsePoint)) { Fail "the installed app's taxonomy has no regular file $($f.Name)" }
+    if ($it.Length -ne [int64]$f.Value.bytes) { Fail "the installed $($f.Name) is $($it.Length) bytes, $(Split-Path -Leaf $TaxonomyManifest) pins $($f.Value.bytes)" }
+    $got = (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($got -ne $f.Value.sha256) { Fail "the installed $($f.Name) has sha256 $got, $(Split-Path -Leaf $TaxonomyManifest) pins $($f.Value.sha256)" }
+    Write-Host "taxonomy: $($f.Name), $($it.Length) bytes, sha256 as pinned"
+  }
 }
 $guiNotices = Join-Path $R 'GUI-THIRD-PARTY-NOTICES.txt'
 $n = (Get-Item $guiNotices).Length

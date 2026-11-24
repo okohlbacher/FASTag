@@ -16,7 +16,6 @@ function bar(p: Partial<RunBarProps> = {}): { c: HTMLElement; props: RunBarProps
     running: false,
     busy: false,
     batchRunning: false,
-    cancelling: false,
     progress: null,
     phase: null,
     startedAt: 0,
@@ -33,7 +32,6 @@ function bar(p: Partial<RunBarProps> = {}): { c: HTMLElement; props: RunBarProps
     canRun: true,
     onRun: vi.fn(),
     onRunBatch: vi.fn(),
-    onCancel: vi.fn(),
     ...p
   }
   const r = render(<RunBar {...base} />)
@@ -75,6 +73,9 @@ describe('the run bar', () => {
 
   it('behind a batch queue: Run N remaining, and Retry failed only while idle with a failed job', async () => {
     const { props, rerender } = bar({ jobs: 3, remaining: 2, failedJobs: 1 })
+    // Files remain: Run is the filled button, Retry failed secondary.
+    expect(screen.getByRole('button', { name: 'Run 2 remaining files' }).classList.contains('primary')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Retry failed' }).classList.contains('primary')).toBe(false)
     await click(screen.getByRole('button', { name: 'Run 2 remaining files' }))
     expect(props.onRunBatch).toHaveBeenCalledWith()
     await click(screen.getByRole('button', { name: 'Retry failed' }))
@@ -84,11 +85,51 @@ describe('the run bar', () => {
     expect(screen.getByRole('button', { name: 'Running batch…' }).hasAttribute('disabled')).toBe(true)
   })
 
-  it('Cancel is offered while busy and disabled once pressed', () => {
-    const { rerender } = bar({ running: true, busy: true, startedAt: Date.now() })
-    expect(screen.getByRole('button', { name: 'Cancel' }).hasAttribute('disabled')).toBe(false)
-    rerender({ running: true, busy: true, startedAt: Date.now(), cancelling: true })
-    expect(screen.getByRole('button', { name: 'Cancel' }).hasAttribute('disabled')).toBe(true)
+  it('after a batch with only failed files left, Retry failed is the one filled button; no Run 0', async () => {
+    const { props, rerender } = bar({ jobs: 3, remaining: 0, failedJobs: 2 })
+    const retry = screen.getByRole('button', { name: 'Retry failed' })
+    expect(retry.classList.contains('primary')).toBe(true)
+    expect(screen.queryByRole('button', { name: /^Run \d+ remaining/ })).toBeNull()
+    expect(document.querySelectorAll('.runbar button.primary')).toHaveLength(1)
+    await click(retry)
+    expect(props.onRunBatch).toHaveBeenCalledWith('failed')
+    // Nothing failed and nothing left: a disabled All files run.
+    rerender({ jobs: 3, remaining: 0, failedJobs: 0 })
+    expect(screen.queryByRole('button', { name: 'Retry failed' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'All files run' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  // Cancel has one home, the run status pill in the app bar
+  // (shell/TopBar.tsx, shell.app.test.tsx); the run bar keeps the progress.
+  it('while busy, the bar has no Cancel of its own and Running… is not filled', () => {
+    bar({ running: true, busy: true, startedAt: Date.now() })
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Running…' }).classList.contains('primary')).toBe(false)
+    expect(document.querySelectorAll('.runbar button.primary, .runbar button.danger')).toHaveLength(0)
+  })
+
+  it('Run held by checks: a block never offers Run anyway; off Inputs, Review input checks goes there', async () => {
+    const onReviewChecks = vi.fn()
+    const { rerender } = bar({ inspectorHeld: true, canRun: false, step: 3, onReviewChecks })
+    const held = (): string => document.getElementById('run-held')?.textContent ?? ''
+    expect(held()).toMatch(/^Run waits for the checks before the run: fix them, or choose Run anyway beside each red flag in Inputs\./)
+    await click(screen.getByRole('button', { name: 'Review input checks' }))
+    expect(onReviewChecks).toHaveBeenCalledTimes(1)
+    rerender({ inspectorHeld: true, canRun: false, step: 4, onReviewChecks, inspectorBlocks: 1 })
+    expect(held()).toMatch(/^Run waits for the checks before the run: an input check blocks the run/)
+    expect(held()).not.toContain('Run anyway')
+    expect(screen.getByRole('button', { name: 'Review input checks' })).toBeDefined()
+    // On Inputs the checks are on screen: no link.
+    rerender({ inspectorHeld: true, canRun: false, step: 2, onReviewChecks })
+    expect(screen.queryByRole('button', { name: 'Review input checks' })).toBeNull()
+  })
+
+  it('while busy or between batch jobs: no Cancel and no Reset…, the progress stays', () => {
+    const { rerender } = bar({ running: true, busy: true, startedAt: Date.now(), phase: 'Tagging spectra' })
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull()
+    expect(what(document.body)).toMatch(/Tagging spectra/)
+    rerender({ running: false, busy: true, batchRunning: true, jobs: 2, remaining: 1 })
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Reset…' })).toBeNull()
   })
 

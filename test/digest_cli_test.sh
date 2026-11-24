@@ -194,15 +194,26 @@ grep -q -- "-massgap_out: OpenMS does not know the modification 'Bogusmod (X)'" 
 "$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" -massgap_out "$TMP/x2.tsv" > "$TMP/log" 2>&1 \
   && fail "-massgap_out without -recon_out was accepted"
 printf '' | "$BIN" -stream -digest_out "$TMP/x3.tsv" > "$TMP/log" 2>&1 && fail "-stream with -digest_out was accepted"
-# Beside the build-tree binary there is no share/FASTag/digest either.
+# A FASTAG_DIGEST_DIR that names no folder finds no models: the data linked
+# beside the build-tree binary does not stand in for it, and the error says so.
 FASTAG_DIGEST_DIR="$TMP/none" "$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" -digest_out "$TMP/x4.tsv" > "$TMP/log" 2>&1 \
   && fail "no shipped models and no -digest_models, but no error"
+grep -q "FASTAG_DIGEST_DIR is set to '$TMP/none', which is not a folder" "$TMP/log" \
+  || { cat "$TMP/log" >&2; fail "no message for a FASTAG_DIGEST_DIR that is no folder"; }
+# A folder without the file the option needs: named, with the fix.
+mkdir -p "$TMP/nogap"; cp "$DATA/digest_models.tsv" "$TMP/nogap/"
+FASTAG_DIGEST_DIR="$TMP/nogap" "$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" "${R[@]}" -massgap_out "$TMP/x5.tsv" > "$TMP/log" 2>&1
+rc=$?
+[ "$rc" = 6 ] || { cat "$TMP/log" >&2; fail "massgap_mods.tsv missing: exit $rc (want 6)"; }
+grep -q -- "-massgap_out needs massgap_mods.tsv from FASTag's shipped digest data, and it was not found (it is not in '$TMP/nogap', the folder FASTAG_DIGEST_DIR names)" "$TMP/log" \
+  || { cat "$TMP/log" >&2; fail "massgap_mods.tsv missing: message"; }
+[ ! -e "$TMP/x5.tsv" ] || fail "massgap_mods.tsv missing: -massgap_out written"
 
 # ---- digest options without their report: warned about, not refused
 "$BIN" "${COMMON[@]}" -out "$TMP/w.tsv" -digest_tag_min 50 -digest_window 0.01 > "$TMP/log" 2>&1 \
   || fail "-digest_tag_min without -digest_out was refused"
 grep -q -- "-digest_tag_min is only read for -digest_out" "$TMP/log" || fail "no warning for -digest_tag_min"
-grep -q -- "-digest_window is only read for -digest_out or -label_out" "$TMP/log" || fail "no warning for -digest_window"
+grep -q -- "-digest_window is only read for -digest_out, -label_out or -qc_out" "$TMP/log" || fail "no warning for -digest_window"
 "$BIN" "${COMMON[@]}" -out "$TMP/w.tsv" -label_out "$TMP/w2.tsv" -digest_window 0.01 > "$TMP/log" 2>&1
 grep -q -- "-digest_window is only read" "$TMP/log" && fail "-digest_window warned although -label_out reads it"
 "$BIN" "${COMMON[@]}" -out "$TMP/w.tsv" -digest_silac_min 10 -glyco_out "$TMP/w3.tsv" > "$TMP/log" 2>&1 \
@@ -310,17 +321,18 @@ if [ -n "$BUILDTAXDB" ] && [ -n "$TAXDIR" ]; then
 fi
 
 # ---- 1.12 D: -alkylation_out (#3g)
-alk_check() {  # FILE: sections, five fields, the call rows
+alk_check() {  # FILE [tags]: sections, five fields, the call rows (format 4; "tags": no database)
   tr -d '\r' < "$1" | awk -F'\t' 'NF != 5 || $5 == "" { bad = 1 } END { exit bad }' || fail "$1: a malformed row"
-  for sct in run alk_run alk_cys alkylation_call; do
-    tr -d '\r' < "$1" | cut -f1 | grep -qx "$sct" || fail "$1: no $sct section"
-  done
+  local want="run alk_run alk_cys alkylation_placement_call alkt_run alkt_form alkylation_tags_call alkylation_call"
+  [ "${2:-}" = tags ] && want="run alk_run alkt_run alkt_form alkylation_tags_call alkylation_call"
+  [ "$(tr -d '\r' < "$1" | awk -F'\t' 'NR > 1 && $1 != last { s = s (s == "" ? "" : " ") $1; last = $1 } END { print s }')" = "$want" ] \
+    || fail "$1: sections, in this order: $want"
   tr -d '\r' < "$1" | cut -f1 | grep -qx -e cys -e call && fail "$1: a cys or call section (the mass-gap or digest names)"
   [ "$(tr -d '\r' < "$1" | awk -F'\t' '$1 == "alkylation_call" { k = k (k == "" ? "" : ",") $2 } END { print k }')" \
-    = "status,reagent,mass,share,reason" ] || fail "$1: alkylation_call rows"
-  [ "$(val "$1" alk_run format)" = 1 ] || fail "$1: alk_run format"
+    = "status,reagent,mass,share,voted,reason,source" ] || fail "$1: alkylation_call rows"
+  [ "$(val "$1" alk_run format)" = 4 ] || fail "$1: alk_run format"
 }
-counts_of() { tr -d '\r' < "$1" | awk -F'\t' '$1 == "alk_cys" || $1 == "alkylation_call" || ($1 == "alk_run" && ($2 == "tags" || $2 == "spectra"))'; }
+counts_of() { tr -d '\r' < "$1" | awk -F'\t' '$1 == "alk_cys" || $1 == "alkylation_placement_call" || $1 == "alkylation_call" || ($1 == "alk_run" && ($2 == "tags" || $2 == "spectra"))'; }
 run "${COMMON[@]}" -out "$TMP/a0.tsv" -alkylation_out "$TMP/alk0.tsv" -alkylation_proteome "$DB"
 same "$TMP/base.tsv" "$TMP/a0.tsv" "-alkylation_out changed the tag TSV"
 alk_check "$TMP/alk0.tsv"
@@ -377,7 +389,7 @@ if command -v gzip > /dev/null 2>&1; then
   counts_of "$TMP/alk6.tsv" > "$TMP/alk6.counts"
   same "$TMP/alk0.counts" "$TMP/alk6.counts" "the gzip-compressed shipped proteome gives other counts than the plain FASTA"
   FASTAG_DIGEST_DIR="$TMP/share/digest" "$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" -alkylation_out "$TMP/x8.tsv" \
-    > "$TMP/log" 2>&1 && fail "-alkylation_proteome auto without a shipped human proteome was accepted"
+    -alkylation_proteome human > "$TMP/log" 2>&1 && fail "-alkylation_proteome human without a shipped human proteome was accepted"
   grep -q "no shipped human proteome" "$TMP/log" || fail "no message for the missing human proteome"
 else
   echo "note: gzip not found; the shipped-proteome check is skipped" >&2
@@ -396,32 +408,51 @@ done
 "$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" -alkylation_out "$TMP/x9.tsv" -alkylation_proteome zebrafish > "$TMP/log" 2>&1 \
   && fail "an unknown -alkylation_proteome was accepted"
 grep -q "is neither auto" "$TMP/log" || fail "no message for an unknown -alkylation_proteome"
-# Without a shipped proteome (1.12.0, or a build or copy without share/FASTag/alkylation;
-# 1.13 ships them, see proteomes_cli_test): without -recon_fasta or a FASTA path, the
-# default auto and every name stop with ILLEGAL_PARAMETERS (exit 6) before any output
-# opens. An empty FASTAG_ALKYLATION_DIR stands for such an install, so the check holds in any tree.
+# Without a shipped proteome (a build or copy without share/FASTag/alkylation):
+# every name stops with ILLEGAL_PARAMETERS (exit 6) before any output opens. An
+# empty FASTAG_ALKYLATION_DIR stands for such an install, so the check holds in
+# any tree. The default auto needs no proteome (feedback 202dbcf4): it is
+# checked below.
 mkdir -p "$TMP/alk_empty" "$TMP/noprot"
-for prot in default auto human mouse yeast ecoli zebrafish; do
+for prot in human mouse yeast ecoli zebrafish; do
   printf 'sentinel\n' > "$TMP/noprot/tags.tsv"
-  if [ "$prot" = default ]; then
-    FASTAG_ALKYLATION_DIR="$TMP/alk_empty" "$BIN" "${COMMON[@]}" -out "$TMP/noprot/tags.tsv" \
-      -alkylation_out "$TMP/noprot/alk.tsv" > "$TMP/log" 2>&1
-  else
-    FASTAG_ALKYLATION_DIR="$TMP/alk_empty" "$BIN" "${COMMON[@]}" -out "$TMP/noprot/tags.tsv" \
-      -alkylation_out "$TMP/noprot/alk.tsv" -alkylation_proteome "$prot" > "$TMP/log" 2>&1
-  fi
+  FASTAG_ALKYLATION_DIR="$TMP/alk_empty" "$BIN" "${COMMON[@]}" -out "$TMP/noprot/tags.tsv" \
+    -alkylation_out "$TMP/noprot/alk.tsv" -alkylation_proteome "$prot" > "$TMP/log" 2>&1
   rc=$?
   [ "$rc" = 6 ] || { cat "$TMP/log" >&2; fail "-alkylation_proteome $prot without a proteome: exit $rc, not 6 (ILLEGAL_PARAMETERS)"; }
   case $prot in
     zebrafish) grep -q "is neither auto" "$TMP/log" || fail "no message for -alkylation_proteome zebrafish" ;;
-    *) want=$prot; { [ "$want" = default ] || [ "$want" = auto ]; } && want=human
-       grep -q "no shipped $want proteome found" "$TMP/log" || fail "no 'no shipped $want proteome' message for $prot"
+    *) grep -q "no shipped $prot proteome found" "$TMP/log" || fail "no 'no shipped $prot proteome' message for $prot"
        grep -q -- "Give -alkylation_proteome <fasta> or -recon_fasta" "$TMP/log" || fail "no advice for $prot" ;;
   esac
   { [ ! -e "$TMP/noprot/alk.tsv" ] && [ ! -e "$TMP/noprot/alk.tsv.part" ]; } \
     || fail "$prot: -alkylation_out written although the run was refused"
   [ "$(tr -d '\r' < "$TMP/noprot/tags.tsv")" = sentinel ] || fail "$prot: -out written although the run was refused"
 done
+# feedback 202dbcf4: the default (and auto) needs no database and no shipped
+# proteome: the call is read off the tags, the report says database_source
+# none, nothing is placed, and the tag TSV is unchanged.
+for prot in default auto; do
+  extra=()
+  [ "$prot" = auto ] && extra=(-alkylation_proteome auto)
+  FASTAG_ALKYLATION_DIR="$TMP/alk_empty" run "${COMMON[@]}" -out "$TMP/noprot/$prot.tsv" \
+    -alkylation_out "$TMP/noprot/$prot.alk.tsv" ${extra[@]+"${extra[@]}"}
+  same "$TMP/base.tsv" "$TMP/noprot/$prot.tsv" "-alkylation_out ($prot, no database) changed the tag TSV"
+  alk_check "$TMP/noprot/$prot.alk.tsv" tags
+  [ "$(val "$TMP/noprot/$prot.alk.tsv" alk_run database_source) $(val "$TMP/noprot/$prot.alk.tsv" alk_run method)" = "none tags" ] \
+    || fail "$prot: not a tag-only report"
+  [ "$(val "$TMP/noprot/$prot.alk.tsv" alkylation_call source)" = tags ] || fail "$prot: source is not tags"
+  grep -q "Recon index" "$TMP/log" && fail "$prot: an index was built without a database"
+  grep -q -- "-alkylation_window is only read for" "$TMP/log" && fail "$prot: warned about an option not given"
+done
+FASTAG_ALKYLATION_DIR="$TMP/alk_empty" run "${COMMON[@]}" -out "$TMP/noprot/w.tsv" -alkylation_out "$TMP/noprot/w.alk.tsv" \
+  -alkylation_window 0.1
+grep -q -- "-alkylation_window is only read for -alkylation_out with a database" "$TMP/log" \
+  || fail "no warning for -alkylation_window without a database"
+# auto with -fasta places on -fasta (the run's own database) and refines the tag call
+run "${COMMON[@]}" -out "$TMP/af.tsv" -fasta "$DB" -alkylation_out "$TMP/alkf.tsv"
+alk_check "$TMP/alkf.tsv"
+[ "$(val "$TMP/alkf.tsv" alk_run database_source)" = fasta ] || fail "alkf: database_source is not fasta"
 printf '' | "$BIN" -stream -alkylation_out "$TMP/x10.tsv" > "$TMP/log" 2>&1 && fail "-stream with -alkylation_out was accepted"
 grep -q -- "-stream cannot be combined with -alkylation_out" "$TMP/log" || fail "no -stream refusal message for -alkylation_out"
 "$BIN" "${COMMON[@]}" -out "$TMP/w.tsv" -alkylation_min_spectra 5 > "$TMP/log" 2>&1 \

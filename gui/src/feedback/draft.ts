@@ -9,7 +9,7 @@ import type { CaptureInfo, FeedbackDraft } from './types'
 import type { DraftText, Session } from './useFeedback'
 
 /// The privacy notice the dialog shows; a new wording gets a new version.
-export const CONSENT_TEXT_VERSION = 'fastag-feedback-privacy-1'
+export const CONSENT_TEXT_VERSION = 'fastag-feedback-privacy-2'
 
 const cut = (s: string, n: number): string => [...s].slice(0, n).join('')
 
@@ -54,7 +54,8 @@ export function buildDraft(s: Session, t: DraftText, img: ImageState, w: Window 
     log: s.log.slice(-50),
     capture: captureInfo(s.frozen, img),
     annotations: img.image ? img.shapes.slice(0, 100).map(toAnnotation) : [],
-    share: { ...t.share },
+    // A report without a screenshot cannot share one.
+    share: { ...t.share, screenshot: t.share.screenshot && !!img.image },
     consent_text_version: CONSENT_TEXT_VERSION
   }
 }

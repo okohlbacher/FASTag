@@ -47,12 +47,14 @@ describe('Overview panel', () => {
     const onAction = vi.fn()
     const { rerender } = render(<OverviewPanel overview={model(CLI_CASES.v112)} input="/d/a.mzML" busy={false} onAction={onAction} />)
     await click(within(tile('Alkylation')).getByRole('button', { name: 'Add Alkylation report and run again' }))
-    expect(onAction).toHaveBeenCalledWith({ kind: 'enable', label: 'Add Alkylation report and run again', values: { alkylation_out: 'alkylation.tsv', extension: '3' } })
+    // feedback 202dbcf4: the report needs no database, so Extension is not raised.
+    expect(onAction).toHaveBeenCalledWith({ kind: 'enable', label: 'Add Alkylation report and run again', values: { alkylation_out: 'alkylation.tsv' } })
     rerender(<OverviewPanel overview={model(CLI_CASES.v112)} input="/d/a.mzML" busy onAction={onAction} />)
     expect(within(tile('Alkylation')).getByRole('button', { name: 'Add Alkylation report and run again' }).hasAttribute('disabled')).toBe(true)
   })
 
-  it('names the workflow, shows only the tiles of the reports asked for, and names a missing report', () => {
+  // The workflow's name is in the Results page header (overview.app.test.tsx).
+  it('shows only the tiles of the reports asked for, and names a missing report', () => {
     render(
       <OverviewPanel
         overview={model(CLI_CASES.v112)}
@@ -64,7 +66,6 @@ describe('Overview panel', () => {
         missing={['Glycopeptide report']}
       />
     )
-    expect(screen.getByText('Run QC')).toBeDefined()
     expect(screen.getByRole('status').textContent).toMatch(/not written: Glycopeptide report/)
     const names = screen.getAllByRole('region').filter((r) => r.classList.contains('tile')).map((r) => r.getAttribute('aria-label'))
     expect(names).toEqual(['MS2 spectra', 'Instrument', 'Tags', 'Glyco'])

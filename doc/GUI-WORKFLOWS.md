@@ -30,12 +30,12 @@ grid; see the Decision at the end of this section.
 | # | Workflow (label) | Purpose (blurb, shown under the chooser) | Required inputs | Outputs, on by default (off) | Results tabs opened |
 |---|---|---|---|---|---|
 | W1 | **Generate tags** (landing) | Sequence tags from every spectrum, with per-residue confidence, for de novo assembly and export. | spectra | tags.tsv (spectra with tags .mzML) | Overview, Tags, Spectrum |
-| W2 | **Run QC** | QC of one run: MS/MS counts and resolution by analyzer, charges, isobaric kit, tag yield, instrument, serial and start time. | spectra | qc.tsv; tags.tsv (always) | Overview, QC, Tags, Spectrum |
-| W3 | **Mass-shift survey** (blind modification search) | Mass shifts between tags and the database: a frequency table, sites and UniMod names. | spectra, protein FASTA | recon.tsv, delta.tsv, delta_spectra.tsv, delta_counts.tsv (massgap.tsv, recon_id.tsv) | Overview, Mass shifts, Tags, Spectrum |
+| W2 | **Run QC** | QC of one run: MS/MS counts and resolution by analyzer, charges, isobaric kit (one call, with the count of each reporter channel), tag yield, instrument, serial and start time. | spectra | qc.tsv; tags.tsv (always) | Overview, QC, Tags, Spectrum |
+| W3 | **Mass-shift survey** (blind modification search) | Mass shifts between tags and the database: a frequency table, sites and UniMod names. | spectra; protein FASTA or shipped proteome (without one: tags only, the shift reports off) | recon.tsv, delta.tsv, delta_spectra.tsv, delta_counts.tsv (massgap.tsv, recon_id.mzTab) | Overview, Mass shifts, Tags, Spectrum |
 | W4 | **Species** | Which taxa the sample contains, from the bundled taxonomy index. No FASTA needed. | spectra | species.tsv | Overview, Species, Tags, Spectrum |
 | W5 | **Database reduction** | A protein shortlist, a reduced FASTA and a Sage, Comet or MSFragger configuration for your search. | spectra, protein FASTA | shortlist.tsv, reduced.fasta, engine config | Overview, Shortlist, Tags, Spectrum |
 | W6 | **Identifiability triage** | Rank MS/MS spectra by how identifiable they are, and mark those your search identified. | spectra (IDs optional) | census.tsv, census_summary.tsv, census_sorted.tsv | Overview, Triage, Tags, Spectrum |
-| W7 | **Characterize a run** | Protease, isobaric and SILAC labels, alkylation, glycopeptides and species, from 10% of the spectra. | spectra | digest.tsv, label.tsv, alkylation.tsv, glyco.tsv, species.tsv | Overview, Digest, Species, Glyco, Tags, Spectrum |
+| W7 | **Characterize a run** | Protease, isobaric and SILAC labels, alkylation, glycopeptides and species, from all spectra. | spectra | digest.tsv, label.tsv, alkylation.tsv, glyco.tsv, species.tsv | Overview, Digest, Species, Glyco, Tags, Spectrum |
 
 - **Tabs.** Every run writes its tags table, so Tags and Spectrum follow
   the workflow's own tabs in every workflow (results/ResultTabs.tsx
@@ -51,8 +51,8 @@ grid; see the Decision at the end of this section.
   **Decision:** batch is an input mode, as in FragPipe and MaxQuant. A
   separate W8 duplicated W2 and W7 and gave a single-file `-out` in a batch.
 - **Open results.** Open earlier results from the header (Results > Open…,
-  File > Open) and from a link "Open earlier results…" under the chooser. It
-  is not a card.
+  File > Open) and from "Open earlier results…" in the page header of every
+  Setup step. It is not a card.
   **Decision:** it is navigation, not a run.
 - **Task IDs.** New IDs: `run-qc`, `mass-shift`, `species`, `db-reduction`,
   `triage`. The IDs `export-tags` and `characterize` stay. Saved presets
@@ -77,7 +77,7 @@ grid; see the Decision at the end of this section.
 | W4 | `species true`, `species_out`, `extension 2` (validated in the paper: seed 3 + 2 x 2 = k 7) |
 | W5 | `shortlist_out`, `fasta_out`, `search_config_out`, `extension 3`, plus the shortlist recipe `shortlist_gapped true`, `recon_min_length 6`, `shortlist_max_evalue 10`, `recon_missed_cleavages 2` (doc/SHORTLIST.md). The recipe is **not validated**: with MSFragger and the tryptic shortlist it passed its second held-out test and failed the third. From 1.15.4 the CLI applies it by default only under `-search_engine msfragger` with `-shortlist_protease trypsin`; the GUI sets it for every engine and protease as its default recipe, and the workflow help says so. |
 | W6 | `census true`, `census_score true`, `census_sorted_out` |
-| W7 | `digest_out`, `label_out`, `glyco true`, `species true`, `extension 2`, `subsample_fraction 0.1`. `alkylation_out` is offered unchecked (round 2): its shipped proteome needs tags of 8+ residues, and extension 2 (validated for the species call) reaches 7. |
+| W7 | `digest_out`, `label_out`, `alkylation_out`, `glyco true`, `species true`, `extension 2`; all spectra (no `subsample_fraction`). From 1.16 the alkylation report is on and every spectrum is read: the report needs no database (its call is read off the tags), and on all spectra at extension 2 enough cysteines vote (PXD000001: methylthio, 52 of 69 votes), where 10% of the spectra (the earlier default) gave 8 votes and no call. Before 1.16 it placed on the shipped human proteome, which needs tags of 8+ residues. |
 
 ## 2. Parameters per workflow
 
@@ -111,7 +111,7 @@ where needed.
 | W3 | Missed cleavages (`recon_missed_cleavages`) | Missed tryptic cleavages allowed in a placement window (0 to 10). |
 | W4 | Report rank (`species_rank`) | Taxonomic level of the report: genus, family, … |
 | W4 | Presence call (`species_call`) | Experimental: under Advanced (round 2). Decoy calls each taxon present, no call or not detected. |
-| W4 | Spectra to read (`subsample_fraction`) | Fraction of spectra to read, 0 = all. 0.1 is usually enough. |
+| W4 | Spectra to read (`subsample_fraction`) | Fraction of spectra to read, 0 = all (the default). A share reads faster but gives fewer votes. |
 | W5 | Protein database (`recon_fasta`), required | FASTA to shortlist from. |
 | W5 | Background proteins (`shortlist_background`) | Host proteome and contaminants, always added to the reduced FASTA. |
 | W5 | Search engine (`search_engine`) | Engine to write a configuration for: Sage, Comet or MSFragger (experimental). |
@@ -120,7 +120,7 @@ where needed.
 | W6 | Identifications (`census_ids`), optional | idXML or mzIdentML of this run. Marks which spectra your search identified. |
 | W6 | ID q-value (`census_ids_fdr`) | q-value a target hit needs to count as identified. |
 | W6 | Triage E-value (`census_triage_evalue`) | An unidentified spectrum with a tag at or below this E-value is a triage candidate. |
-| W7 | Spectra to read (`subsample_fraction`) | Fraction of spectra to read. 0.1 gives stable calls in a tenth of the time. |
+| W7 | Spectra to read (`subsample_fraction`) | Fraction of spectra to read, 0 = all (the default). A share reads faster, but too few cysteines may vote for an alkylation call. |
 
 ### 2.3 Outputs card (per workflow)
 
@@ -146,7 +146,7 @@ Wiring rules (the checkbox drives the boolean; there is no separate field):
 | glyco.tsv | `glyco true` |
 | any census_* | `census true` |
 | census_sorted.tsv | `census_score true` |
-| delta.tsv, massgap.tsv, recon_id.tsv | recon.tsv checked and greyed ("needed by …") |
+| delta.tsv, massgap.tsv, recon_id.mzTab | recon.tsv checked and greyed ("needed by …") |
 | delta_spectra.tsv, delta_counts.tsv | delta.tsv |
 | shortlist, reduced FASTA, engine config | Protein database required |
 | check_header.tsv | `check_header_charge` set |
@@ -186,6 +186,15 @@ does not duplicate any of these.
 > and where every control of this section went (its section 7). The
 > workflows, their values, the product wiring and Advanced below are
 > unchanged.
+>
+> **UI refresh (2026-11-24):** every view shares one frame: the app bar
+> (views, run status, Search settings ⌘K, Help, Feedback, Theme), a page
+> header (title, one context line, page actions, then the steps or the
+> result tabs), the 1200 px content column and, in Setup and Batch, a sticky
+> action bar with one filled button. Help is the app bar's Help button (F1),
+> which opens the page of the screen shown; the per-field (?) popovers stay,
+> the page-level "Learn more" and "How to read…" links of the layers below
+> are gone. See doc/GUI-SETUP-WIZARD.md section 1a.
 
 ```
 [Header: Setup | Run | Results | Batch | History      Open… | ? Help]
@@ -229,9 +238,30 @@ Rules:
 - **Results tabs:**
   - Show only tabs whose report exists, in the order of section 1.
   - Rename "Mass gaps & recon" to **Mass shifts**.
-  - New tabs: **QC** (qc.tsv as grouped key/value pairs), **Triage**
+  - New tabs: **QC** (qc.tsv as a short page: tiles for MS2 spectra, tag
+    yield, instrument with serial and start time, isobaric kit and
+    redundancy; small charts, each with a Table view, for spectra per MS
+    level by analyzer, precursor charge, resolution by m/z band, reporter
+    assessability and reporter channels; every other row under a closed
+    **All values** with a filter; older `qc_version` reports get the same
+    page, the kit from their compatible kits and the channels from
+    `reporter_observed_*`), **Triage**
     (census_sorted with an identified/unidentified filter), and **Shortlist**
     (ranked proteins, "Reveal reduced FASTA / engine config").
+  - Triage opens with an **Overview** of every row (collapsible; the filter
+    does not change it): tiles for MS2 spectra, processed, the strong-tag
+    share (best E-value at or below the Triage E-value; the headline),
+    tagged (a tag passed -max_evalue; not a quality call) and identified
+    (only with -census_ids). Three charts: the peptide length the precursor
+    implies (averagine, 111.1254 Da per residue, by charge) with the tag
+    lengths on top; tags reported per spectrum by peaks (median, middle
+    half, the -max_tags cap); and the share of the peptide the tags cover by
+    estimated length (res_cover and max_len of census 2 and 3, else
+    best_len and the tag_cover m/z span, marked approximate; a census 3
+    res_cover with res_cover_exact 0 is marked approximate: a lower bound,
+    orientation unresolved (folded) or a gap's residues left out; a census 2 res_cover as placed by y
+    reads only). The -max_tags cap is per seed length; the number of
+    lengths is read from the summary's run/tag_length first.
   - Until a view exists, the file opens in the generic table.
   - The Overview names the workflow, shows the evidence-cutoff caveat once
     at the top, and replaces CLI flags with "Run again with …" buttons.
@@ -295,7 +325,7 @@ analyses" there.
 | Global > Charge and ions | `ion_series`, `ion_series_hybrid`, `unknown_charge`, `charge_min`, `charge_max`, `charge_infer_margin`, `isotope_error` | Advanced (`ion_series` is also set by the Instrument preset) |
 | Global > Complement pairs | `complement_rule`, `complement_tolerance`, `complement_tolerance_unit`, `complement_tol_factor`, `complement_probe`, `complement_midp` | Advanced |
 | Global > Isobaric reporters | `tmt_pseudo_filter`, `tmt_reporter_filter` | Advanced (experimental) |
-| Hidden, managed by the GUI | `progress`, `dump_spectrum`, `probe_input` | Hidden (progress bar, Spectrum tab, Input probe) |
+| Hidden, managed by the GUI | `progress`, `dump_spectrum`, `probe_input`, `data_paths` | Hidden (progress bar, Spectrum tab, Input probe) |
 | Hidden, boilerplate or no effect | `no_progress`, `version`, `log`, `debug`, `force`, `test`, `stream`, `mzpeak_read_memory` | Hidden |
 | Hidden, removed in 1.14 | `ion_series_photo`, `label_call_min_tags`, `label_discovery_depth`, `label_discovery_max_flank`, `label_discovery_min_share`, `label_discovery_min_spectra`, `label_discovery_out`, `label_discovery_unimod_top`, `label_discovery_window_c`, `label_discovery_window_n`, `pick_unknown_type`, `search_shifts`, `search_shifts_out`, `shift_expand_sites`, `shift_max_offsets`, `shift_max_variable`, `shift_site_min_count`, `shift_site_min_ions`, `shift_site_min_share`, `shortlist_exact_only`, `species_reagents` | Hidden; listed under Help > "Options not in the GUI" |
 
@@ -309,7 +339,8 @@ Implementation notes:
   `census_ids_accept`, `census_ids_exact`) must name a released version or
   none. The manifest is 1.15.3.
 - Alkylation: the Overview must not say "needs a FASTA".
-  `alkylation_proteome auto` uses the shipped human proteome.
+  `alkylation_proteome auto` reads no proteome: the call is read off the tags
+  (the run's Protein or Filter database, when given, adds a check).
 
 ## 5. Acceptance criteria (checkable on screenshots)
 

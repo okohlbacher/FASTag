@@ -7,7 +7,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { installMockBridge } from '../testing/mockBridge'
 import { shellLine } from '../app/format'
-import { chooseTask, click, currentStep, flush, goTo, key, renderApp, renderColdApp, runButton, showStep } from '../testing/render'
+import { addBatch, chooseTask, click, currentStep, flush, goTo, key, renderApp, renderColdApp, runButton, showStep } from '../testing/render'
 
 const field = (n: string): HTMLInputElement | null => document.getElementById(`p-${n}`) as HTMLInputElement | null
 const change = (el: Element, value: string): Promise<void> => act(async () => void fireEvent.change(el, { target: { value } }))
@@ -53,7 +53,7 @@ describe('wizard: step 1', () => {
     fireEvent.keyDown(tile('export-tags'), { key: 'ArrowRight' })
     expect(document.activeElement).toBe(tile('characterize'))
     // Focus selects (the detail panel), it does not choose.
-    expect(screen.getByRole('region', { name: /Characterize a run/ }).textContent).toMatch(/protease, labels, glycopeptides and species/)
+    expect(screen.getByRole('region', { name: /Characterize a run/ }).textContent).toMatch(/protease, labels, alkylation, glycopeptides and species, from all spectra/)
     expect(stepBtn(2).getAttribute('aria-disabled')).toBe('true')
     await act(async () => void fireEvent.keyDown(tile('characterize'), { key: 'Enter' }))
     expect(currentStep()).toBe(2)
@@ -107,19 +107,22 @@ describe('wizard: inputs per task', () => {
     expect(field('fasta')).toBeNull()
   })
 
-  it('Mass-shift survey requires the protein database: said at the field once Next was tried; a wrong extension warns', async () => {
+  it('Mass-shift survey offers a FASTA or a shipped proteome and never blocks on it (feedback 422372a2); a wrong extension warns', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
     await chooseTask('Mass-shift survey')
     expect(field('recon_fasta')).not.toBeNull()
-    expect(screen.queryByText(/^Required for Mass-shift survey: choose a protein FASTA/)).toBeNull()
-    expect(stepBtn(2).closest('li')!.className).toMatch(/blocked/)
-    expect(document.querySelector('.still-missing')!.textContent).toBe('Still missing: spectra, Protein database')
+    // The shipped proteomes, in step 2 beside it; none chosen at first.
+    const prot = document.getElementById('p-recon_proteome') as HTMLSelectElement
+    expect(prot.closest('[data-step]')!.getAttribute('data-step')).toBe('2')
+    expect([...prot.options].map((o) => o.textContent)).toEqual(['None', 'Human', 'Mouse', 'Yeast', 'E. coli'])
+    expect(prot.value).toBe('')
+    // Without a database only the spectra are missing.
+    expect(document.querySelector('.still-missing')!.textContent).toBe('Still missing: spectra')
     await click(screen.getByRole('button', { name: 'Next: Settings ›' }))
-    // Next is never a dead end: Settings opens; Inputs shows its errors.
     expect(currentStep()).toBe(3)
     showStep(2)
-    expect(screen.getByText('Required for Mass-shift survey: choose a protein FASTA.')).toBeDefined()
+    expect(screen.queryByText(/^Required for Mass-shift survey: choose a protein FASTA/)).toBeNull()
     await change(field('recon_fasta')!, '/d/proteins.txt')
     expect(screen.getByText('proteins.txt is not a FASTA file (.fasta, .fa, .faa).')).toBeDefined()
   })
@@ -136,6 +139,57 @@ describe('wizard: inputs per task', () => {
     showStep(4)
     await click(screen.getByRole('button', { name: 'Go to Inputs' }))
     expect(currentStep()).toBe(2)
+    // The one step path: the heading takes focus, the step is said.
+    expect(document.activeElement?.id).toBe('step-h-2')
+    expect(screen.getByText('Step 2 of 4: Inputs')).toBeDefined()
+    // From the Inputs step itself, too.
+    field('recon_fasta')!.focus()
+    await click(screen.getByRole('button', { name: 'Go to Inputs' }))
+    expect(document.activeElement?.id).toBe('step-h-2')
+  })
+
+  it('in Batch, Go to Inputs shows Setup on the Inputs step, its heading focused', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    await chooseTask('Mass-shift survey')
+    await addBatch(mock, ['/d/a.mzML', '/d/b.mzML'])
+    showStep(2)
+    await change(field('recon_fasta')!, '/d/missing.fasta')
+    await waitFor(() => expect(screen.getByText('Not found: /d/missing.fasta')).toBeDefined())
+    showStep(4)
+    await goTo('batch')
+    const go = within(document.querySelector<HTMLElement>('.view[data-view="batch"]')!).getByRole('button', { name: 'Go to Inputs' })
+    await click(go)
+    expect(document.querySelector<HTMLElement>('.view[data-view="setup"]')!.hidden).toBe(false)
+    expect(currentStep()).toBe(2)
+    expect(document.activeElement?.id).toBe('step-h-2')
+  })
+
+  it('with a queue, the Setup footer says why its Run n files is disabled, with Go to Inputs and the plan', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    await chooseTask('Mass-shift survey')
+    await addBatch(mock, ['/d/a.mzML', '/d/b.mzML', '/d/c.mzML'])
+    await goTo('setup')
+    showStep(2)
+    await change(field('recon_fasta')!, '/d/missing.fasta')
+    await waitFor(() => expect(screen.getByText('Not found: /d/missing.fasta')).toBeDefined())
+    showStep(4)
+    const bar = document.querySelector<HTMLElement>('.view[data-view="setup"] .actionbar')!
+    const queueRun = within(bar).getByRole('button', { name: 'Run 3 files' }) as HTMLButtonElement
+    expect(queueRun.disabled).toBe(true)
+    // The reason is on this screen, beside the disabled Run, and names it.
+    const why = within(bar).getByRole('status')
+    expect(why.textContent).toContain('Not found: /d/missing.fasta. Choose it again in Inputs.')
+    expect(queueRun.getAttribute('aria-describedby')).toBe(why.id)
+    expect(within(bar).getByRole('region', { name: 'Plan' })).toBeDefined()
+    await click(within(bar).getByRole('button', { name: 'Go to Inputs' }))
+    expect(currentStep()).toBe(2)
+    expect(document.activeElement?.id).toBe('step-h-2')
+    // Fixed, the reason goes and the queue can run.
+    await change(field('recon_fasta')!, '/d/human.fasta')
+    await waitFor(() => expect(within(bar).queryByRole('status')).toBeNull())
+    expect((within(bar).getByRole('button', { name: 'Run 3 files' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it.each([
@@ -150,8 +204,9 @@ describe('wizard: inputs per task', () => {
       mock.nextPickInput = '/d/run01.mzML'
       await click(screen.getByRole('button', { name: 'Choose file…' }))
       if (report) {
+        // On by default from 1.16 (Characterize's alkylation report).
         showStep(4)
-        await click(document.getElementById(`out-${report}`)!)
+        expect((document.getElementById(`out-${report}`) as HTMLInputElement).checked, report).toBe(true)
       }
       await openAdvanced(n)
       const f = field(n)!
@@ -176,11 +231,15 @@ describe('wizard: inputs per task', () => {
     expect(stepBtn(2).closest('li')!.className).toMatch(/blocked/)
     expect(Number(field('recon_fasta')!.closest<HTMLElement>('[data-step]')!.dataset.step)).toBe(2)
     expect(document.querySelectorAll('#p-recon_fasta')).toHaveLength(1)
+    // The run bar leads there too, though the field sat under Advanced (the
+    // alkylation report, on by default, reads it) while the change rendered.
+    expect(screen.getByRole('button', { name: 'Go to Inputs' })).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'Go to Settings' })).toBeNull()
     showStep(4)
     await click(screen.getByRole('button', { name: 'choose it in Inputs' }))
     expect(currentStep()).toBe(2)
     expect(document.querySelector('.still-missing')!.textContent).toBe('Still missing: Protein database')
-    expect(document.querySelector('[data-step="2"] .lead')!.textContent).toBe('Characterize a run needs spectra; optional: your taxonomy. Also required for Tag placements: a protein FASTA.')
+    expect(document.querySelector('.page-header .lead')!.textContent).toBe('Needs spectra; optional: your taxonomy. Also required for Tag placements: a protein FASTA.')
     await change(field('recon_fasta')!, '/d/human.fasta')
     expect(stepBtn(2).closest('li')!.className).not.toMatch(/blocked/)
     expect((runButton() as HTMLButtonElement).disabled).toBe(false)
@@ -228,7 +287,7 @@ describe('wizard: inputs per task', () => {
     await chooseTask('Species')
     const about = screen.getByRole('region', { name: 'About these spectra' })
     expect(within(about).getByLabelText(/^Instrument/)).toBeDefined()
-    expect(about.textContent).toMatch(/Was the sample alkylated\?/)
+    expect(about.textContent).toMatch(/Remove if the sample was not alkylated\./)
     await change(document.getElementById('instrument')!, 'iontrap-cid')
     expect(about.textContent).toMatch(/Species calls are unreliable on ion-trap spectra/)
     // The plan line names the assumptions, from every step.
@@ -320,6 +379,22 @@ describe('wizard: short paths', () => {
     expect(currentStep()).toBe(3)
     fireEvent.keyDown(field('tag_length')!, { key: 'ArrowRight', altKey: true })
     expect(currentStep()).toBe(3)
+  })
+
+  it('Alt+Right and Alt+Left work from the action bar\'s Next and Back too', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    expect(currentStep()).toBe(2)
+    const next = screen.getByRole('button', { name: /^Next: Settings/ })
+    next.focus()
+    await act(async () => void fireEvent.keyDown(next, { key: 'ArrowRight', altKey: true }))
+    expect(currentStep()).toBe(3)
+    expect(document.activeElement?.id).toBe('step-h-3')
+    const back = screen.getByRole('button', { name: /Back$/ })
+    back.focus()
+    await act(async () => void fireEvent.keyDown(back, { key: 'ArrowLeft', altKey: true }))
+    expect(currentStep()).toBe(2)
+    expect(document.activeElement?.id).toBe('step-h-2')
   })
 
   it('the command preview of step 4 is the command line Run starts', async () => {

@@ -17,6 +17,8 @@
 
 #include <algorithm>
 #include <iterator>
+#include <limits>
+#include <string_view>
 #include <cassert>
 #include <cmath>
 #include <numeric>
@@ -895,9 +897,16 @@ namespace FASTag
         t.nterm_mass = std::max(0.0, s.precursor_mass - ((avg + cum) * charge - PROTON * charge) - (WATER - offC));
       }
       t.ion_series = p.ion_pair.kind;
+      t.res_mass = cum * charge;
 
       t.seq = spell(A, path);
-      for (const Step& st : path) { t.n_res += stepResidues(st); t.gapped = t.gapped || st.gap; }
+      t.step_res.reserve(path.size());
+      for (const Step& st : path)
+      {
+        t.n_res += stepResidues(st);
+        t.gapped = t.gapped || st.gap;
+        t.step_res.push_back(static_cast<uint8_t>(stepResidues(st)));  // path[i]: peaks[i] -> peaks[i + 1]
+      }
       if (p.per_residue_conf)
       {
         // The path was traversed C->N and seq is stored N->C (see spell()), so
@@ -981,15 +990,22 @@ namespace FASTag
     }
 
     /// A scored tag plus the indices (into Prepared::spec) of the peaks that
-    /// spelled it -- the exact, integer signature -diversity needs to tell a
-    /// re-read of the same ladder from genuinely different evidence. Filled
-    /// only under -diversity, its one reader: a copy per tag is a heap
-    /// allocation per tag.
+    /// spelled it, ascending -- the exact, integer signature -diversity needs
+    /// to tell a re-read of the same ladder from genuinely different evidence,
+    /// and the path peaks a reported tag carries (Tag::path_mz). The indices
+    /// live in one flat per-thread buffer (PathPeaks), [off, off + n): a
+    /// vector per candidate would be a heap allocation per candidate.
     struct ScoredTag
     {
       Tag tag;
-      std::vector<uint32_t> peaks;
+      uint32_t off = 0, n = 0;
     };
+    /// The flat buffer of ScoredTag's peak indices, reused across spectra.
+    std::vector<uint32_t>& pathPeaks()
+    {
+      static thread_local std::vector<uint32_t> buf;
+      return buf;
+    }
 
     /// Push one scored path as one or more tags.
     ///
@@ -1006,8 +1022,12 @@ namespace FASTag
               const Param& p, const Tables& tab, const std::vector<uint32_t>& peaks,
               const std::vector<Step>& path, int charge)
     {
-      const auto sig = [&]() { return p.diversity ? peaks : std::vector<uint32_t>(); };
-      if (!t.gapped) { ++n_seeds; out.push_back({std::move(t), sig()}); return; }
+      // Every spelling of the path shares its peaks: stored once.
+      std::vector<uint32_t>& flat = pathPeaks();
+      const uint32_t off = static_cast<uint32_t>(flat.size());
+      const uint32_t n = static_cast<uint32_t>(peaks.size());
+      flat.insert(flat.end(), peaks.begin(), peaks.end());
+      if (!t.gapped) { ++n_seeds; out.push_back({std::move(t), off, n}); return; }
 
       size_t gi = 0;   // the gap step; peaks has one entry more than path
       while (!path[gi].gap) ++gi;
@@ -1047,11 +1067,11 @@ namespace FASTag
           Tag v = scorePath(s, p, tab, peaks, alt, charge);
           v.extended = t.extended;
           ++n_seeds;
-          out.push_back({std::move(v), sig()});
+          out.push_back({std::move(v), off, n});
           ++emitted;
         }
       }
-      if (emitted == 0) { ++n_seeds; out.push_back({std::move(t), sig()}); }
+      if (emitted == 0) { ++n_seeds; out.push_back({std::move(t), off, n}); }
     }
 
     /// Fewest peaks that can carry a tag of p.tag_length residues. A gap
@@ -1084,6 +1104,7 @@ namespace FASTag
     // for the DFS stack, per start peak.
     static thread_local std::vector<ScoredTag> scored;
     scored.clear();
+    pathPeaks().clear();
     size_t n_seeds = 0;
     const Alphabet& A = tables.alphabet();
 
@@ -1225,20 +1246,27 @@ namespace FASTag
     // the rank comparator so the header's ordered-by-E-value contract holds.
     // Both hold indices into scored.
     std::vector<uint32_t> div_kept, div_deferred;
-    auto near_dup = [](const ScoredTag& a, const ScoredTag& b) {
+    const std::vector<uint32_t>& flat = pathPeaks();
+    auto near_dup = [&flat](const ScoredTag& a, const ScoredTag& b) {
       if (a.tag.charge != b.tag.charge) return false;
-      if (a.peaks.size() < 4 || b.peaks.size() < 4) return false;
+      if (a.n < 4 || b.n < 4) return false;
       // peaks ascend: every graph edge, and so every path, runs to higher m/z.
-      const std::vector<uint32_t>& pa = a.peaks;
-      const std::vector<uint32_t>& pb = b.peaks;
+      const uint32_t* pa = flat.data() + a.off;
+      const uint32_t* pb = flat.data() + b.off;
       size_t i = 0, j = 0, shared = 0;
-      while (i < pa.size() && j < pb.size())
+      while (i < a.n && j < b.n)
       {
         if (pa[i] == pb[j]) { ++shared; ++i; ++j; }
         else if (pa[i] < pb[j]) ++i;
         else ++j;
       }
-      return shared >= std::min(pa.size(), pb.size()) - 1;
+      return shared >= std::min<size_t>(a.n, b.n) - 1;
+    };
+    // A reported tag's path peaks (Tag::path_mz), ascending m/z.
+    const auto with_path = [&flat, &s](ScoredTag& c) -> Tag& {
+      c.tag.path_mz.resize(c.n);
+      for (uint32_t k = 0; k < c.n; ++k) c.tag.path_mz[k] = s.spec[flat[c.off + k]].getMZ();
+      return c.tag;
     };
 
     const TmtPseudo::Filter tmt_filter(p);
@@ -1267,7 +1295,7 @@ namespace FASTag
       if (!seen.emplace(t.seq, t.charge, t.nterm_mass, t.cterm_mass).second) continue;
       if (!p.diversity || p.max_tag_count <= 0)
       {
-        out.push_back(std::move(t));
+        out.push_back(std::move(with_path(cand)));
         if (p.max_tag_count > 0 && static_cast<int>(out.size()) >= p.max_tag_count) break;
         continue;
       }
@@ -1289,7 +1317,7 @@ namespace FASTag
         div_kept.push_back(d);
       }
       std::stable_sort(div_kept.begin(), div_kept.end(), by_rank_cmp);
-      for (const uint32_t k : div_kept) out.push_back(std::move(scored[k].tag));
+      for (const uint32_t k : div_kept) out.push_back(std::move(with_path(scored[k])));
     }
     return out;
   }
@@ -1449,5 +1477,113 @@ namespace FASTag
     std::stable_sort(rows.begin(), rows.end(), [](const Tag& a, const Tag& b) { return a.evalue < b.evalue; });
     if (cap > 0 && rows.size() > cap) rows.erase(rows.begin() + static_cast<std::ptrdiff_t>(cap), rows.end());
     return rows;
+  }
+
+  namespace
+  {
+    /// The residues of a tag sequence as written, one token each: a letter
+    /// and its inline modification ("M[Oxidation]").
+    std::vector<std::string_view> residueTokens(const std::string& seq)
+    {
+      std::vector<std::string_view> out;
+      for (size_t i = 0; i < seq.size();)
+      {
+        size_t j = i + 1;
+        if (j < seq.size() && seq[j] == '[')
+        {
+          int depth = 0;
+          for (; j < seq.size(); ++j)
+          {
+            if (seq[j] == '[') ++depth;
+            else if (seq[j] == ']' && --depth == 0) { ++j; break; }
+          }
+        }
+        out.emplace_back(seq.data() + i, j - i);
+        i = j;
+      }
+      return out;
+    }
+    /// A tag's residues per path step, ascending m/z (Tag::step_res); a tag
+    /// without them reads one residue per step if that fits its @p n_tok
+    /// residues. Empty: unknown (fewer than two peaks, or no fit).
+    std::vector<uint8_t> stepCounts(const Tag& t, size_t n_tok)
+    {
+      if (t.path_mz.size() < 2) return {};
+      const size_t steps = t.path_mz.size() - 1;
+      if (t.step_res.size() == steps)
+      {
+        size_t sum = 0;
+        for (const uint8_t c : t.step_res) sum += c;
+        return sum == n_tok ? t.step_res : std::vector<uint8_t>();
+      }
+      return n_tok == steps ? std::vector<uint8_t>(steps, 1) : std::vector<uint8_t>();
+    }
+    /// Whether row a lies in row b: a's path peaks a contiguous run of b's
+    /// and, on those peaks, b reads a's residues step by step. seq runs from
+    /// the high m/z end (spell()), so b's residues on its steps k .. k+n-1
+    /// start after the residues of its steps above k+n-1.
+    bool liesIn(const std::vector<double>& pa, const std::vector<uint8_t>& ca, const std::vector<std::string_view>& ta,
+                const std::vector<double>& pb, const std::vector<uint8_t>& cb, const std::vector<std::string_view>& tb)
+    {
+      if (ca.empty() || cb.empty() || pa.size() > pb.size()) return false;
+      const auto it = std::search(pb.begin(), pb.end(), pa.begin(), pa.end());
+      if (it == pb.end()) return false;  // path_mz ascends strictly: the offset is unique
+      const size_t k = static_cast<size_t>(it - pb.begin());
+      const size_t n = ca.size();
+      if (!std::equal(ca.begin(), ca.end(), cb.begin() + static_cast<std::ptrdiff_t>(k))) return false;
+      size_t off = 0;
+      for (size_t j = k + n; j < cb.size(); ++j) off += cb[j];
+      return off + ta.size() <= tb.size()
+          && std::equal(ta.begin(), ta.end(), tb.begin() + static_cast<std::ptrdiff_t>(off));
+    }
+  }
+
+  std::vector<char> subsumedTags(const std::vector<Tag>& tags, const std::vector<std::uint8_t>& hyp,
+                                 const std::vector<char>& eligible)
+  {
+    // ponytail: O(n^2) pairs per spectrum; n is at most max_tags x seed
+    // lengths x precursor hypotheses (x 2 passes of a hybrid spectrum share
+    // that cap), a few hundred rows at the most.
+    const size_t n = tags.size();
+    std::vector<char> out(n, 0);
+    if (n < 2) return out;
+    std::vector<std::vector<std::string_view>> tok(n);
+    std::vector<std::vector<uint8_t>> cnt(n);
+    for (size_t i = 0; i < n; ++i)
+    {
+      tok[i] = residueTokens(tags[i].seq);
+      cnt[i] = stepCounts(tags[i], tok[i].size());
+    }
+    const auto takes_part = [&](size_t i) { return eligible.empty() || eligible[i]; };
+    const auto hyp_of = [&](size_t i) { return hyp.empty() ? 0 : static_cast<int>(hyp[i]); };
+    // An unscored row (NaN E-value) counts as +infinity: it licenses no drop
+    // of a scored row, and any container licenses its drop. One total order
+    // keeps the rule transitive.
+    const auto ev = [&](size_t i) {
+      const double e = tags[i].evalue;
+      return std::isnan(e) ? std::numeric_limits<double>::infinity() : e;
+    };
+    for (size_t a = 0; a < n; ++a)
+    {
+      if (!takes_part(a)) continue;
+      const Tag& A = tags[a];
+      for (size_t b = 0; b < n && !out[a]; ++b)
+      {
+        if (b == a || !takes_part(b)) continue;
+        const Tag& B = tags[b];
+        if (A.charge != B.charge || A.ion_series != B.ion_series || hyp_of(a) != hyp_of(b)) continue;
+        if (!eligible.empty() && eligible[a] != eligible[b]) continue;  // another hit class
+        if (!liesIn(A.path_mz, cnt[a], tok[a], B.path_mz, cnt[b], tok[b])) continue;
+        // A lies in B. If B lies in A as well they are duplicates: the
+        // better E-value (then the earlier row) is the one kept. Otherwise B
+        // is longer, and A gives way only to a B at least as significant:
+        // E(B) <= E(A).
+        const bool dup = A.path_mz.size() == B.path_mz.size() && tok[a].size() == tok[b].size();
+        if (dup && (ev(a) < ev(b) || (!(ev(b) < ev(a)) && a < b))) continue;
+        if (!dup && !(ev(b) <= ev(a))) continue;
+        out[a] = 1;
+      }
+    }
+    return out;
   }
 }

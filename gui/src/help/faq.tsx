@@ -129,12 +129,12 @@ export const FAQ: FaqEntry[] = [
       <>Checks before the run are still running, a check blocks the run, or a red flag has not been answered.</>,
       <>A value is marked red: FASTag would refuse it. The reason is written under the field and above the Run button.</>,
       <>Two settings do not go together, for example species detection with tags that are too short. The reason is written above the Run button.</>,
-      <>Files are queued for a batch: the Batch view has its own Run button. It is disabled when no files remain to run; failed files have a separate Retry failed button.</>,
+      <>Files are queued for a batch: the bar runs the queue (Run n files in Setup, Run n remaining files in Batch). When no files remain to run, Run is gone; if files failed, Retry failed takes its place.</>,
       <>A run is still going.</>
     ],
     fixes: [
-      <>Fix what the message above the Run button names. For an input check, wait for it to finish, then read its suggested fix. Choose Run anyway only after understanding a red flag; a blocking check cannot be overridden. See <L to="faq-inspector">What the checks mean</L>.</>,
-      <>If FASTag cannot start, see <L to="faq-will-not-start">Restoring the bundled program</L>. Reset… changes parameters only; it cannot fix missing files or an unavailable program.</>
+      <>Fix what the message above the Run button names. For an input check, wait for it to finish, then read its suggested fix. Run anyway sits in Inputs, beside the red flag (from Settings or Outputs, <strong>Review input checks</strong> in the bar's message goes there); choose it only after understanding the flag; a blocking check cannot be overridden. See <L to="faq-inspector">What the checks mean</L>.</>,
+      <>If FASTag cannot start, see <L to="faq-will-not-start">Restoring the bundled program</L>. Loading FASTag defaults changes parameters only; it cannot fix missing files or an unavailable program.</>
     ]
   },
   {
@@ -147,6 +147,41 @@ export const FAQ: FaqEntry[] = [
     ],
     fixes: [
       <>Show full log opens the run log. The drawer shows the last 500 lines; the app retains at most 5,000 lines for a run, so this is not a complete log of a long run. Copy command copies the command line, to run it in a terminal or to send with a question. If you need every message, rerun in a terminal and save its standard output and error output to a file.</>
+    ]
+  },
+  {
+    id: 'faq-shipped-data',
+    group: 'Running',
+    question: "The run fails because FASTag's shipped data is missing",
+    symptoms: (
+      <>
+        The check before the run, or FASTag&apos;s reason (exit code 6), says the mass-gap report, the digest report, the database reduction or the
+        alkylation report with a named proteome needs a file of FASTag&apos;s shipped data (massgap_mods.tsv, digest_models.tsv, a proteome such as human.fasta.gz) and it is not
+        found.
+      </>
+    ),
+    causes: [
+      <>
+        FASTag finds its shipped data next to the program. A FASTag built from source and not installed, or a copy of the program on its own (for example one
+        named by <C>FASTAG_BIN</C>), has none beside it. The desktop app and an installed FASTag have it.
+      </>,
+      <>
+        <C>FASTAG_DIGEST_DIR</C> or <C>FASTAG_ALKYLATION_DIR</C> is set to a folder that does not exist or lacks the file.
+      </>
+    ],
+    fixes: [
+      <>Use an installed FASTag: cmake --install puts the data in &lt;prefix&gt;/share/FASTag/digest and share/FASTag/alkylation.</>,
+      <>
+        Or set <C>FASTAG_DIGEST_DIR</C> to a folder that holds the file (data/digest in the FASTag sources), and for the alkylation report{' '}
+        <C>FASTAG_ALKYLATION_DIR</C> (data/alkylation). Then start FASTag again.
+      </>,
+      <>Or run without the report that needs it. The alkylation report needs no proteome at its default (auto): its call is read off the tags.</>,
+      <>
+        A FASTag program older than the app (named by <C>FASTAG_BIN</C>) may read auto as the shipped human proteome. One that says so asks for human.fasta.gz before
+        the run, or says the report will use the human proteome; one without <C>-data_paths</C> does not say how it reads auto, so the check only warns and does not
+        hold the run. Use the FASTag the app ships, or name the proteome of your sample. A program without <C>-recon_proteome</C> is held before a shipped proteome is
+        sent to it (Use no shipped proteome).
+      </>
     ]
   },
   {
@@ -442,6 +477,7 @@ export const CLASSES: [RegExp, string][] = [
   [/FASTAG_REFUSED reason=raw_dia|' is raw \S*DIA\b|-acquisition_check warn/, 'faq-raw-dia'],
   [/cannot reach the index k/, 'faq-species-short'],
   [/-species: no |taxonomy directory|Failed to load (-taxdb|taxonomy)/, 'faq-species-reference'],
+  [/shipped digest data|no shipped \w+ proteome|FASTAG_DIGEST_DIR|FASTAG_ALKYLATION_DIR/, 'faq-shipped-data'],
   [/Unknown modification/, 'faq-modification'],
   [/reach the minimum filter length/, 'faq-min-filter'],
   [/No spectrum carried a reported tag/, 'faq-out-spectra-none'],

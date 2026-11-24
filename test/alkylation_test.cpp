@@ -306,16 +306,20 @@ int main()
     {
       sections.insert(r.section);
       full = full && !r.key.empty() && !r.value.empty() && !r.n.empty() && !r.description.empty();
-      if (r.section == "alkylation_call") call_keys += (call_keys.empty() ? "" : ",") + r.key;
+      if (r.section == "alkylation_placement_call") call_keys += (call_keys.empty() ? "" : ",") + r.key;
     }
-    check(sections == std::set<std::string>{"alk_run", "alk_cys", "alkylation_call"},
-          "sections alk_run, alk_cys, alkylation_call only (never run or cys)");
+    // format 2: the placement call is alkylation_placement_call; the caller
+    // adds the tag sections and the combined alkylation_call
+    check(sections == std::set<std::string>{"alk_run", "alk_cys", "alkylation_placement_call"},
+          "sections alk_run, alk_cys, alkylation_placement_call only (never run or cys)");
     check(full, "every field filled");
-    check(call_keys == "status,reagent,mass,share,reason", "alkylation_call keys in order: " + call_keys);
-    check(value(rows, "alk_run", "format") == "1" && value(rows, "alkylation_call", "reagent") == "Carbamidomethyl" &&
+    check(call_keys == "status,reagent,mass,share,voted,reason", "alkylation_placement_call keys in order: " + call_keys);
+    check(value(rows, "alk_run", "format") == "4" && value(rows, "alk_run", "method") == "tags+placement" &&
+              value(rows, "alkylation_placement_call", "reagent") == "Carbamidomethyl" &&
               value(rows, "alk_cys", "class.Carbamidomethyl") == "30" && value(rows, "alk_cys", "unexplained") == "12",
           "report values");
-    check(value(rows, "alkylation_call", "mass") == D::num(CAM), "reagent mass row");
+    check(rows.size() > 1 && rows[1].key == "method", "method follows format");
+    check(value(rows, "alkylation_placement_call", "mass") == D::num(CAM), "reagent mass row");
     // 1.13 (#24): database_release only for a shipped proteome, right after database_source
     check(value(rows, "alk_run", "database_release").rfind("<missing", 0) == 0,
           "no database_release row for a database that is not shipped");
@@ -331,9 +335,9 @@ int main()
               brows[src_at + 1].value == binfo.database_release && brows[src_at + 1].n == "-",
           "database_release follows database_source with the release");
     const auto none_rows = A::alkylationRows(A::Tally(), A::callAlkylation(A::Tally(), s), s, forms, info);
-    check(value(none_rows, "alkylation_call", "status") == "no_call" &&
-              value(none_rows, "alkylation_call", "reason") == "few_cys_spectra" &&
-              value(none_rows, "alkylation_call", "share") == "-",
+    check(value(none_rows, "alkylation_placement_call", "status") == "no_call" &&
+              value(none_rows, "alkylation_placement_call", "reason") == "few_cys_spectra" &&
+              value(none_rows, "alkylation_placement_call", "share") == "-",
           "an empty run: no_call few_cys_spectra");
     check(rows.size() == none_rows.size(), "the same rows whatever the counts");
     check(value(rows, "alk_cys", "excluded.non_by") == "0" && value(rows, "alk_run", "fixed_nterm_delta") == "0" &&
@@ -469,8 +473,9 @@ int main()
     info.min_tag_length = 8;
     info.longest_tag = 3;
     const auto rows = A::alkylationRows(A::Tally(), c, s, forms, info);
-    check(value(rows, "alk_run", "min_tag_length") == "8" && value(rows, "alkylation_call", "reason") == "tags_too_short" &&
-              value(rows, "alkylation_call", "status") == "no_call",
+    check(value(rows, "alk_run", "min_tag_length") == "8" &&
+              value(rows, "alkylation_placement_call", "reason") == "tags_too_short" &&
+              value(rows, "alkylation_placement_call", "status") == "no_call",
           "min_tag_length row and the tags_too_short reason");
     bool says = false;
     for (const D::Row& r : rows)
@@ -481,6 +486,94 @@ int main()
     const auto prow = A::alkylationRows(A::Tally(), A::callAlkylation(A::Tally(), s), s, forms, plain);
     check(value(prow, "alk_run", "min_tag_length").rfind("<missing", 0) == 0 && prow.size() + 2 == rows.size(),
           "no min_tag_length row without a shipped proteome");
+  }
+
+  // ---- feedback 202dbcf4: the call needs no database; placements refine it
+  {
+    const A::Settings s = settings(0.0);
+    const std::vector<A::Form> forms = A::forms();
+    A::Call tags_cam = A::callAlkylation(tally(30, 0), s);
+    A::Call tags_none = A::callAlkylation(tally(0, 30), s);
+    A::Call nocall = A::callAlkylation(A::Tally(), s);
+    check(tags_cam.called && tags_cam.cls == A::CARBAMIDOMETHYL && tags_none.called && tags_none.cls == A::NONE &&
+              !nocall.called,
+          "the three input calls");
+    A::Call c = A::combineCalls(tags_cam, nullptr);
+    check(c.called && c.cls == A::CARBAMIDOMETHYL && c.source == "tags", "no database: the tag call");
+    c = A::combineCalls(nocall, nullptr);
+    check(!c.called && c.reason == "few_cys_spectra" && c.source == "tags", "no database, no tag call: its reason");
+    c = A::combineCalls(tags_cam, &tags_cam);
+    check(c.called && c.cls == A::CARBAMIDOMETHYL && c.source == "tags+placement", "both agree");
+    c = A::combineCalls(nocall, &tags_cam);
+    check(c.called && c.cls == A::CARBAMIDOMETHYL && c.source == "placement" && c.binned == tags_cam.binned,
+          "only the placements call: theirs, with their counts");
+    c = A::combineCalls(tags_cam, &nocall);
+    check(c.called && c.source == "tags", "only the tags call: theirs");
+    c = A::combineCalls(tags_cam, &tags_none);
+    check(!c.called && c.reason == "disagree" && c.source == "tags+placement", "both call, differently: disagree");
+    A::Call tooshort = nocall;
+    A::markTagsTooShort(tooshort, 3, 8);
+    c = A::combineCalls(nocall, &tooshort);
+    check(!c.called && c.reason == "few_cys_spectra" && c.source == "tags",
+          "neither calls: the tag reason, never tags_too_short");
+
+    // the run rows without a database
+    const auto run = A::tagOnlyRunRows(s);
+    std::string keys;
+    for (const D::Row& r : run)
+    {
+      check(r.section == "alk_run" && !r.value.empty() && !r.n.empty() && !r.description.empty(), "alk_run row " + r.key);
+      keys += (keys.empty() ? "" : ",") + r.key;
+    }
+    check(keys == "format,method,database,database_source,min_spectra,min_share", "tag-only alk_run keys: " + keys);
+    check(value(run, "alk_run", "format") == "4" && value(run, "alk_run", "method") == "tags" &&
+              value(run, "alk_run", "database") == "-" && value(run, "alk_run", "database_source") == "none",
+          "tag-only alk_run values");
+
+    // the combined call section: seven rows (format 3: voted after share), source last
+    const auto fr = A::callRows("alkylation_call", A::combineCalls(tags_cam, nullptr), s, forms, "votes", true);
+    keys.clear();
+    for (const D::Row& r : fr) keys += (keys.empty() ? "" : ",") + r.key;
+    check(keys == "status,reagent,mass,share,voted,reason,source", "alkylation_call keys: " + keys);
+    check(value(fr, "alkylation_call", "source") == "tags" && value(fr, "alkylation_call", "reagent") == "Carbamidomethyl",
+          "alkylation_call values");
+    const auto dr = A::callRows("alkylation_call", A::combineCalls(tags_cam, &tags_none), s, forms, "votes", true);
+    check(value(dr, "alkylation_call", "status") == "no_call" && value(dr, "alkylation_call", "reason") == "disagree" &&
+              value(dr, "alkylation_call", "reagent") == "-" && value(dr, "alkylation_call", "source") == "tags+placement",
+          "a disagreement is a no_call");
+  }
+
+  // ---- review n3: a conflict counts against the share. 10 CAM and 90
+  //      conflicts were a share of 1.0 (the conflicts left the denominator)
+  //      and a call; now 0.1 of 100, ambiguous. 90 CAM and 10 conflicts stay
+  //      called at 0.9.
+  {
+    A::Settings s;
+    A::Tally t;
+    t.cls[A::CARBAMIDOMETHYL] = 10;
+    t.conflict = 90;
+    t.spectra = 100;
+    const A::Call c = A::callAlkylation(t, s);
+    check(!c.called && c.reason == "ambiguous" && c.binned == 10 && c.voted == 100 && std::fabs(c.share - 0.1) < 1e-12,
+          "10 CAM + 90 conflicts: no_call ambiguous, share 0.1 of 100 (called " + std::to_string(c.called) + ", share " +
+              std::to_string(c.share) + ", voted " + std::to_string(c.voted) + ")");
+    const auto r = A::callRows("alkylation_placement_call", c, s, A::forms(), "binned spectra", false);
+    check(value(r, "alkylation_placement_call", "share") == "0.1" && value(r, "alkylation_placement_call", "voted") == "100",
+          "the share and voted rows: " + value(r, "alkylation_placement_call", "share") + " " +
+              value(r, "alkylation_placement_call", "voted"));
+    for (const D::Row& row : r)
+      if (row.key == "share") check(row.n == "100", "the share row's n is the denominator: " + row.n);
+    A::Tally k;
+    k.cls[A::CARBAMIDOMETHYL] = 90;
+    k.conflict = 10;
+    k.spectra = 100;
+    const A::Call d = A::callAlkylation(k, s);
+    check(d.called && d.cls == A::CARBAMIDOMETHYL && d.voted == 100 && std::fabs(d.share - 0.9) < 1e-12,
+          "90 CAM + 10 conflicts: call CAM, share 0.9");
+    // unexplained votes stay out of the denominator
+    A::Tally x = k;
+    x.unexplained = 50;
+    check(A::callAlkylation(x, s).voted == 100, "unexplained votes are not in the share");
   }
 
   if (failures) std::cerr << failures << " failure(s)\n";

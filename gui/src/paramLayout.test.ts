@@ -86,10 +86,11 @@ describe('dependencies', () => {
     expect(inertBecause('subsample_seed', { subsample_fraction: '0.1' })).toBeNull()
   })
 
-  it('arms the digest window from EITHER report', () => {
+  it('arms the digest window from ANY of its reports (digest, label, Run QC)', () => {
     expect(inertBecause('digest_window', off)).not.toBeNull()
     expect(inertBecause('digest_window', { digest_out: '/r/d.tsv' })).toBeNull()
     expect(inertBecause('digest_window', { label_out: '/r/l.tsv' })).toBeNull()
+    expect(inertBecause('digest_window', { qc_out: '/r/q.tsv' })).toBeNull()
   })
 
   it('needs both recon_out and massgap_out for the mass-gap knobs', () => {
@@ -211,6 +212,7 @@ describe('dependencies follow the CLI reader table', () => {
     '-digest_out': { on: [{ digest_out: 'd.tsv' }], off: [{}] },
     '-digest_out or -label_out': { on: [{ digest_out: 'd.tsv' }, { label_out: 'l.tsv' }], off: [{}] },
     '-label_out': { on: [{ label_out: 'l.tsv' }], off: [{ digest_out: 'd.tsv' }] },
+    '-digest_out, -label_out or -qc_out': { on: [{ digest_out: 'd.tsv' }, { label_out: 'l.tsv' }, { qc_out: 'q.tsv' }], off: [{}] },
     '-glyco': { on: [{ glyco: true }], off: [{}] },
     '-species': { on: [{ species: true }], off: [{}] },
     '-acquisition_check refuse or warn': { on: [{ acquisition_check: 'warn' }, { acquisition_check: 'refuse' }], off: [{ acquisition_check: 'off' }] },
@@ -228,6 +230,10 @@ describe('dependencies follow the CLI reader table', () => {
     '-species_call decoy': { on: [{ species: true, species_call: 'decoy' }], off: [{ species: true, species_call: 'none' }] },
     '-alkylation_out': { on: [{ alkylation_out: 'a.tsv' }], off: [{ alkylation_tags_out: 't.tsv' }] },
     '-alkylation_out or -alkylation_tags_out': { on: [{ alkylation_out: 'a.tsv' }, { alkylation_tags_out: 't.tsv' }], off: [{}] },
+    '-alkylation_out with a database (-recon_fasta, -fasta or -alkylation_proteome)': {
+      on: [{ alkylation_out: 'a.tsv', recon_fasta: '/d/db.fasta' }, { alkylation_out: 'a.tsv', fasta: '/d/db.fasta' }, { alkylation_out: 'a.tsv', alkylation_proteome: 'human' }],
+      off: [{ alkylation_out: 'a.tsv' }, { alkylation_out: 'a.tsv', alkylation_proteome: 'auto' }, { recon_fasta: '/d/db.fasta' }]
+    },
     '-census': { on: [{ census: true }], off: [{}] },
     '-census_ids': { on: [ids], off: [{ census: true }] },
     '-census_score': { on: [{ census: true, census_score: true }], off: [{ census: true }] }

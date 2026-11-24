@@ -18,7 +18,7 @@ describe('map: param overlay vs CLI manifest', () => {
     expect(c).toContain('domain')
     expect(c).not.toContain('superkingdom')
   })
-  it('renders 157 parameters and hides 37: boilerplate, options the GUI drives itself, those removed in 1.14, shortlist_defaults of 1.15.4 and the tag-graph outputs of 1.15.7', () => {
+  it('renders 156 parameters and hides 37: boilerplate, options the GUI drives itself, those removed in 1.14 and shortlist_defaults of 1.15.4', () => {
     // 1.10.0 added species_evidence (rendered) to the 1.9.0 set; 1.12.0 adds
     // 64 options (8 of them #17 -search_shifts), hidden until each has its GUI design, except
     // acquisition_check: its default refuses raw DIA, so the form offers warn/off.
@@ -39,10 +39,11 @@ describe('map: param overlay vs CLI manifest', () => {
     // 1.15.4 adds shortlist_defaults, hidden: Database reduction sets the
     // recipe values itself. 1.15.5 adds tolerance_by_analyzer and
     // fragment_tolerance_itms, rendered under Advanced (Fragment tolerance by analyzer).
-    // 1.15.7 adds the resolved tags: resolve_score, resolve_threshold,
-    // resolve_max_evalue and resolve_join rendered (Resolved tags, advanced);
-    // -resolved_out and -tag_graph_out hidden, the app writes them itself.
-    expect(RENDERED.length).toBe(157)
+    // 1.16 adds terminus and subsume_tags, rendered (Tag columns and files).
+    // (The six tag-merging options of the development builds after 1.15.7,
+    // four rendered and two hidden, were never released and are gone.)
+    // Feedback 422372a2 adds recon_proteome, rendered (Mass-shift survey, Inputs).
+    expect(RENDERED.length).toBe(156)
     // 1.13 digqual adds digest_quality, hidden as experimental.
     // TMT pseudo-residue and reporter filtering add two hidden experimental options.
     // post-1.13.1 adds search_missed_cleavages and search_nterm_acetyl (by engine), hidden.
@@ -50,18 +51,22 @@ describe('map: param overlay vs CLI manifest', () => {
     // post-1.13.1 adds shortlist_exact_only (msfragger gapped default off), hidden as experimental.
     // 1.14 removes shortlist_exact_only (failed its held-out test): the name stays, hidden, advanced since.
     // 1.16 adds census_ids_accept (command-line only), hidden.
+    // 1.16 adds fasta_proteins, hidden: the GUI sets it to 3 whenever a filter database is given.
+    // 1.16 adds data_paths, hidden: the app's check before a run asks the engine with it.
     expect(HIDDEN_PARAMS.length).toBe(37)
-    for (const n of ['resolved_out', 'tag_graph_out']) expect(HIDDEN_PARAMS).toContain(n)
-    for (const n of ['resolve_score', 'resolve_threshold', 'resolve_max_evalue', 'resolve_join']) expect(RENDERED).toContain(n)
+    for (const n of ['resolved_out', 'tag_graph_out', 'resolve_score', 'resolve_threshold', 'resolve_max_evalue', 'resolve_join'])
+      expect([...RENDERED, ...HIDDEN_PARAMS]).not.toContain(n)
+    for (const n of ['terminus', 'subsume_tags']) expect(RENDERED).toContain(n)
     expect(HIDDEN_PARAMS).toContain('shortlist_defaults')
     for (const n of ['tolerance_by_analyzer', 'fragment_tolerance_itms']) expect(RENDERED).toContain(n)
     for (const n of ['qc_out', 'census_score', 'census_sorted_out', 'delta_spectra_out', 'census_ids_accept', 'search_missed_cleavages', 'tmt_pseudo_filter', 'digest_quality', 'alkylation_tags_out', 'ion_series_hybrid', 'complement_probe', 'shortlist_protease', 'check_header_out'])
       expect(RENDERED).toContain(n)
-    for (const n of ['shortlist_exact_only', 'species_reagents', 'ion_series_photo', 'label_call_min_tags', 'progress', 'probe_input', 'dump_spectrum']) expect(HIDDEN_PARAMS).toContain(n)
+    for (const n of ['shortlist_exact_only', 'species_reagents', 'ion_series_photo', 'label_call_min_tags', 'progress', 'probe_input', 'dump_spectrum', 'fasta_proteins', 'data_paths']) expect(HIDDEN_PARAMS).toContain(n)
     for (const n of manifest.params.map((p) => p.name).filter((n) => n.startsWith('label_discovery_'))) expect(HIDDEN_PARAMS).toContain(n)
     expect(RENDERED).toContain('acquisition_check')
     expect(PARAM_BY_NAME.get('acquisition_check')?.choices).toEqual(['refuse', 'warn', 'off'])
-    expect(manifest.params.length).toBe(194) // 1.15.5: 185 + shortlist_defaults, tolerance_by_analyzer, fragment_tolerance_itms; 1.15.7: + resolved_out, tag_graph_out and four resolve_*
+    expect(RENDERED).toContain('recon_proteome')
+    expect(manifest.params.length).toBe(193) // 1.15.5: 185 + shortlist_defaults, tolerance_by_analyzer, fragment_tolerance_itms; 1.16: + terminus, subsume_tags, fasta_proteins, data_paths; feedback 422372a2: + recon_proteome
   })
   it('renders or hides every parameter of the manifest once (mzpeak_read_memory hidden)', () => {
     // In addition to the pinned counts above: every manifest parameter is

@@ -2,7 +2,7 @@
 
 import { baseName, parseReport, value, type Report } from '../digestReport'
 import { dirName, stripExt } from '../app/paths'
-import { parseTable, sniffTable, type TableKind } from './tables'
+import { sniffTable, xmlIdFormat, type TableKind } from './tables'
 
 /// The run that wrote a file, as the app recorded it (history.rs
 /// RunRecord): its id and every output it wrote.
@@ -99,9 +99,10 @@ export async function loadReports(paths: string[]): Promise<{ reports: Report[];
 }
 
 /// What a file the user opens holds when it is one of the wide tables
-/// (results/tables.ts): its kind, or why it cannot be shown (an idXML or
-/// mzIdentML -recon_id_out); null for anything else, which is read as a
-/// long-form report.
+/// (results/tables.ts): its kind (an idXML or mzIdentML -recon_id_out is
+/// reconIds too: Mass shifts lists it as a file), or why it cannot be shown
+/// (another XML file); null for anything else, which is read as a long-form
+/// report.
 /// @p head: the head when the caller has read it already (one read per open).
 export async function sniffPath(path: string, head?: string | null): Promise<{ kind: TableKind } | { error: string } | null> {
   // The head only (report.rs HEAD_BYTES): the header line, the mzTab
@@ -119,11 +120,8 @@ export async function sniffPath(path: string, head?: string | null): Promise<{ k
   const kind = sniffTable(text)
   if (kind) return { kind }
   if (/^\s*</.test(text)) {
-    try {
-      parseTable(text, path)
-    } catch (e) {
-      return { error: e instanceof Error ? e.message : String(e) }
-    }
+    if (xmlIdFormat(text, path) || /\.mztab$/i.test(path)) return { kind: 'reconIds' }
+    return { error: `${baseName(path)} is an XML file, not a table or report this viewer reads` }
   }
   return null
 }

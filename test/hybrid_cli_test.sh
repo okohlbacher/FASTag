@@ -28,9 +28,9 @@
 #     changes nothing; -stream refuses it;
 #   - threads 1/3/8 identical; OnDisc (-out_spectra) equals the fast reader;
 #   - -species leaves the c/z rows of hybrid spectra out and counts them;
-#   - tag merging (-tag_graph_out) places every row with E <= 1 of a hybrid
-#     run whose precursor peaks crowd the b/y preparation (syn_prec), and
-#     -dump_spectrum prints the union of both preparations it walks on.
+#   - -dump_spectrum on a hybrid run whose precursor peaks crowd the b/y
+#     preparation (syn_prec) prints exactly the union of the b/y and the c/z
+#     preparation (the peaks of both passes' rows).
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 export LC_ALL=C  # sort and comm agree on the order
@@ -123,14 +123,18 @@ grep -q $'^run\tion_series_by\t0\t40\t' "$TMP/h_both.census_summary.tsv" || fail
 [ "$(awk -F'\t' 'NR > 1 && $NF != "" { print $NF }' "$TMP/h_both.census.tsv" | sort -u | tr '\n' ' ')" = "by cz " ] \
   || fail "census: best tags not of both series"
 # The b/y rows: the by run's rows with E-values doubled (rows the cut or the
-# shared cap drops aside).
-NC=$(awk -F'\t' 'NR == 1 { print NF }' "$TMP/h_by.tsv")
+# shared cap drops aside). Against the by run's rows before -subsume_tags: a
+# b/y row can lie in a longer b/y row of the by run that the shared cap cuts
+# from both (its c/z reading of the same peaks is no container), so it is
+# written under both and subsumed under by.
+runb h_by_off "$TMP/syn_split.mzML" 2 "${RX[@]}" -subsume_tags off
+NC=$(awk -F'\t' 'NR == 1 { print NF }' "$TMP/h_by_off.tsv")
 awk -F'\t' -v e="$EC" -v nc="$NC" 'FNR == 1 { next }
   NR == FNR { k = $1; for (i = 2; i <= nc; ++i) if (i != e) k = k "\t" $i; by[k] = $e + 0; next }
   $NF == "by" { k = $1; for (i = 2; i <= nc; ++i) if (i != e) k = k "\t" $i; ++n
                 if (!(k in by)) { ++miss; next }
                 r = ($e + 0) / by[k]; if (r < 1.999 || r > 2.001) ++bad }
-  END { print n + 0, miss + 0, bad + 0 }' "$TMP/h_by.tsv" "$TMP/h_both.tsv" > "$TMP/eratio"
+  END { print n + 0, miss + 0, bad + 0 }' "$TMP/h_by_off.tsv" "$TMP/h_both.tsv" > "$TMP/eratio"
 read -r nby nmiss nbad < "$TMP/eratio"
 [ "$nby" -gt 20 ] && [ "$nmiss" -eq 0 ] && [ "$nbad" -eq 0 ] \
   || fail "both: b/y rows vs by: $nby rows, $nmiss not in by, $nbad without E x 2"
@@ -157,55 +161,34 @@ sruns hf_both "$TMP/syn_splitf.mzML" -ion_series auto -ion_series_hybrid both
 cmp -s "$TMP/h_both.tsv" "$TMP/hf_both.tsv" || fail "the @etd@hcd filter token is not read as hybrid"
 cmp -s "$TMP/h_both.recon.tsv" "$TMP/hf_both.recon.tsv" || fail "filter run: recon differs"
 
-# ---- tag merging on a hybrid spectrum: each row on the peaks it was tagged on ----
+# ---- -dump_spectrum on a hybrid spectrum: the union of both preparations ----
 # syn_prec adds the unreacted precursor and its charge-reduced species at 20x
 # the base peak: the c/z preparation drops them, the b/y one keeps them, and
-# under a tight -max_peaks they push out peaks the c/z ladders use. Every row
-# with E <= 1 (-resolve_max_evalue) must be in some -tag_graph_out rows cell
-# (0-based per-spectrum row indices of -out), c/z rows as well as b/y.
+# under a tight -max_peaks they push out peaks the c/z ladders use. The dump
+# under -ion_series_hybrid both must be exactly the union of the b/y dump
+# (-ion_series auto) and the c/z dump (-ion_series cz), and larger than the
+# b/y list somewhere.
 "$GEN" --write-mzml "$DB" "$TMP/syn_prec.mzML" split_prec > /dev/null || fail "writing the synthetic split_prec run"
-covered() {  # <name>: "<kind> <rows E<=1> <rows in no node>" per series
-  awk -F'\t' -v G="$TMP/$1.graph.tsv" '
-    BEGIN { while ((getline l < G) > 0) { split(l, c, "\t"); if (c[1] == "spectrum") continue
-              n = split(c[9], r, ","); for (i = 1; i <= n; i++) if (r[i] != "") in_g[c[1], r[i]] = 1 } }
-    NR == 1 { for (i = 1; i <= NF; i++) col[$i] = i; next }
-    { k = $1; i = idx[k]++; if ($col["evalue"] + 0 > 1) next
-      s = $col["ion_series"]; ++tot[s]; if (!((k, i) in in_g)) { ++miss[s]; if (!ex[s]) ex[s] = k " row " i " " $col["tag"] } }
-    END { for (s in tot) print s, tot[s], miss[s] + 0, ex[s] }' "$TMP/$1.tsv" | sort
+runb gp30 "$TMP/syn_prec.mzML" 2 -ion_series auto -ion_series_hybrid both -max_peaks 30
+dumpmz() {  # <spectrum id> [args]: the dumped m/z, one per line, sorted
+  local sid=$1; shift
+  "$BIN" -in "$TMP/syn_prec.mzML" -max_peaks 30 -dump_spectrum "$sid" "$@" 2> /dev/null \
+    | grep '"record":"spectrum"' | sed 's/.*"mz":\[\([^]]*\)\].*/\1/' | tr ',' '\n' | sort -u
 }
-for mp in 20 30; do
-  runb gp$mp "$TMP/syn_prec.mzML" 2 -ion_series auto -ion_series_hybrid both -max_peaks $mp \
-    -resolved_out "$TMP/gp$mp.res.tsv" -tag_graph_out "$TMP/gp$mp.graph.tsv"
-  covered gp$mp > "$TMP/gp$mp.cov"
-  echo "hybrid merge coverage at -max_peaks $mp (series, rows E<=1, rows in no node): $(tr '\n' ';' < "$TMP/gp$mp.cov")"
-  [ "$(awk '$1 == "cz" && $2 > 20' "$TMP/gp$mp.cov" | wc -l)" -eq 1 ] || fail "-max_peaks $mp: too few c/z rows to check"
-  [ "$(awk '$1 == "by" && $2 > 20' "$TMP/gp$mp.cov" | wc -l)" -eq 1 ] || fail "-max_peaks $mp: too few b/y rows to check"
-  awk '$3 != 0 { bad = 1 } END { exit bad }' "$TMP/gp$mp.cov" \
-    || fail "-max_peaks $mp: rows with E <= 1 left out of -tag_graph_out: $(tr '\n' ';' < "$TMP/gp$mp.cov")"
-done
-
-# -dump_spectrum (the GUI's peaks) under the same options prints the union
-# the graph walks on: every peak of a node is a dumped peak, and the union
-# holds more peaks than the b/y preparation alone somewhere.
-nodes_off=0; grew=0
-for id in $(awk -F'\t' 'NR > 1 { print $1 }' "$TMP/gp30.graph.tsv" | sort -u | tr ' ' '~'); do
+union_off=0; grew=0; nspec=0
+for id in $(awk -F'\t' 'NR > 1 { print $1 }' "$TMP/gp30.tsv" | sort -u | tr ' ' '~'); do
   sid=${id//\~/ }
-  "$BIN" -in "$TMP/syn_prec.mzML" -ion_series auto -ion_series_hybrid both -max_peaks 30 -dump_spectrum "$sid" \
-    2> /dev/null | grep '"record":"spectrum"' | sed 's/.*"mz":\[\([^]]*\)\].*/\1/' | tr ',' '\n' > "$TMP/dump.mz" \
-    || fail "-dump_spectrum $sid"
-  nb=$("$BIN" -in "$TMP/syn_prec.mzML" -ion_series auto -max_peaks 30 -dump_spectrum "$sid" 2> /dev/null \
-       | grep -o '"n":[0-9]*' | cut -d: -f2)
-  [ "$(wc -l < "$TMP/dump.mz" | tr -d ' ')" -gt "$nb" ] && grew=$((grew + 1))
-  n=$(awk -F'\t' -v s="$sid" -v D="$TMP/dump.mz" '
-        BEGIN { while ((getline l < D) > 0) mz[++m] = l + 0 }
-        $1 == s { k = split($6, x, /[;,]/)
-                  for (i = 1; i <= k; i++) { f = 0; for (j = 1; j <= m; j++) if (mz[j] - x[i] < 1e-3 && x[i] - mz[j] < 1e-3) f = 1
-                                             if (!f) ++bad } }
-        END { print bad + 0 }' "$TMP/gp30.graph.tsv")
-  nodes_off=$((nodes_off + n))
+  dumpmz "$sid" -ion_series auto -ion_series_hybrid both > "$TMP/dump.both" || fail "-dump_spectrum $sid"
+  dumpmz "$sid" -ion_series auto > "$TMP/dump.by"
+  dumpmz "$sid" -ion_series cz > "$TMP/dump.cz"
+  [ -s "$TMP/dump.both" ] && [ -s "$TMP/dump.by" ] && [ -s "$TMP/dump.cz" ] || fail "-dump_spectrum $sid: an empty peak list"
+  sort -u "$TMP/dump.by" "$TMP/dump.cz" | cmp -s - "$TMP/dump.both" || union_off=$((union_off + 1))
+  [ "$(wc -l < "$TMP/dump.both" | tr -d ' ')" -gt "$(wc -l < "$TMP/dump.by" | tr -d ' ')" ] && grew=$((grew + 1))
+  nspec=$((nspec + 1))
 done
-echo "hybrid -dump_spectrum: node peaks not dumped $nodes_off; spectra whose union exceeds the b/y list $grew"
-[ "$nodes_off" -eq 0 ] || fail "-dump_spectrum under -ion_series_hybrid both misses $nodes_off peaks of -tag_graph_out"
+echo "hybrid -dump_spectrum: $nspec spectra; not the union of b/y and c/z $union_off; union exceeds the b/y list $grew"
+[ "$nspec" -ge 20 ] || fail "too few syn_prec spectra with tags ($nspec)"
+[ "$union_off" -eq 0 ] || fail "-dump_spectrum under -ion_series_hybrid both is not the union of the b/y and c/z preparations ($union_off spectra)"
 [ "$grew" -gt 0 ] || fail "-dump_spectrum under -ion_series_hybrid both prints only the b/y preparation"
 
 # ---- no hybrid spectrum: nothing changes ----
@@ -250,8 +233,10 @@ if [ -n "$BUILDTAXDB" ] && [ -n "$TAXDIR" ]; then
   mkdir -p "$TMP/prot"
   awk '/^>/ { if (s != "") print s; print; s = ""; next } { s = s $0 } END { if (s != "") print s }' "$DB" > "$TMP/prot/562.fasta"
   "$BUILDTAXDB" "$TMP/prot" "$TMP/toy.taxdb" 7 > "$TMP/buildtaxdb.log" 2>&1 || { cat "$TMP/buildtaxdb.log" >&2; fail "buildtaxdb"; }
-  SP=(-tag_length 5 -extension 1 -fragment_tolerance 20 -fragment_tolerance_unit ppm -species -taxdb "$TMP/toy.taxdb"
-      -taxonomy_nodes "$TAXDIR/nodes.dmp" -taxonomy_names "$TAXDIR/names.dmp")
+  # -subsume_tags off: -species counts every row, so the -out rows are the
+  # c/z rows it leaves out only when -out holds every row.
+  SP=(-tag_length 5 -extension 1 -fragment_tolerance 20 -fragment_tolerance_unit ppm -subsume_tags off -species
+      -taxdb "$TMP/toy.taxdb" -taxonomy_nodes "$TAXDIR/nodes.dmp" -taxonomy_names "$TAXDIR/names.dmp")
   runb sp_both "$TMP/syn_split.mzML" 2 -ion_series auto -ion_series_hybrid both "${SP[@]}"
   ncz=$(awk -F'\t' 'NR > 1 && $NF == "cz"' "$TMP/sp_both.tsv" | wc -l | tr -d ' ')
   nby=$(awk -F'\t' 'NR > 1 && $NF == "by"' "$TMP/sp_both.tsv" | wc -l | tr -d ' ')

@@ -19,6 +19,7 @@
 import type { JSX, ReactNode } from 'react'
 import { HelpLink } from './HelpLink'
 import { WORKFLOWS } from './workflows'
+import { TASK_GROUPS, TILE_ORDER, taskById } from '../setup/tasks'
 
 export interface HelpSection {
   id: string
@@ -78,7 +79,7 @@ export const START: HelpPage = {
             <strong>Settings</strong>, <strong>Outputs &amp; run</strong>. Step 1 selects <strong>Generate tags</strong>, the
             default task: it generates sequence tags from all input spectra and includes per-residue confidence for
             downstream export. No FASTA file is needed. Click <strong>Continue with Generate tags</strong>. To inspect an
-            earlier analysis instead, click <strong>Open earlier results…</strong> in step 1.
+            earlier analysis instead, click <strong>Open earlier results…</strong> at the top right of Setup.
           </p>
           <ol>
             <li>
@@ -107,20 +108,20 @@ export const START: HelpPage = {
           </ol>
           <p>
             For run metrics, choose <strong>Run QC</strong>. For protease, labels, glycopeptides and species, choose{' '}
-            <strong>Characterize a run</strong>; for many files, switch Inputs (step 2) to <strong>Batch</strong>. Characterize samples 10% of the spectra and enables the species, digest, label and glyco reports (the alkylation report on request), opening on{' '}
+            <strong>Characterize a run</strong>; for many files, switch Inputs (step 2) to <strong>Batch</strong>. Characterize reads all spectra and enables the species, digest, label, alkylation and glyco reports, opening on{' '}
             <L to="workflow-overview">Overview</L>. A report that says “not assessed” or “no call” is not evidence
             that a feature is absent.
           </p>
           <p>
-            &quot;FASTag ready&quot; in the title bar means the FASTag program that comes with the app can be run; the
-            number beside it is its version. A field marked <em>changed</em> differs from the CLI default; the
-            selected task can set that value for you. The plan above Run lists the enabled analyses and what
-            differs from your task or preset.
+            &quot;FASTag ready&quot; in the app bar means the FASTag program that comes with the app can be run; its
+            version is in Help › About. A field marked <em>changed</em> differs from the CLI default; the
+            selected task can set that value for you. The plan at the left of the bar at the bottom lists the
+            enabled analyses and what the run assumes about the sample; Run and Next are at its right.
           </p>
           <p>
             While a run goes, <strong>Changed from defaults</strong> lists the settings it was given that differ from
-            the defaults. Afterwards, <strong>Last run</strong> shows whether it finished, was cancelled or failed, and
-            the same list (&quot;all defaults&quot; when there is none), even if the form was edited since. Cancel
+            the defaults. Afterwards, <strong>History</strong> shows whether it finished, was cancelled or failed.{' '}
+            <strong>Cancel</strong>, in the run status at the top right on every view (or Esc, or Cmd/Ctrl+.),
             stops a run at once, and the files at its output paths are removed, so no half-written table is
             later read as a result. If an output file already exists, the app asks before the run whether to
             overwrite it; a run that is then cancelled or fails removes it too. Closing the window or quitting while a run goes asks first: Cancel run and quit,
@@ -138,7 +139,7 @@ export const START: HelpPage = {
           <dt>What is in this run?</dt>
           <dd>
             Choose <strong>Characterize a run</strong>. It turns on the <L to="param-species">Species report</L> with
-            tag length 3 and extension 2, so tags reach the 7 residues the bundled index needs, and reads 10% of the
+            tag length 3 and extension 2, so tags reach the 7 residues the bundled index needs, and reads all
             spectra. Read the evidence count in the <L to="species">Species tab</L>; a ranking alone is not a
             presence call. For the taxa alone, choose <strong>Species</strong>.
           </dd>
@@ -179,8 +180,9 @@ export const START: HelpPage = {
               in Batch to change the destination for pending or retried jobs; completed jobs keep their existing paths.
             </li>
             <li>
-              <strong>Run N remaining files</strong> runs the files not run yet. <strong>Retry failed</strong> runs
-              the failed ones again. Cancel stops the whole queue.
+              <strong>Run N remaining files</strong> (Batch view; <strong>Run N files</strong> in Setup&apos;s action
+              bar) runs the files not run yet. <strong>Retry failed</strong> runs the failed ones again, and is the
+              bar&apos;s button once only failed files are left. Cancel, in the run status at the top right, stops the whole queue.
             </li>
             <li>
               Each file keeps its own log: <strong>Log</strong> beside a file in the list shows it, and Show full log
@@ -213,8 +215,9 @@ export const START: HelpPage = {
             earlier outputs or loads their settings. Switch views with Cmd+1–4 on macOS or Ctrl+1–4 elsewhere.
           </p>
           <p>
-            Use <strong>Search parameters</strong> (Cmd/Ctrl+K, or / outside a text field) to find an editable
-            setting and jump to it. Use <strong>Search Help</strong> here for explanations, troubleshooting and
+            <strong>Help</strong> (the ? in the app bar, or F1) opens the page for the screen you are on. Use{' '}
+            <strong>Search settings</strong> in the app bar (Cmd/Ctrl+K, or / outside a text field) to find an editable
+            setting and jump to it, from any view. Use <strong>Search Help</strong> here for explanations, troubleshooting and
             command-line options. Entries marked <em>Not in the settings form</em> explain whether the app uses
             a dedicated control, manages the option itself, or leaves it to the command line.
           </p>
@@ -240,28 +243,64 @@ export const START: HelpPage = {
             only for Mass-shift survey and Database reduction; optional inputs are one click away under{' '}
             <strong>Add optional input</strong>. Settings shows the few settings the task needs; every other option is
             under Advanced, the task&apos;s own groups first. Outputs &amp; run lists the task&apos;s files as
-            checkboxes, named after the run, and the command line. <strong>Batch</strong> in Inputs runs the same
+            checkboxes, named after the run, and the command line behind <strong>Command line</strong>. <strong>Batch</strong> in Inputs runs the same
             task over several files, with an output folder and an optional SDRF. To look at earlier results, use{' '}
-            <strong>Open earlier results…</strong> in step 1 or the Results view.
+            <strong>Open earlier results…</strong> at the top right of Setup, or the Results view.
           </p>
           <p>
             A task replaces the settings but keeps the input files it uses and the instrument you chose; a line in
             Inputs says what it kept and dropped, and <strong>Undo</strong> brings back what it replaced. The head of
             Settings says when the form differs from the task (modified), and its <strong>Reset</strong> takes that
-            back. <strong>Presets</strong> (in steps 1 and 3) loads FASTag&apos;s own defaults or a preset of yours.
+            back. <strong>Presets</strong> (at the top right of every step) loads FASTag&apos;s own defaults or a preset of yours; on Settings it also offers <strong>Save as preset…</strong>.
           </p>
           <p>
             <strong>Save…</strong> stores what differs from the task or defaults the form started from, under a name.
             No paths are stored: input files such as a FASTA are left out, and a report is stored by its name and
             written next to the current tags file. The app also remembers the parameters of the last run, but they
-            are never used on their own: <strong>Continue last run (n)</strong> in step 1 offers the n settings of the last run,
-            and nothing of them is used until you click it. <strong>Reset…</strong> beside Run sets every parameter
+            are never used on their own: <strong>Continue last run (n)</strong> at the top right of step 1 offers the n settings of the last run,
+            and nothing of them is used until you click it. <strong>Presets → Load FASTag defaults</strong> sets every parameter
             back to FASTag&apos;s default.
           </p>
           <p>
             <strong>Export INI…</strong> writes the parameters a run would use as an INI file;{' '}
             <code>FASTag -ini file.ini</code> runs the command line with the same parameters.
           </p>
+        </>
+      )
+    },
+    {
+      id: 'start-tasks',
+      title: 'The seven tasks',
+      body: (
+        <>
+          <p>
+            Step 1 of Setup shows each task with what you get, what it needs and how long it runs. Here is when to
+            use each one, and what it is not for.
+          </p>
+          {TASK_GROUPS.map((g) => (
+            <div key={g.id} className="help-task-group">
+              <h4 className="sub-h">{g.title}</h4>
+              {TILE_ORDER.map((id) => taskById(id)!)
+                .filter((t) => t.group === g.id)
+                .map((t) => (
+                  <details key={t.id} className="help-entry" id={`task-${t.id}`}>
+                    <summary>{t.label}</summary>
+                    <p>{t.question}</p>
+                    <dl className="recipes">
+                      <dt>You get</dt>
+                      <dd>{t.gets}</dd>
+                      <dt>Use when</dt>
+                      <dd>{t.use}</dd>
+                      <dt>Not for</dt>
+                      <dd>{t.notFor}</dd>
+                    </dl>
+                    <p>
+                      <L to={t.docs.to}>{t.docs.label}</L>
+                    </p>
+                  </details>
+                ))}
+            </div>
+          ))}
         </>
       )
     },
@@ -289,11 +328,18 @@ export const START: HelpPage = {
       body: (
         <>
           <p>
-            <strong>Feedback</strong> in the top bar (also Help › Send Feedback…, Cmd/Ctrl+Shift+F) takes a screenshot
+            <strong>Feedback</strong> in the app bar (the speech-bubble icon; also Help › Send Feedback…, Cmd/Ctrl+Shift+F) takes a screenshot
             of the window, notes the app and engine versions, the system, the view and the settings, and opens a
             short form. <strong>Mark up…</strong> draws numbered boxes, arrows, lines and labels on the screenshot;
             a <strong>Redaction</strong> blacks out what must not be seen, for good. <strong>Remove screenshot</strong>{' '}
             leaves it out.
+          </p>
+          <p>
+            The form is a panel, not a blocking dialog: it sits at the bottom right and the app behind it still works,
+            so you can look around while you write. Drag its title bar to move it (or use the arrow keys on its move
+            handle), drag the corner to resize it, and collapse it to its title bar. F6 goes between the panel and the
+            app. <strong>Retake screenshot</strong> hides the panel and takes a new screenshot of the window as it is
+            now. Copy and paste work in every field, from the keyboard, the Edit menu and the right-click menu.
           </p>
           <p>
             <strong>Save</strong> keeps the report on this computer only, in the app&apos;s data folder under{' '}
@@ -571,9 +617,10 @@ export const RESULTS: HelpPage = {
             <tr><td>Gapped</td><td>1 when the tag crosses a missing peak (<L to="tags-gapped">gapped tag</L>).</td></tr>
             <tr><td>E-value</td><td>The score; lower is better (<L to="results-evalue">E-value</L>).</td></tr>
             <tr><td>Min. conf., Mean conf.</td><td>The weakest and the average observed-step score, 0 to 1 (<L to="results-conf">residue confidence</L>).</td></tr>
-            <tr><td>Database hit</td><td>Without a database filter: Not checked (-), the tags were not matched against a database. With one, only matching tags are written: In database (fwd, as written; rev, reversed), or Entrapment (efwd, erev: found only in the entrapment database).</td></tr>
+            <tr><td>Database hit</td><td>Without a database filter: Not checked (-), the tags were not matched against a database. With one, only matching tags are written: In database (fwd, as written; rev, reversed), or Entrapment (efwd, erev: found only in the entrapment database). With a database the app asks FASTag for up to 3 proteins per tag, and the cell names the first one as accession/gene@first–last residue (for example P0A6F5/groL@123–131), with "+n more" when the tag occurs in more proteins; the tooltip lists them all. The columns Proteins (position), Gene and Proteins (n) hold them all and can be shown under Columns. In the Spectrum tab, tags that occur in one protein only are drawn under that protein's residues, read from the database of the run that wrote the tags while it is still the file that run read. A protein whose identifier the database gives to more than one entry is named with its positions but not aligned.</td></tr>
             <tr><td>Database q-value</td><td>q_db, only with an <G to="gloss-entrapment">entrapment database</G> (<L to="results-nofdr">see below</L>).</td></tr>
             <tr><td>ProForma, Residue conf., USI</td><td>Optional columns (<L to="param-proforma">ProForma</L>, <L to="param-res_conf">per-residue confidence</L>, <L to="param-usi_collection">USI</L>), checked in Outputs &amp; run of Generate tags.</td></tr>
+            <tr><td>Series, Terminus</td><td>Optional columns (<L to="param-terminus">series and terminus</L>): the series (b, y, c or z) of the one reading of a tag that reaches a peptide terminus in a way measured to hold (- when none or both do, or above 25 ppm or 0.02 Da), and every terminus found (for example C+K; - when neither reading reaches one).</td></tr>
           </tbody>
         </table>
       )
@@ -736,89 +783,69 @@ export const RESULTS: HelpPage = {
       body: (
         <>
           <p>
-            In Tags, double-click a row, or choose it and press Enter (or Open in Spectrum). The Spectrum tab shows that spectrum with the
+            In Tags, double-click a row, or choose it and press Enter (or Open in Spectrum). In Glyco, Triage and Mass shifts, click a scan (it has the spectrum icon), or choose its row and press Enter. The Spectrum tab shows that spectrum with the
             peaks FASTag tagged: after centroiding, the precursor cut, deisotoping and the peak budget, as the run
             prepared them (FASTag prints them with -dump_spectrum, under the options of the run that wrote the
-            table). The chosen tag&apos;s ladder is drawn on them: its b or y ions one residue apart (the residue
-            divided by the fragment charge), each step with its error in ppm. A <L to="tags-gapped">gapped tag</L>{' '}
-            crossed a missing peak, shown dashed. Choose another tag of the spectrum below to draw its ladder; ◀ and ▶
-            go to the previous and next tagged spectrum. The wheel or + and − zoom, dragging or the arrow keys pan.
+            table). The chosen tag&apos;s ladder is drawn on them: its ions one residue apart (the residue divided by
+            the fragment charge), each step with its error in ppm. The tag is walked from both of its flanks, so
+            its b ladder and its y ladder (c and z for a c/z row) each get their own line when they lie on the
+            peaks, labelled with the series as judged (below), with a dashed line down to each peak. A{' '}
+            <L to="tags-gapped">gapped tag</L> crossed a missing peak, shown dashed. Choose another tag of the
+            spectrum in the table below to draw its ladder. Point at a residue, or Tab to it, to pick out its two
+            peaks; its tooltip gives their m/z and the step&apos;s error. A position with no peak is flagged on its
+            line. ◀ and ▶ (Alt+← and Alt+→, or Page Up and Page Down) go to the previous and next spectrum in the
+            Tags table&apos;s order, as it was sorted and filtered; a spectrum opened from Triage steps through every
+            tagged spectrum in file order. The wheel or + and − zoom, dragging or the arrow keys pan.
           </p>
           <p>
-            All tags, resolved draws every tag of the spectrum at once. Each tag is placed on its peaks; rows that
-            land on the same peaks are one tag (FASTag writes a gapped tag once per order of its gap residues). Tags
-            of one ion series that overlap by at least one step and agree are assembled into one longer resolved tag,
-            and a tag inside another is not listed on its own. Resolved tags are ranked by the evidence of their
-            steps: each step&apos;s chance of being right, from its E-value, mass error, the intensity of its two
-            peaks, their complement ions at any charge, whether it is a gap step, the steps that compete with it
-            and how many tags support it, less a threshold, so a tag grows only by steps that are probably right.
-            The first is then the best resolved tag that does not hold a peak together with its own complement.
-            This is FASTag&apos;s default (Ranking cstar). (Fitted on three datasets against database search and
-            tested on two others: the first resolved tag was right in 84.9% of scans at 20 ppm and in 59.8% at
-            0.5 Da, against 81.5% and 48.0% for the earlier step ranking.) The table gives the E-value of the best and of the weakest of them, how many
-            tags build it and which other resolved tags conflict with it (they share a peak and continue
-            differently) or read the same residues in the other ion series. A step two readings cannot be told
-            apart on is written {"{Q|[AG]}"}, in italics. E-value ≤ leaves out weaker tags (1 by default); Join
-            tags that only touch also continues a tag with one that starts at its last peak, marked with a hollow
-            dot. A resolved tag is a hypothesis: it is right only where all the tags it is assembled from are.
+            The table lists the tags FASTag wrote for the spectrum, best E-value first, with the series and how
+            many ladder positions lie on peaks. The strip under the axis shows the mass error of the tag drawn: a
+            dot for each step (the distance of its two peaks against the residue mass), a line for the errors
+            summed from its first peak, and the band of the run&apos;s tolerance; its scale widens to hold every
+            value.
           </p>
           <p>
-            Choosing a resolved tag in the table selects it. On the plot the other tags are then drawn against it:
-            solid where they read a step as it does, red and dashed where they read another step over part of its
-            m/z range (at most one of the two is right there), dashed elsewhere; thick steps have an E-value of at
-            most 0.01, faint ones above 1. Hover over a step for its readings, E-values, mass error and the
-            intensity of its two peaks. The strip under the axis shows the mass error of the selected tag: a dot
-            for each step (the distance of its two peaks against the residue mass), a line for the errors summed
-            from its first peak, hollow dots for the steps that differ from it, and the band of the run&apos;s
-            tolerance; its scale widens to hold every value. Under the table, Tags behind resolved tag lists the
-            tags it is assembled from, those inside it and those that differ from it, aligned peak by peak in m/z
-            order; a tag there opens alone.
+            FASTag drops a tag whose ions all lie, in order, in a longer tag of the same spectrum, fragment charge
+            and ion series when that longer tag is at least as significant, its E-value no higher (a subsumed
+            tag): it adds nothing the longer one does not show. A longer tag with a worse E-value keeps the shorter
+            one in the table, since the longer one may have been extended past its correct part. Run FASTag with
+            -subsume_tags off to keep every tag.
           </p>
           <p>
-            When the run wrote its resolved tags and tag graph (FASTag with -resolved_out and -tag_graph_out, which
-            the app passes beside the tags when the CLI has them), the tags are resolved as FASTag resolved them and
-            the line beside the summary says Resolved by FASTag; the E-value cutoff and Join are then FASTag&apos;s own.
-            Otherwise, or when those tables do not fit the spectrum&apos;s peaks, it says Resolved in the GUI (and why):
-            the GUI then ranks the resolved tags as the run did, by its -resolve_score and -resolve_threshold, and the
-            line names the ranking it took. The ranking is the one FASTag wrote on the rows of its resolved tags (scheme,
-            threshold), else the run&apos;s settings; for tables of a run the app has no record of, written by a FASTag
-            that did not record it, the line says the ranking is not recorded and the GUI takes FASTag&apos;s default,
-            cstar at 3.
-            Merge graph draws the tag graph around the resolved tag selected: its residues N to C on a ruler (a gap
-            two residues wide; residues, not m/z, so the graph does not follow the plot&apos;s zoom), and under it
-            the tags that build it as a staircase of bars, each over its residues, with bold joins. Resolved tags that
-            conflict with it (share a peak and continue otherwise) are aligned above, the tags inside it and those that
-            only touch it below, then the rest, one row each in rank order. A resolved tag that reads it again on its
-            complement peaks (the other series of its pair) is not drawn again: a b+y badge names it. Tags in no
-            resolved tag are hidden behind Show unused tags. Choosing a bar, by click or Enter, selects its resolved
-            tag and re-anchors the graph on it; the graph is one Tab stop, and the arrow keys move between its bars.
-          </p>
-          <p>
-            A resolved tag at a peptide terminus is written N–EPTIDE or EPTIDE–C, and N–(K)EPTIDE or EPTIDE(K)–C,
-            muted, when one residue lies between: FASTag&apos;s terminus column of -resolved_out, or, for tables of
-            an older FASTag and when the GUI resolves itself, the same test of the flanks (0 or a terminal
-            modification of the run within the tolerance of that side, the precursor&apos;s added on the side measured
-            from it). The plot marks b0 or y0 of the selected one when it lies in view.
+            A tag at a peptide terminus is written N–EPTIDE or EPTIDE–C, and N–(K)EPTIDE or EPTIDE(K)–C, muted,
+            when one residue lies between: its flank, under the series shown, is 0 or a terminal modification of
+            the run within the tolerance (the fragment tolerance on the side measured from its peaks, the
+            precursor&apos;s added on the side measured from the precursor, at each -isotope_error offset), or one
+            residue more. The plot marks b0 or y0 of the tag drawn when it lies in view.
           </p>
           <p>
             When the run wrote tag placements (a protein database and Tag placements), the peptide most tags of the
             spectrum were placed on is named under the plot, and its fragments in the ion series and charge of the
-            tag drawn are the top row of the plot (DB), with the residues the tag confirms in bold; the table counts
-            the steps of each resolved tag on the peptide, the pileup shows its residues between the peaks, and the
-            strip marks each peak against the peptide&apos;s fragment with ×. A mass the placement leaves over is
-            added from the end of its region on; inside the region no fragment is drawn. The peptide is a candidate
-            from the placement of the tags, not an identification: FASTag does not score it.
+            tag drawn are the top row of the plot (DB), with the residues the tag confirms in bold; the strip marks
+            each of its peaks against the peptide&apos;s fragment with ×. A mass the placement leaves over is added
+            from the end of its region on; inside the region no fragment is drawn. The peptide is a candidate from
+            the placement of the tags, not an identification: FASTag does not score it.
           </p>
           <p>
             FASTag writes a tag in ascending m/z and does not say whether it read b or y ions, and the series
             decides which way the tag reads from N to C. The tab judges the series on the peaks: a ions (b − CO)
             beside at least two of its peaks make it b; a ions beside its complement peaks, or a start right after
-            a C-terminal K or R, make it y; one a ion makes it likely (b? or y?); otherwise it says b or y and shows
-            the tag as FASTag wrote it, with the other reading beside it in the table. When the run placed the
+            a C-terminal K or R, make it y; one a ion makes it likely (b? or y?). Then the termini: only the kinds
+            that held when measured are used: at a terminus, one residue from the N terminus (such as b1, also
+            after an N-terminal label), y1 of a C-terminal K or R, and one residue from the C terminus that may be
+            K or R among others (such as [KQ]). A ladder whose high peak is one K or R from the C terminus, or that
+            is one other residue from it (such as W, which GE, AD or SV weigh as well), is not used. When only one
+            reading of its peaks, as b ions or as y ions (c or z), lies at a terminus in a used way, that reading
+            settles a call the a ions left open (sure), makes a call that agrees sure, and leaves a call that
+            disagrees open; when both readings do, the termini decide nothing. The series column of -terminus
+            makes the same call from the termini alone. For c and z ions no terminus was measured, so it makes a
+            call likely at most (c? or z?). Otherwise it says b or y? (c or z?) and shows the tag as FASTag wrote it. When the run placed the
             spectrum&apos;s tags on a database peptide, the peptide&apos;s ions decide. A ladder and its complement
-            are always opposite series. At a tolerance wider than about 0.05 m/z (a Da run) nothing is judged.
-            Hover over a series for its evidence. On the development data the judged series was right in at least
-            99% of correct tags, the likely one in 86–99%.
+            are always opposite series. At a tolerance wider than 25 ppm or 0.02 Da neither the a ions nor the
+            termini are used, as they match by chance there: only the database peptide settles the series. Hover
+            over a series for its evidence. On the development data the series judged by a ions was right in at
+            least 99% of correct tags, the likely one in 86–99%; the termini used were right in more than 99% at
+            20 ppm, on a second data set as well.
           </p>
           <p>
             The tab needs a FASTag that has -dump_spectrum; with an older one it is not there, and the row action says
@@ -1042,8 +1069,20 @@ export const DIGEST: HelpPage = {
             &quot;Context&quot; says when an explanation was chosen because its parts also appear as peaks of their
             own. The chip below names the candidate cysteine modification with the most matching placed spectra;
             these are counts, not an alkylation call. The{' '}
-            <L to="param-alkylation_out">alkylation report</L>, an optional report of Characterize a run, makes that
-            call; on a shipped proteome it needs tags of 8 residues (human, mouse) or 7 (yeast, E. coli), so turning it on raises Extension to 3 or 2 (not on a FASTA of your own, as the proteome or as Protein database, nor with another report that places tags).
+            <L to="param-alkylation_out">alkylation report</L>, a default report of Characterize a run, makes that
+            call from the cysteine forms in the tags, with no database. With a shipped proteome named (human, mouse, yeast, E. coli) it also places tags on it as a check; that needs tags of 8 residues (human, mouse) or 7 (yeast, E. coli), so turning it on then raises Extension to 3 or 2 (not on a FASTA of your own, as the proteome or as Protein database, nor with another report that places tags).
+          </p>
+          <p>
+            Some reagents leave a cysteine with the mass of two plain residues: carbamidomethyl C equals C + G and
+            propionamide C equals A + C, to the last digit. A tag that skips a missing peak reads an unmodified GC
+            or AC as the reagent, and no ion of the spectrum tells the two readings apart (the immonium ion of the
+            reagent has the mass of the pair&apos;s internal ion). So the tags alone never call such a reagent: the
+            report shows <strong>Candidate: Carbamidomethyl — needs a protein database to confirm</strong>. Run
+            again with a FASTA as <L to="param-fasta">Protein database</L> or a shipped proteome as{' '}
+            <L to="param-alkylation_proteome">Alkylation proteome</L>: when the placements of single-cysteine
+            peptides on it call the same reagent, the report calls it. Which forms need this depends on the
+            fragment tolerance (at 0.02 Da also N-ethylmaleimide and carboxymethyl, at 20 ppm not); methylthio has
+            no such reading and is called from the tags alone.
           </p>
         </>
       )
@@ -1289,7 +1328,7 @@ export const FILES: HelpPage = {
               <tr><td>Label report</td><td><L to="param-label_out">Digest and labels</L></td><td>Label and SILAC counts and the label call (<L to="digest-labels">Digest tab</L>).</td></tr>
               <tr><td>Reconciliation table</td><td><L to="param-recon_out">Reconciliation</L></td><td>Each tag placed in database peptides, with the leftover mass (<L to="digest-gaps">mass gaps</L>).</td></tr>
               <tr><td>Mass-shift histogram</td><td><L to="param-delta_out">Reconciliation</L></td><td>Leftover masses, one count per spectrum.</td></tr>
-              <tr><td>Reconciliation as identifications</td><td><L to="param-recon_id_out">Reconciliation</L></td><td>The placements as idXML, mzIdentML (.mzid) or mzTab, not filtered by a false discovery rate.</td></tr>
+              <tr><td>Reconciliation as identifications</td><td><L to="param-recon_id_out">Reconciliation</L></td><td>The placements as identifications, not filtered by a false discovery rate. mzTab by default, shown under Mass shifts; name the file .idXML or .mzid for those formats, which are listed there as files to reveal or open.</td></tr>
               <tr><td>Mass-gap report</td><td><L to="param-massgap_out">Reconciliation</L></td><td>Gap peaks, alkylation and SILAC (<L to="digest-gaps">Digest tab</L>).</td></tr>
               <tr><td>Spectra with tags</td><td><L to="param-out_spectra">Outputs &amp; run</L></td><td>The spectra that carry at least one reported tag that is not an entrapment match, as mzML or mzPeak.</td></tr>
             </tbody>
@@ -1312,7 +1351,8 @@ export const FILES: HelpPage = {
             With <L to="param-glyco">Glyco flag</L>, FASTag writes one row per MS2 spectrum: how many different{' '}
             <G to="gloss-oxonium">oxonium ions</G> it holds, their summed intensity as a share of the strongest peak,
             a 0/1 flag and the ion names. By default, the flag is 1 when at least 2 different oxonium ions are found and their
-            share reaches the <L to="param-glyco_min_fraction">minimum fraction</L> (0.10). These are raw-spectrum
+            share reaches the <L to="param-glyco_min_fraction">minimum fraction</L> (0.10). The fragments of HexNAc
+            (126.055 to 186.076) count only when HexNAc itself (204.087) is found. These are raw-spectrum
             signals, measured before the peak budget used for tagging; the fraction is relative to the strongest
             peak, not the sum of all peak intensities, and can exceed 1.
           </p>
@@ -1344,7 +1384,7 @@ export const SETTINGS_INTRO: ReactNode = (
     <p>
       Settings start from your task or preset. The default <strong>Generate tags</strong> task processes all spectra
       and adds per-residue confidence. <strong>Characterize a run</strong> enables species, digest,
-      label and glyco reports and samples 10% of the input spectra. The reference below shows the CLI defaults,
+      label, alkylation and glyco reports and also reads all spectra. The reference below shows the CLI defaults,
       which can differ from the task&apos;s values. First check the{' '}
       <L to="param-fragment_tolerance">fragment tolerance</L> for the MS2 analyser. Species detection needs tags
       that reach 7 residues: the Characterize task uses <L to="param-tag_length">tag length</L> 3 with extension 2.

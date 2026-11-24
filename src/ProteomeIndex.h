@@ -92,6 +92,34 @@ namespace FASTag
     void locateTag(const std::string& tag, bool both, std::vector<TagOcc>& out) const;
 
     /**
+      @brief One protein a tag occurs in, at its first occurrence (-fasta_proteins).
+    */
+    struct ProteinHit
+    {
+      uint32_t protein;  ///< protein ordinal (database order)
+      uint32_t start;    ///< 1-based residue position of the first matched database residue
+      uint32_t end;      ///< 1-based residue position of the last (start + TagOcc::len - 1)
+    };
+
+    /**
+      @brief The distinct proteins @p tag occurs in, in one orientation.
+
+      locateTag() with the occurrences of the other orientation dropped: an
+      -fasta row whose filter hit was fwd lists only forward occurrences,
+      a rev row only reversed ones. Each protein appears once, at its first
+      occurrence; target proteins come before decoys, each group in
+      database order.
+
+      @param[in] tag Base residues, N->C, unfolded ok.
+      @param[in] reversed The orientation (true: the reversed tag).
+      @param[in] decoy Per protein ordinal, nonzero for a decoy entry; may be
+        empty (no decoys).
+      @param[out] out The proteins (replaced).
+    */
+    void proteinHits(const std::string& tag, bool reversed, const std::vector<char>& decoy,
+                     std::vector<ProteinHit>& out) const;
+
+    /**
       @brief Tryptic windows containing [pos, pos+len).
 
       Windows never span a sentinel or an ambiguity residue: both are hard
@@ -297,4 +325,28 @@ namespace FASTag
     std::vector<CollapseRule> rules_;
     size_t residues_ = 0;
   };
+  /**
+    @brief The gene name of a UniProt-style FASTA description (its GN= value).
+
+    @param[in] description The FASTA description (the header after the identifier).
+    @return The value after "GN=" up to the next whitespace; empty when there is none.
+  */
+  std::string fastaGeneName(const std::string& description);
+
+  /**
+    @brief The three -fasta_proteins cells of one -out row, tab-separated.
+
+    db_proteins: the first @p n proteins as "identifier@start-end",
+    ';'-separated; db_genes: their gene names (@p genes, per protein ordinal),
+    ';'-separated, '-' for one without; db_protein_count: the number of
+    distinct proteins. No proteins gives "-", "-", "0".
+
+    @param[in] idx The index @p hits come from.
+    @param[in] genes Gene name per protein ordinal of @p idx (empty: none).
+    @param[in] hits The proteins (ProteomeIndex::proteinHits()).
+    @param[in] n How many to name (>= 1).
+    @return "db_proteins<TAB>db_genes<TAB>db_protein_count".
+  */
+  std::string dbProteinCells(const ProteomeIndex& idx, const std::vector<std::string>& genes,
+                             const std::vector<ProteomeIndex::ProteinHit>& hits, size_t n);
 }

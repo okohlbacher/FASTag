@@ -45,11 +45,12 @@ only tags that actually reach the export minimum will be kept. Lower the
 export minimum only if shorter reads suit the downstream tool. Read exports
 use the whole file and their own filters, not the Tags table's filters.
 
-For QC, choose **Characterize a run**: it samples **10% of the input spectra**
-and enables species, digest, label and glyco reports, opening on
+For QC, choose **Characterize a run**: it reads **all input spectra**
+and enables species, digest, label, alkylation and glyco reports, opening on
 **Results → Overview**. A species ranking is not a presence call, and “no
-call” or “not assessed” does not establish absence. For a full survey, set
-**Subsample fraction** to `1` and **Subsample spectra** to `0` under **Spectra**.
+call” or “not assessed” does not establish absence. For a quicker look at a
+large run, set **Spectra to read** to a share (fewer spectra vote, often too
+few for the alkylation call).
 **Batch QC vs SDRF** runs that survey for multiple files. An SDRF
 (sample and data relationship format) metadata table is optional; load one
 in **Batch** to compare its annotations with the reports. **Open results /
@@ -209,6 +210,23 @@ Windows, which the Windows CLI zip does not contain: it ships `FASTag.bat` and
 at a local build with `FASTAG_BIN=/path/to/FASTag npm run tauri dev`, or drop a
 symlink at `src-tauri/resources/fastag/bin/FASTag`.
 
+The bundled CLI gets its data folders explicitly (`src-tauri/src/data.rs`
+`data_env`): `FASTAG_TAXONOMY_DIR`, `FASTAG_DIGEST_DIR` and
+`FASTAG_ALKYLATION_DIR`, each the user's own when it names a folder, else
+`resources/fastag/share/FASTag/<name>`. A CLI from `FASTAG_BIN` finds its own
+(a build tree links `data/` beside the binary). When it has none beside it (a
+build from before that, or with `-DFASTAG_STAGE_DATA_IN_BUILD=OFF`), a debug
+build of the app gives it this source tree's `data/digest`, `data/alkylation`
+and `data/taxonomy` instead; a release build never does. A debug build also gives a CLI that
+has no taxonomy index of its own the one `tools/fetch_taxonomy_index.py` fetched (the folder
+a build tree stages, `~/.cache/fastag/<data release>/share-FASTag-taxonomy`), so `-species`
+runs without `FASTAG_TAXONOMY_DIR`; the Species panel and the check before a run report on
+that same folder. Before a run, `data_status`
+resolves the digest data and proteomes as the CLI does, and the check before
+the run (`inspector/checks.ts`, `no-shipped-data-<option>`) blocks a mass-gap
+report, digest report, database reduction or alkylation report whose file is
+missing, with the folders searched and the fix.
+
 `npm run dev` opened in a browser (http://localhost:1420) shows the React part
 without the backend: a mock bridge stands in, and "open a report" loads the
 fixture reports. A production build does not contain it.
@@ -334,7 +352,7 @@ or a link to the same file).
 Setup presents tasks in this order: **Generate tags** (the default: all spectra
 with the per-residue confidence column), **Open results / inspect spectra**
 (no run), **Characterize a run** (species with extension 2, digest, label and
-glyco reports, a tenth of the spectra), then **Batch QC vs SDRF**. "Starting from" also
+alkylation and glyco reports, all spectra), then **Batch QC vs SDRF**. "Starting from" also
 offers FASTag's own defaults and your saved presets. The parameters sit in
 four step cards (Spectra, Database & taxonomy, Tagging, Reports), each with a
 one-line summary; settings that only a section's switch turns on (species,
@@ -415,7 +433,9 @@ once. Parsing a 50 MB table (810,738 glyco rows or 402,313 recon rows, the
 PXD014764 rows repeated) took 0.18 to 0.25 s and 80 to 130 MB of heap
 beyond the text in Node 26 (V8, vitest) on an M4 Max; the IPC transfer of such a
 string is not measured. A larger table shows "too large" and opens only in
-a spreadsheet.
+a spreadsheet; a larger `-recon_id_out` mzTab is listed under Identification
+files with Open and Reveal (the error starts with `too large to show`,
+report.rs `TOO_LARGE_PREFIX`).
 
 Themes: System (the default), Light and Dark, from the top bar or View >
 Theme; the choice is remembered on this machine. Text uses the system UI
@@ -537,8 +557,9 @@ them.
 Sharing is the second step. The backend builds the public export (`export.json`,
 `fastag-feedback-public/1`, `src/feedback/schema/feedback-public.schema.json`, which must stay identical
 to the intake's `doc/feedback/feedback-public.schema.json`) fresh from typed fields, zips it with the
-screenshot if included into `<id>.feedback.zip`, and the dialog shows it field by field. Screenshot
-and log are off by default, diagnostics on. After the confirmation that it becomes a public GitHub
+screenshot if included into `<id>.feedback.zip`, and the dialog shows it field by field. The
+screenshot (when there is one) and diagnostics are included by default, the log is off; each can be
+unticked. After the confirmation that it becomes a public GitHub
 issue, **Open issue draft** opens
 `https://github.com/okohlbacher/FASTag/issues/new?template=feedback.yml&title=…&report-id=…&kind=…`
 (text fields only, under 2 KB; the opener is scoped to that endpoint in

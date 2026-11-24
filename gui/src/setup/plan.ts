@@ -32,13 +32,17 @@ export function reportsOn(values: V): string[] {
 /// "Run QC on run01.mzML · 1 report · 10% of spectra"; a batch counts its
 /// files, and names its output folder when it has one.
 /// In Batch mode (@p ctx.batch) the queue is the input: "no files yet"
-/// until it holds one, never the single file.
-export function planLine(label: string, values: V, ctx: { input: string; files: number; outDir?: string | null; batch?: boolean }): string {
+/// until it holds one, never the single file. @p ctx.waiting: the reports
+/// that are off until a protein database is chosen (Mass-shift survey).
+export function planLine(label: string, values: V, ctx: { input: string; files: number; outDir?: string | null; batch?: boolean; waiting?: number }): string {
   const batch = ctx.batch || ctx.files > 0
   const what = ctx.files > 0 ? `${ctx.files} ${ctx.files === 1 ? 'file' : 'files'}` : batch ? 'no files yet' : ctx.input ? baseName(ctx.input) : 'no file yet'
   const named = ctx.files > 0 || (!batch && !!ctx.input)
   const n = reportsOn(values).length
-  const parts = [named ? `${label} on ${what}` : `${label} · ${what}`, n ? `${n} ${n === 1 ? 'report' : 'reports'}` : 'tags table only', samplingSummary(values)]
+  const parts = [named ? `${label} on ${what}` : `${label} · ${what}`, n ? `${n} ${n === 1 ? 'report' : 'reports'}` : 'tags table only']
+  const k = ctx.waiting ?? 0
+  if (k) parts.push(`${k} ${k === 1 ? 'report' : 'reports'} off: no protein database`)
+  parts.push(samplingSummary(values))
   if (batch) parts.push(ctx.outDir ? `outputs in ${ctx.outDir}` : 'outputs beside each input')
   return parts.join(' · ')
 }

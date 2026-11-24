@@ -38,9 +38,12 @@ describe('help vs docs', () => {
     expect(start).toContain('Results opens on Tags')
     expect(start).toContain('Open earlier results…')
     // QC remains available as an explicit optional workflow.
-    expect(taskById('characterize')!.values).toMatchObject({ species: true, extension: '2', subsample_fraction: '0.1', digest_out: 'digest.tsv', label_out: 'label.tsv', glyco: true })
+    expect(taskById('characterize')!.values).toMatchObject({ species: true, extension: '2', digest_out: 'digest.tsv', label_out: 'label.tsv', alkylation_out: 'alkylation.tsv', glyco: true })
+    // All spectra (1.16): no share is set, so the CLI default (all) applies.
+    expect(taskById('characterize')!.values).not.toHaveProperty('subsample_fraction')
     expect(start).toContain('For run metrics, choose Run QC. For protease, labels, glycopeptides and species, choose Characterize a run')
-    expect(start).toContain('Characterize samples 10% of the spectra')
+    expect(start).toContain('Characterize reads all spectra and enables the species, digest, label, alkylation and glyco reports')
+    expect(start).not.toContain('10% of the spectra')
     expect(start).toContain('opening on Overview')
     expect(start).not.toContain('Every other setting starts at')
     const files = pageText('files')

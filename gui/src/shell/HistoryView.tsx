@@ -1,6 +1,7 @@
 // The History view (GUI-DESIGN 3 S9, 6.5; the list of P2a PR s, the actions
 // of PR h): one row per recorded run, newest first, from the backend's run
-// record (history.rs). Each row offers Copy command (the argv the record
+// record (history.rs). Each row offers Open (a finished run) and, under
+// More (RowMenu), Copy command (the argv the record
 // keeps, which is the command line the run was started with), Settings into
 // form (with Undo), Re-run (the recorded run again, with the parameters it
 // was sent) and Delete record (the record only, never its files; asked
@@ -17,7 +18,9 @@ import { PARAM_BY_NAME } from '../paramLayout'
 import { dirName, stripExt } from '../app/paths'
 import { duration, shellLine } from '../app/format'
 import { JobIcon } from '../icons'
-import { HelpLink } from '../help/HelpLink'
+import PageHeader from './PageHeader'
+import EmptyState from './EmptyState'
+import RowMenu, { type RowMenuItem } from './RowMenu'
 
 const STATUS: Record<RunRecord['status'], { text: string; icon: 'done' | 'failed' | 'cancelled' }> = {
   ok: { text: 'Finished', icon: 'done' },
@@ -69,19 +72,22 @@ export function recordOutputs(r: RunRecord, out: string): ResolvedOutputs {
     if (params[on] !== true || o[key]) continue
     o[key] = r.outputs.find((x) => x.endsWith(suffix)) ?? `${stripExt(out)}${suffix}`
   }
-  // The tag graph tables the backend adds beside the tags (fastag.rs), never sent as params.
-  for (const key of ['resolved_out', 'tag_graph_out'] as const) {
-    const i = r.argv.indexOf(`-${key}`)
-    if (i > 0 && r.argv[i + 1] && !o[key]) o[key] = place(r.argv[i + 1])
-  }
   return o
 }
 
-// What the note under the heading says after an action.
+// What the note under the heading says after an action. Clipboard feedback
+// is kept apart (Copied), so a Copy command never drops the Undo of an
+// earlier Settings into form.
 type Note =
   | { kind: 'settings'; input: string; undo: () => void }
   | { kind: 'deleted'; input: string }
   | { kind: 'error'; text: string }
+
+// What Copy command said: copied, or refused by the clipboard.
+interface Copied {
+  input: string
+  ok: boolean
+}
 
 export interface HistoryViewProps {
   // Shown: the list is read again each time the view opens, and after a run.
@@ -130,18 +136,21 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
   const { active, version, busy } = p
   const [records, setRecords] = useState<RunRecord[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // The record whose command was copied (or refused by the clipboard).
-  const [copied, setCopied] = useState<{ id: string; ok: boolean } | null>(null)
-  const [note, setNote] = useState<Note | null>(null)
+  const [note, setNoteOnly] = useState<Note | null>(null)
+  const [copied, setCopied] = useState<Copied | null>(null)
+  // A new note replaces the copy feedback too; a copy leaves the note.
+  const setNote = (n: Note | null): void => {
+    setNoteOnly(n)
+    setCopied(null)
+  }
   const [reread, setReread] = useState(0)
   // The record whose Delete record asks for confirmation.
   const [confirming, setConfirming] = useState<string | null>(null)
   // Where keyboard focus goes once the list has re-rendered after a delete
-  // (WCAG 2.4.3): a row's first action or its Delete record, else (the list
-  // is empty) the heading.
-  const [focusTo, setFocusTo] = useState<{ id: string | null; what: 'first' | 'delete' } | null>(null)
+  // (WCAG 2.4.3): a row's first action or its More (where Delete record
+  // is), else (the list is empty) the heading.
+  const [focusTo, setFocusTo] = useState<{ id: string | null; what: 'first' | 'more' } | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
-  const headingRef = useRef<HTMLHeadingElement>(null)
   const keepRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (!active) return
@@ -166,17 +175,18 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
   useEffect(() => {
     if (!focusTo) return
     const row = focusTo.id ? rootRef.current?.querySelector(`tr[data-id="${CSS.escape(focusTo.id)}"]`) : null
-    const target = row?.querySelector<HTMLElement>(focusTo.what === 'delete' ? '[data-action="delete"]' : 'button')
-    ;(target ?? headingRef.current)?.focus()
+    const target = row?.querySelector<HTMLElement>(focusTo.what === 'more' ? '[data-action="more"]' : 'button')
+    ;(target ?? rootRef.current?.querySelector<HTMLElement>('#history-h'))?.focus()
     setFocusTo(null)
   }, [focusTo, records])
 
   const fail = (e: unknown): void => setNote({ kind: 'error', text: e instanceof Error ? e.message : String(e) })
 
   function copy(r: RunRecord): void {
+    // Said in the note: the item that did it is gone with the menu.
     navigator.clipboard.writeText(shellLine(r.argv)).then(
-      () => setCopied({ id: r.id, ok: true }),
-      () => setCopied({ id: r.id, ok: false })
+      () => setCopied({ input: r.input, ok: true }),
+      () => setCopied({ input: r.input, ok: false })
     )
   }
 
@@ -197,14 +207,14 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
         // Kept (or the delete failed): the row stays, and so does focus.
         setConfirming(null)
         fail(e)
-        setFocusTo({ id: r.id, what: 'delete' })
+        setFocusTo({ id: r.id, what: 'more' })
       }
     )
   }
 
   function keep(id: string): void {
     setConfirming(null)
-    setFocusTo({ id, what: 'delete' })
+    setFocusTo({ id, what: 'more' })
   }
 
   function settings(r: RunRecord, out: string): void {
@@ -212,12 +222,34 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
     setNote({ kind: 'settings', input: r.input, undo })
   }
 
+  // What More lists for @p r (RowMenu), in this order; Delete record last,
+  // apart.
+  function rowItems(r: RunRecord, out: string | null, finished: boolean): RowMenuItem[] {
+    const items: RowMenuItem[] = []
+    if (finished && out) items.push({ label: 'Reveal', onSelect: () => void window.fastag.revealOutput(out, false).catch(fail) })
+    items.push({ label: 'Copy command', title: shellLine(r.argv), onSelect: () => copy(r) })
+    if (r.params && out) {
+      items.push({ label: 'Settings into form', disabled: busy, onSelect: () => settings(r, out) })
+      items.push({ label: 'Re-run', disabled: busy, onSelect: () => void p.onRerun(r.id).catch(fail) })
+    }
+    items.push({ label: 'Delete record', action: 'delete', separatorBefore: true, onSelect: () => setConfirming(r.id) })
+    return items
+  }
+
   return (
-    <div className="history" ref={rootRef}>
-      <h2 id="history-h" ref={headingRef} tabIndex={-1}>
-        History
-      </h2>
-      <p><HelpLink to="workflow-history">Reopen results or reuse settings</HelpLink></p>
+    <div className="history page-col" ref={rootRef}>
+      <PageHeader
+        title="History"
+        titleId="history-h"
+        focusable
+        context="Earlier runs: open their results, or load their settings into Setup."
+        actions={
+          <button type="button" className="secondary" onClick={p.onOpenResults} disabled={busy}>
+            Open results…
+          </button>
+        }
+      />
+      <div className="page-body">
       <div className="history-note" role="status" aria-label="History">
         {note?.kind === 'settings' && (
           <>
@@ -239,20 +271,23 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
         )}
         {note?.kind === 'deleted' && <>The record of {baseName(note.input)} was deleted; its files were kept.</>}
         {note?.kind === 'error' && <span className="warn">{note.text}</span>}
+        {copied && (
+          <span className="history-copied">
+            {note && ' '}
+            {copied.ok ? (
+              <>Copied the command of {baseName(copied.input)}.</>
+            ) : (
+              <span className="warn">The clipboard refused the command.</span>
+            )}
+          </span>
+        )}
       </div>
       {error && (
         <p className="warn" role="alert">
           Could not read the run record: {error}
         </p>
       )}
-      {records && records.length === 0 && (
-        <div className="empty">
-          <p>Runs you start appear here.</p>
-          <button type="button" className="secondary" onClick={p.onOpenResults} disabled={busy}>
-            Open results…
-          </button>
-        </div>
-      )}
+      {records && records.length === 0 && <EmptyState title="No runs yet">Runs you start appear here.</EmptyState>}
       {records && records.length >= HISTORY_LIMIT && (
         <p className="hint" role="note">
           The latest {HISTORY_LIMIT} runs are listed; older ones stay in the history file.
@@ -313,35 +348,8 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
                   <td className="hist-actions">
                     <div className="hist-actions-row">
                       {finished && out && (
-                        <>
-                          <button type="button" className="secondary small" disabled={busy} onClick={() => p.onOpen(r, out)}>
-                            Open
-                          </button>
-                          <button
-                            type="button"
-                            className="secondary small"
-                            onClick={() => window.fastag.revealOutput(out, false).catch(fail)}
-                          >
-                            Reveal
-                          </button>
-                        </>
-                      )}
-                      <button type="button" className="secondary small" onClick={() => copy(r)} title={shellLine(r.argv)}>
-                        {copied?.id === r.id && copied.ok ? 'Copied' : 'Copy command'}
-                      </button>
-                      {r.params && out && (
-                        <button type="button" className="secondary small" disabled={busy} onClick={() => settings(r, out)}>
-                          Settings into form
-                        </button>
-                      )}
-                      {r.params && out && (
-                        <button
-                          type="button"
-                          className="secondary small"
-                          disabled={busy}
-                          onClick={() => void p.onRerun(r.id).catch(fail)}
-                        >
-                          Re-run
+                        <button type="button" className="secondary small" disabled={busy} onClick={() => p.onOpen(r, out)}>
+                          Open
                         </button>
                       )}
                       {confirming === r.id ? (
@@ -364,11 +372,8 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
                           </button>
                         </span>
                       ) : (
-                        <button type="button" className="secondary small" data-action="delete" onClick={() => setConfirming(r.id)}>
-                          Delete record
-                        </button>
+                        <RowMenu label={`More actions for ${baseName(r.input)}`} items={rowItems(r, out, finished)} />
                       )}
-                      {copied?.id === r.id && !copied.ok && <span className="muted">The clipboard refused the command.</span>}
                     </div>
                   </td>
                 </tr>
@@ -377,6 +382,7 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
           </tbody>
         </table>
       )}
+      </div>
     </div>
   )
 }

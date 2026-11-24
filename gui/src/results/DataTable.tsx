@@ -7,6 +7,9 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type JSX, type KeyboardEvent, type ReactNode } from 'react'
 import { useSticky } from './tableStore'
+import { useSpectrumLink } from './spectrumLink'
+import { IconSpectrum } from '../icons'
+import './viewers.css'
 
 export interface Column {
   id: string
@@ -21,6 +24,10 @@ export interface Column {
   title?: string
   /// A tooltip for the cell of row @p i (the full native ID behind a scan number).
   cellTitle?(i: number): string | undefined
+  /// The spectrum (native ID) of row @p i: the cell links it to the
+  /// Spectrum tab, as the Tags table's scan cell does, when the Results
+  /// page can show spectra (spectrumLink.ts); else plain, the tooltip says why.
+  spectrum?(i: number): string
 }
 
 export const PAGE = 100
@@ -80,7 +87,18 @@ export function sortIds(ids: ArrayLike<number>, col: Column | undefined, desc: b
   return order.map((j) => out[j])
 }
 
-export default function DataTable({ label, columns, ids, total, empty, sort: initial = null, keep, onOpen, openLabel = 'Open', onOrder }: DataTableProps): JSX.Element {
+export default function DataTable({ label, columns, ids, total, empty, sort: initial = null, keep, onOpen: openRow, openLabel: rowLabel, onOrder }: DataTableProps): JSX.Element {
+  // A spectrum column links its scans; without a row action of its own the
+  // table opens the active row's spectrum (Enter, double-click, the button).
+  const link = useSpectrumLink()
+  const opener = link && 'open' in link ? link : null
+  const specCol = columns.find((c) => c.spectrum)
+  const openSpec = opener && specCol ? (id: number): void => {
+    const sp = specCol.spectrum!(id)
+    if (sp !== '') opener.open(sp)
+  } : undefined
+  const onOpen = openRow ?? openSpec
+  const openLabel = rowLabel ?? (openRow ? 'Open' : 'Open in Spectrum')
   const [sort, setSort] = useSticky(keep, `sort:${label}`, initial)
   const [active, setActive] = useState(0)
   const base = useId()
@@ -188,7 +206,11 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
       {n === 0 ? (
         <div className="dt-empty">{empty ?? 'No rows match.'}</div>
       ) : (
-        <div className="dt-wrap" ref={wrapRef}>
+        <div
+          className="dt-wrap"
+          ref={wrapRef}
+          title={`Click a column to sort; in the table ↑ ↓, Page Up/Down, Home and End move the active row${onOpen ? `; Enter or a double-click: ${openLabel.toLowerCase()}` : ''}.`}
+        >
           <table
             ref={gridRef}
             className="taxa dt"
@@ -242,23 +264,49 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
                     }}
                     onDoubleClick={onOpen ? () => onOpen(id) : undefined}
                   >
-                    {columns.map((c) => (
-                      <td key={c.id} role="gridcell" className={[c.num ? 'num' : '', c.mono ? 'mono' : ''].join(' ').trim() || undefined} title={c.cellTitle?.(id)}>
-                        {c.text(id)}
-                      </td>
-                    ))}
+                    {columns.map((c) => {
+                      const sp = c.spectrum?.(id) ?? ''
+                      const tip = c.cellTitle?.(id)
+                      return (
+                        <td
+                          key={c.id}
+                          role="gridcell"
+                          className={[c.num ? 'num' : '', c.mono ? 'mono' : ''].join(' ').trim() || undefined}
+                          title={sp !== '' && link && 'off' in link ? `${tip ?? sp}\n${link.off}.` : tip}
+                        >
+                          {sp !== '' && opener ? (
+                            // The scan itself opens the spectrum, its icon as in Tags;
+                            // the keyboard opens it with Enter on the row.
+                            <button
+                              type="button"
+                              className="dt-spec"
+                              tabIndex={-1}
+                              title={`Show this spectrum${tip ? ` (${tip})` : ''}`}
+                              aria-label={`Open spectrum ${c.text(id)}`}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                moved.current = j !== at
+                                setActive(j)
+                                gridRef.current?.focus({ preventScroll: true })
+                                opener.open(sp)
+                              }}
+                              onDoubleClick={(e) => e.stopPropagation()}
+                            >
+                              <IconSpectrum />
+                              <span>{c.text(id)}</span>
+                            </button>
+                          ) : (
+                            c.text(id)
+                          )}
+                        </td>
+                      )
+                    })}
                   </tr>
                 )
               })}
             </tbody>
           </table>
         </div>
-      )}
-      {n > 0 && (
-        <p className="dt-help">
-          Click a column to sort; in the table ↑ ↓, Page Up/Down, Home and End move the active row
-          {onOpen ? `; Enter or a double-click: ${openLabel.toLowerCase()}` : ''}.
-        </p>
       )}
     </div>
   )

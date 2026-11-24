@@ -83,7 +83,7 @@ export function gapDomain(bins: GapBin[], range: GapRange): [number, number] {
 }
 
 /// Clean ticks from 0 to at least @p max (3-5 of them).
-function yTicks(max: number): number[] {
+export function yTicks(max: number): number[] {
   const raw = max / 4
   const p = 10 ** Math.floor(Math.log10(Math.max(raw, 1e-9)))
   const step = [1, 2, 5, 10].map((m) => m * p).find((s) => s >= raw) ?? p * 10
@@ -93,7 +93,7 @@ function yTicks(max: number): number[] {
   return out
 }
 
-function xTicks(lo: number, hi: number): number[] {
+export function xTicks(lo: number, hi: number): number[] {
   const raw = (hi - lo) / 6
   const p = 10 ** Math.floor(Math.log10(Math.max(raw, 1e-9)))
   const step = [1, 2, 5, 10].map((m) => m * p).find((s) => s >= raw) ?? p * 10

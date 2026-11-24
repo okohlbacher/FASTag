@@ -5,6 +5,7 @@ import { FAQ, FAQ_BY_ID, FAQ_GROUPS } from './faq'
 import { HelpLink } from './HelpLink'
 import { closeHelp, helpBack, openHelp, rememberHelpPage, showHelpPage, useHelp } from './link'
 import { parameterLimits, searchHelp } from './search'
+import { TASKS } from '../setup/tasks'
 
 export const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
@@ -39,6 +40,7 @@ export const PAGE_OF: Map<string, string> = (() => {
   for (const f of FAQ) m.set(f.id, 'troubleshooting')
   for (const g of FAQ_GROUPS) m.set(`faq-group-${slug(g)}`, 'troubleshooting')
   for (const g of GLOSSARY) m.set(g.id, 'glossary')
+  for (const t of TASKS) m.set(`task-${t.id}`, 'start')
   for (const s of SECTIONS) m.set(`param-sec-${slug(s.title)}`, 'settings')
   m.set('param-sec-hidden', 'settings')
   for (const [n, ui] of Object.entries(PARAM_UI)) if (ui.help) m.set(`param-${n}`, 'settings')
@@ -66,6 +68,20 @@ export function reveal(id: string): void {
   const f = (target ?? el) as HTMLElement
   if (!f.matches('summary, button, a, input, select, textarea')) f.tabIndex = -1
   f.focus({ preventScroll: true })
+  // The search results collapse as a hit opens; once that layout settles,
+  // a heading left above the reading area (WebKit, a few pixels) is brought
+  // back. Only then: a heading still below is on its way there by a smooth
+  // scroll, which 'nearest' would cut short at the panel's bottom edge.
+  // Checked over two frames: the collapse can land in either.
+  const fix = (): void => {
+    const area = f.closest('.help-main')
+    if (document.activeElement === f && area && f.getBoundingClientRect().top < area.getBoundingClientRect().top)
+      f.scrollIntoView?.({ block: 'nearest' })
+  }
+  requestAnimationFrame?.(() => {
+    fix()
+    requestAnimationFrame(fix)
+  })
 }
 
 function ParamEntry({ name }: { name: string }): JSX.Element | null {
@@ -333,7 +349,7 @@ export default function HelpView(): JSX.Element {
     <div className="helpview">
       <div className="help-head">
         <HelpSearch />
-        <button type="button" className="secondary small" onClick={() => closeHelp()}>
+        <button type="button" className="secondary small" title="Close Help (Esc); F1 opens it again" onClick={() => closeHelp()}>
           Close Help
         </button>
       </div>
@@ -357,7 +373,6 @@ export default function HelpView(): JSX.Element {
             <span aria-hidden="true">←</span> Back to {PAGES.find((p) => p.id === back.page)?.title ?? 'the last page'}
           </button>
         )}
-        <p className="hint">F1 opens Help; Esc closes it.</p>
       </nav>
       <main className="help-main" ref={mainRef} aria-labelledby="help-page-h">
         <article className="help-page">

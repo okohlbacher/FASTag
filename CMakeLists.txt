@@ -6,7 +6,7 @@
 # 3.28: the floor .github/env/openms.yml (and so every CI and release build)
 # guarantees; README, BUILDING.md and BOM.md state the same.
 cmake_minimum_required(VERSION 3.28 FATAL_ERROR)
-project(FASTag VERSION 1.15.7 LANGUAGES CXX)
+project(FASTag VERSION 1.16.0 LANGUAGES CXX)
 # Policy CMP0155 (NEW from 3.28) would scan every C++23 source for module
 # imports, which needs clang-scan-deps beside clang; FASTag uses no modules.
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
@@ -100,12 +100,12 @@ set(FASTAG_CORE_SOURCES_113 src/Cleavage.cpp)
 set(FASTAG_CORE_SOURCES_116 src/BrukerInput.cpp)
 # ---- 1.16 QC: core sources ----
 set(FASTAG_CORE_SOURCES_QC src/RunQC.cpp)
-# ---- tag merging: core sources ----
-set(FASTAG_CORE_SOURCES_MERGE src/TagGraph.cpp)
+# ---- subsumed tags and terminal anchors: core sources ----
+set(FASTAG_CORE_SOURCES_TERM src/Terminus.cpp)
 add_library(fastag_core STATIC ${FASTAG_CORE_SOURCES}
             ${FASTAG_CORE_SOURCES_E} ${FASTAG_CORE_SOURCES_A} ${FASTAG_CORE_SOURCES_D} ${FASTAG_CORE_SOURCES_F}
             ${FASTAG_CORE_SOURCES_113} ${FASTAG_CORE_SOURCES_116} ${FASTAG_CORE_SOURCES_QC}
-            ${FASTAG_CORE_SOURCES_MERGE})
+            ${FASTAG_CORE_SOURCES_TERM})
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
@@ -231,6 +231,107 @@ if(OpenMP_CXX_FOUND)
 endif()
 install(TARGETS FASTag RUNTIME DESTINATION bin)
 
+# The shipped data beside the built binary, in the flat release layout the CLI
+# already searches (share-FASTag-{digest,alkylation,taxonomy}), so a build-tree
+# FASTag runs -digest_out, -massgap_out, the hand-off and -alkylation_out
+# without FASTAG_DIGEST_DIR (cmake/stage-data.cmake: a symlink to data/; on
+# Windows, where a symlink needs Developer Mode, a copy of about 16 MB). The
+# taxonomy folder holds the dumps only, so -species still asks for the index,
+# unless FASTAG_TAXONOMY_INDEX_DIR names a folder with the index (the release
+# asset FASTag-<version>-taxonomy-k7.tar.gz, unpacked) or the index file itself:
+# then share-FASTag-taxonomy is the index (and a folder's dumps) plus the rest
+# of data/taxonomy (species_call.tsv), as in a release. Without it, and with
+# FASTAG_TAXONOMY_INDEX_AUTO (on), every build looks for the pinned index where
+# tools/fetch_taxonomy_index.py puts it (FASTAG_TAXONOMY_CACHE_DIR/<data
+# release>/share-FASTag-taxonomy, one data release per manifest in
+# data/taxonomy/manifests, newest first), so a one-time fetch serves every
+# build tree of this machine with no variable to set. The install and the
+# release packaging copy data/ themselves.
+# Staged by the target fastag_stage_data, on every build (cmake --build), so an
+# edit to data/ alone and a deleted share-FASTag-* folder are restaged; ctest
+# stages first (the fixture fastag_staged_data). A real folder there without
+# the marker .fastag-staged is the user's and is left alone.
+# tools/shipped_data.py lists the files; test/shipped_data_test.py checks them.
+option(FASTAG_STAGE_DATA_IN_BUILD "Link (Windows: copy) data/ beside the built FASTag" ON)
+set(FASTAG_TAXONOMY_INDEX_DIR "" CACHE PATH
+    "Folder with tax_k7.taxdb (and its dumps), or the index file itself, staged as share-FASTag-taxonomy beside the built FASTag")
+if(FASTAG_TAXONOMY_INDEX_DIR AND NOT EXISTS "${FASTAG_TAXONOMY_INDEX_DIR}/tax_k7.taxdb"
+   AND (IS_DIRECTORY "${FASTAG_TAXONOMY_INDEX_DIR}" OR NOT EXISTS "${FASTAG_TAXONOMY_INDEX_DIR}"))
+  message(FATAL_ERROR "FASTAG_TAXONOMY_INDEX_DIR='${FASTAG_TAXONOMY_INDEX_DIR}' is neither a folder with "
+                      "tax_k7.taxdb nor an index file (run tools/fetch_taxonomy_index.py, or unpack "
+                      "FASTag-<version>-taxonomy-k7.tar.gz and name its share-FASTag-taxonomy folder)")
+endif()
+option(FASTAG_TAXONOMY_INDEX_AUTO
+       "Without FASTAG_TAXONOMY_INDEX_DIR, stage the index tools/fetch_taxonomy_index.py fetched into FASTAG_TAXONOMY_CACHE_DIR" ON)
+# The default of tools/fetch_taxonomy_index.py (fastag_cache_dir there).
+if(WIN32 AND DEFINED ENV{LOCALAPPDATA})
+  set(_fastag_cache_default "$ENV{LOCALAPPDATA}/fastag")
+elseif(DEFINED ENV{XDG_CACHE_HOME} AND NOT "$ENV{XDG_CACHE_HOME}" STREQUAL "")
+  set(_fastag_cache_default "$ENV{XDG_CACHE_HOME}/fastag")
+elseif(DEFINED ENV{HOME})
+  set(_fastag_cache_default "$ENV{HOME}/.cache/fastag")
+else()
+  set(_fastag_cache_default "")
+endif()
+file(TO_CMAKE_PATH "${_fastag_cache_default}" _fastag_cache_default)
+set(FASTAG_TAXONOMY_CACHE_DIR "${_fastag_cache_default}" CACHE PATH
+    "Where tools/fetch_taxonomy_index.py puts the taxonomy index (FASTAG_TAXONOMY_INDEX_AUTO)")
+# The folders a build looks in (stage-data.cmake INDEX_SEARCH), newest data
+# release first.
+# Each with the manifest it must be a complete fetch of (INDEX_MANIFESTS:
+# the folder's completion marker names it).
+set(FASTAG_TAXONOMY_INDEX_SEARCH "")
+set(FASTAG_TAXONOMY_INDEX_MANIFESTS "")
+if(FASTAG_TAXONOMY_INDEX_AUTO AND NOT FASTAG_TAXONOMY_INDEX_DIR AND FASTAG_TAXONOMY_CACHE_DIR)
+  file(GLOB _fastag_manifests "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/manifests/*.json")
+  list(SORT _fastag_manifests ORDER DESCENDING)
+  set(_fastag_search "")
+  foreach(_m IN LISTS _fastag_manifests)
+    get_filename_component(_rel "${_m}" NAME_WE)
+    list(APPEND _fastag_search "${FASTAG_TAXONOMY_CACHE_DIR}/${_rel}/share-FASTag-taxonomy")
+  endforeach()
+  list(JOIN _fastag_search "|" FASTAG_TAXONOMY_INDEX_SEARCH)
+  list(JOIN _fastag_manifests "|" FASTAG_TAXONOMY_INDEX_MANIFESTS)
+endif()
+# Whether FASTAG_TAXONOMY_CACHE_DIR is the default tools/fetch_taxonomy_index.py
+# fills (shipped_data_test compares the two only then).
+if(FASTAG_TAXONOMY_CACHE_DIR STREQUAL _fastag_cache_default)
+  set(_fastag_cache_is_default default)
+else()
+  set(_fastag_cache_is_default custom)
+endif()
+if(FASTAG_STAGE_DATA_IN_BUILD)
+  set(_fastag_stage_cmds "")
+  foreach(_fastag_data digest alkylation taxonomy)
+    if(WIN32)
+      set(_fastag_copy ON)
+    else()
+      set(_fastag_copy OFF)
+    endif()
+    set(_fastag_index "")
+    if(_fastag_data STREQUAL "taxonomy" AND FASTAG_TAXONOMY_INDEX_DIR)
+      set(_fastag_index "-DINDEX=${FASTAG_TAXONOMY_INDEX_DIR}")
+    elseif(_fastag_data STREQUAL "taxonomy" AND FASTAG_TAXONOMY_INDEX_SEARCH)
+      set(_fastag_index "-DINDEX_SEARCH=${FASTAG_TAXONOMY_INDEX_SEARCH}"
+                        "-DINDEX_MANIFESTS=${FASTAG_TAXONOMY_INDEX_MANIFESTS}")
+    endif()
+    list(APPEND _fastag_stage_cmds
+      COMMAND "${CMAKE_COMMAND}" -DSRC=${CMAKE_CURRENT_SOURCE_DIR}/data/${_fastag_data}
+              -DDST=$<TARGET_FILE_DIR:FASTag>/share-FASTag-${_fastag_data} -DCOPY=${_fastag_copy}
+              ${_fastag_index}
+              -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/stage-data.cmake)
+  endforeach()
+  # No OUTPUT, so it runs on every build: a data-only edit and a deleted
+  # share-FASTag-* are restaged too. Cheap when nothing changed: a link that
+  # names data/ already is kept, and a copy skips files whose time stamps match.
+  add_custom_target(fastag_stage_data ALL
+    ${_fastag_stage_cmds}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/cmake/stage-data.cmake
+    COMMENT "Staging data/ beside FASTag"
+    VERBATIM)
+  add_dependencies(fastag_stage_data FASTag)
+endif()
+
 # The taxonomy -species resolves by default, at <bin>/../share/FASTag/taxonomy.
 #
 # Only the pruned NCBI dumps (~30 KB) are installed here -- correct for a
@@ -309,10 +410,10 @@ if(FASTAG_BUILD_TESTS)
   set(FASTAG_UNIT_TESTS_B113_MSFRAGGER msfragger_config_test)
   # ---- 1.13: unit tests ----
   set(FASTAG_UNIT_TESTS_113 complement_tol_test cleavage_test tmt_pseudo_test)
-  # ---- tag merging: unit tests ----
-  set(FASTAG_UNIT_TESTS_MERGE taggraph_test)
+  # ---- subsumed tags and terminal anchors: unit tests ----
+  set(FASTAG_UNIT_TESTS_TERM subsume_test terminus_test)
   foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F} ${FASTAG_UNIT_TESTS_113}
-            ${FASTAG_UNIT_TESTS_B113_MSFRAGGER} ${FASTAG_UNIT_TESTS_DIGQUAL} ${FASTAG_UNIT_TESTS_MERGE})
+            ${FASTAG_UNIT_TESTS_B113_MSFRAGGER} ${FASTAG_UNIT_TESTS_DIGQUAL} ${FASTAG_UNIT_TESTS_TERM})
     add_executable(${t} test/${t}.cpp)
     target_link_libraries(${t} PRIVATE fastag_core)
     add_test(NAME ${t} COMMAND ${t})
@@ -321,22 +422,6 @@ if(FASTAG_BUILD_TESTS)
   # links Boost::headers PRIVATE, and OpenMS's target carries no Boost include
   # path on Windows.
   target_link_libraries(complement_test PRIVATE Boost::headers)
-  # Tag merging under libc++'s debug hardening, which checks that every sort's
-  # comparator is a strict weak ordering (NaN intensities and E-values): its
-  # own build of src/TagGraph.cpp, whose objects take precedence over the
-  # archive's. libc++ only (the mode leaves the ABI unchanged).
-  include(CheckCXXSourceCompiles)
-  check_cxx_source_compiles("#include <version>
-    #ifndef _LIBCPP_VERSION
-    #error not libc++
-    #endif
-    int main() { return 0; }" FASTAG_HAVE_LIBCXX)
-  if(FASTAG_HAVE_LIBCXX)
-    add_executable(taggraph_hardened_test test/taggraph_test.cpp src/TagGraph.cpp)
-    target_compile_definitions(taggraph_hardened_test PRIVATE _LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG)
-    target_link_libraries(taggraph_hardened_test PRIVATE fastag_core)
-    add_test(NAME taggraph_hardened_test COMMAND taggraph_hardened_test)
-  endif()
 
   # 1.16: the mass-shift survey (-delta_out site and name columns).
   add_executable(shift_survey_test test/shift_survey_test.cpp)
@@ -348,6 +433,12 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/delta_sites.mgf)
   set_tests_properties(delta_sites_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # Feedback 422372a2: -recon_proteome, a shipped proteome as the -recon_out database.
+  add_test(NAME recon_proteome_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/recon_proteome_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
+  set_tests_properties(recon_proteome_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # 1.16: Bruker timsTOF input (.d, .d.zip, dia-PASEF refusal) on a trimmed
   # real run; a build without WITH_OPENTIMS checks its refusal instead.
@@ -553,12 +644,22 @@ if(FASTAG_BUILD_TESTS)
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/complement_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
   set_tests_properties(complement_cli_test PROPERTIES SKIP_RETURN_CODE 77)
-  # Tag merging: -resolved_out and -tag_graph_out (header, ranks, member
-  # rows, -stream refusal, threads).
-  add_test(NAME resolved_cli_test
-           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/resolved_cli_test.sh $<TARGET_FILE:FASTag>
-                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
-  set_tests_properties(resolved_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # -subsume_tags (on writes a subset of off's rows, none inside another, every
+  # dropped one inside a written one; -stream too) and the -terminus columns.
+  add_test(NAME subsume_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/subsume_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML $<TARGET_FILE:hybrid_ions_test>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(subsume_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # 1.16 (-fasta_proteins): the proteins, positions and genes of each -fasta
+  # hit; -out unchanged without it, orientation, entrapment, decoys last.
+  add_test(NAME fasta_proteins_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/fasta_proteins_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(fasta_proteins_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # 1.15.5 (PREREG-lowres-defaults): -tolerance_by_analyzer and the complement window under Da.
   add_test(NAME tolerance_by_analyzer_cli_test
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/tolerance_by_analyzer_cli_test.sh $<TARGET_FILE:FASTag>
@@ -769,8 +870,31 @@ if(FASTAG_BUILD_TESTS)
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/gui_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
-                   ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt)
+                   ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt
+                   $<IF:$<BOOL:${FASTAG_STAGE_DATA_IN_BUILD}>,ON,OFF>)
   set_tests_properties(gui_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # Every data file the CLI reads (read from src/) is in data/, the cmake
+  # --install tree, the build tree, the release workflows' CLI archives and
+  # desktop apps, and the local macOS app bundle. Skips (77) without python3.
+  add_test(NAME shipped_data_test
+           COMMAND bash -c "PY=\${FASTAG_PYTHON:-python3}; command -v \"\$PY\" >/dev/null || exit 77; exec \"\$PY\" \"\$@\"" _
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/shipped_data_test.py ${CMAKE_CURRENT_SOURCE_DIR}
+                   $<TARGET_FILE_DIR:FASTag> $<IF:$<BOOL:${FASTAG_STAGE_DATA_IN_BUILD}>,ON,OFF>
+                   ${CMAKE_COMMAND} ${CMAKE_BINARY_DIR} "${FASTAG_TAXONOMY_INDEX_DIR}"
+                   "${FASTAG_TAXONOMY_INDEX_SEARCH}" "${FASTAG_TAXONOMY_INDEX_MANIFESTS}"
+                   ${_fastag_cache_is_default})
+  # RUN_SERIAL: (g) moves share-FASTag-alkylation aside and has the build put it back.
+  set_tests_properties(shipped_data_test PROPERTIES SKIP_RETURN_CODE 77 RUN_SERIAL TRUE
+                       ENVIRONMENT "FASTAG_BUILD_CONFIG=$<CONFIG>")
+  # Both read the data the build stages beside FASTag: stage it first, so a
+  # ctest after an edit to data/ alone sees the edit.
+  if(FASTAG_STAGE_DATA_IN_BUILD)
+    add_test(NAME stage_data_setup
+             COMMAND "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}" --config "$<CONFIG>"
+                     --target fastag_stage_data)
+    set_tests_properties(stage_data_setup PROPERTIES FIXTURES_SETUP fastag_staged_data)
+    set_tests_properties(gui_cli_test shipped_data_test PROPERTIES FIXTURES_REQUIRED fastag_staged_data)
+  endif()
   # Every option FASTagOptions.cpp registers has a row in README's
   # command-line table, and no row names an unregistered one. Skips (77)
   # without python3 (FASTAG_PYTHON names another).

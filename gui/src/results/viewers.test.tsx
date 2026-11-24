@@ -326,6 +326,38 @@ describe('ReconView', () => {
     expect(screen.getByRole('grid', { name: 'Mass-shift table' })).toBeTruthy()
   })
 
+  // Review n11: an identifications mzTab over the viewer's 128 MB limit
+  // (report.rs read_report, TOO_LARGE_PREFIX) is a valid export all the same:
+  // it is listed with Open and Reveal, the size its note, not a red error.
+  it('an mzTab over the size limit is listed as a file with Open and Reveal; the placements still show', async () => {
+    const mock = installMockBridge()
+    mock.reportFiles = { [P.recon]: ecoliRecon }
+    mock.reportErrors = { [P.ids]: `too large to show: ${P.ids} is 200 MB (the limit is 128 MB); open it in a spreadsheet or an identification tool` }
+    render(<ReconView massgap={parseReport(ecoliMassgap, P.massgap)} tables={{ recon: P.recon, reconIds: P.ids }} onOpen={vi.fn()} />)
+    await flush()
+    const files = screen.getByRole('group', { name: 'Identification files' })
+    expect(files.textContent).toMatch(/mzTab larger than the 128 MB viewer limit: open it in an identification tool or a spreadsheet\./)
+    expect(screen.queryByRole('alert')).toBeNull()
+    await click(within(files).getByRole('button', { name: 'Open placements as identifications (run.recon.mzTab) with the default app' }))
+    expect(mock.openCalls).toEqual([P.ids])
+    await click(within(files).getByRole('button', { name: /: placements as identifications \(run\.recon\.mzTab\)$/ }))
+    expect(mock.revealCalls).toEqual([{ path: P.ids, folder: false }])
+    expect(screen.getByRole('grid', { name: 'Placements' })).toBeTruthy()
+  })
+
+  it('an mzTab that cannot be read keeps Open and Reveal, and names the failure', async () => {
+    const mock = installMockBridge()
+    mock.reportFiles = { [P.recon]: ecoliRecon }
+    mock.reportErrors = { [P.ids]: `${P.ids}: Permission denied (os error 13)` }
+    render(<ReconView massgap={null} tables={{ recon: P.recon, reconIds: P.ids }} onOpen={vi.fn()} />)
+    await flush()
+    expect(screen.getByRole('alert').textContent).toMatch(/Cannot read \/r\/run\.recon\.mzTab: .*Permission denied/)
+    const files = screen.getByRole('group', { name: 'Identification files' })
+    expect(files.textContent).toMatch(/could not be read here/)
+    await click(within(files).getByRole('button', { name: 'Open placements as identifications (run.recon.mzTab) with the default app' }))
+    expect(mock.openCalls).toEqual([P.ids])
+  })
+
   it('empty: offers the FASTA and the run, and opening a report', async () => {
     installMockBridge()
     const run = vi.fn()

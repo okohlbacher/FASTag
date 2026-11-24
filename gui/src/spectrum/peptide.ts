@@ -4,7 +4,7 @@
 // not an identification: FASTag does not score or FDR-control it.
 
 import type { SpectrumPeaks } from './dump'
-import type { GPath, Step } from './graph'
+import { ladderSteps, type Step } from './step'
 import { C_OFFSET, PROTON, WATER, Z_DOT_OFFSET, type Ladder, type Residues, type SeriesCall } from './ladder'
 
 export interface Candidate {
@@ -133,23 +133,7 @@ export function stepOnRuler(st: Step, ruler: Ruler, s: SpectrumPeaks): boolean {
   return st.readings.some((r) => b - a === (r.gap ? 2 : 1) && il([...r.label.replace(/[[\]]/g, '')].sort().join('')) === want)
 }
 
-/** Steps of @p p the peptide confirms. */
-export const stepsOnRuler = (p: GPath, ruler: Ruler, s: SpectrumPeaks): number => p.steps.filter((st) => stepOnRuler(st, ruler, s)).length
-
-/** A ladder's steps between the peaks it lies on (a gap step across a missing position). */
-export function ladderSteps(l: Ladder): Step[] {
-  const out: Step[] = []
-  let from = -1
-  l.positions.forEach((p, k) => {
-    if (p.peak == null) return
-    if (from >= 0) {
-      const res = l.residues.slice(from, k)
-      out.push({ u: l.positions[from].peak as number, v: p.peak, readings: [{ label: res.length > 1 ? `[${res.join('')}]` : res[0], gap: res.length > 1, evalue: null, deltaMz: 0, deltaPpm: 0 }] })
-    }
-    from = k
-  })
-  return out
-}
+export { ladderSteps }
 
 /** The series the database peptide confirms for these steps: the one whose
  *  fragments more of them lie on (at least one), else null. */

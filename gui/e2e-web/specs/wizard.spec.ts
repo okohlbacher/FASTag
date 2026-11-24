@@ -15,14 +15,48 @@ test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
 })
 
-test('step 1 says FASTag is no search engine, recommends a start, and fits 1280 x 800 without scrolling', async ({ page }) => {
-  await openApp(page)
-  await expect(page.locator('#not-search-engine')).toContainText('It does not identify proteins with FDR control: use a search engine for that.')
-  await expect(page.locator('.recommend')).toContainText('Not sure? Start with Characterize a run')
+const TILES = ['export-tags', 'characterize', 'species', 'mass-shift', 'db-reduction', 'run-qc', 'triage']
+const stepOneFits = async (page: Page): Promise<void> => {
   const [scroll, client] = await page.locator('.view-setup .controls-body').evaluate((e) => [e.scrollHeight, e.clientHeight])
   expect(scroll).toBeLessThanOrEqual(client + 1)
-  for (const id of ['export-tags', 'characterize', 'species', 'mass-shift', 'db-reduction', 'run-qc', 'triage'])
-    await expect(page.locator(`button.task-tile[data-task="${id}"]`)).toBeInViewport()
+  for (const id of TILES) await expect(page.locator(`button.task-tile[data-task="${id}"]`)).toBeInViewport()
+}
+
+test('step 1 says FASTag is no search engine, recommends a start, and fits 1280 x 800 without scrolling', async ({ page }) => {
+  await openApp(page)
+  await expect(page.locator('#not-search-engine')).toContainText('It is not a search engine.')
+  // The recommendation is the tile's chip, not a paragraph above the tiles.
+  await expect(page.locator('button.task-tile[data-task="characterize"]')).toContainText('Start here')
+  // ...on the label's line, as the other chips are: no line of its own.
+  const [label, chip] = await Promise.all(
+    ['.task-tile-label', '.chip.accent'].map((s) => page.locator(`button.task-tile[data-task="characterize"] ${s}`).boundingBox())
+  )
+  expect(Math.abs(label!.y + label!.height / 2 - (chip!.y + chip!.height / 2))).toBeLessThan(6)
+  await stepOneFits(page)
+})
+
+test('step 1 still fits 1280 x 800 with the notice of an interrupted run; its files sit behind a closed disclosure', async ({ page }) => {
+  await openApp(page, 'interrupted')
+  const notice = page.getByRole('region', { name: 'Files left by an unfinished run' })
+  await expect(notice).toBeInViewport()
+  for (const name of ['Remove them', 'Keep']) await expect(notice.getByRole('button', { name })).toBeInViewport()
+  const files = notice.locator('details.leftovers-files')
+  await expect(files).not.toHaveAttribute('open', /.*/)
+  await expect(notice.locator('code', { hasText: '/data/run01.tags.tsv' })).toBeHidden()
+  await stepOneFits(page)
+  // One click shows every path.
+  await files.locator('summary').click()
+  for (const f of ['/data/run01.tags.tsv', '/data/run01.digest.tsv.part'])
+    await expect(notice.locator('code', { hasText: f })).toBeVisible()
+})
+
+test('Inputs: the Instrument select and the one-entry Fixed modifications list beside it are one height', async ({ page }) => {
+  await openApp(page)
+  await chooseTask(page, 'Characterize a run')
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  const [sel, list] = await Promise.all(['#instrument', '#p-fixed_modifications'].map((s) => page.locator(s).boundingBox()))
+  expect(Math.abs(sel!.height - list!.height)).toBeLessThanOrEqual(1)
+  expect(Math.abs(sel!.y - list!.y)).toBeLessThanOrEqual(1)
 })
 
 test('Generate tags: no FASTA field in Inputs; the Filter database is an optional input', async ({ page }) => {
@@ -34,12 +68,14 @@ test('Generate tags: no FASTA field in Inputs; the Filter database is an optiona
   await expect(page.locator('#p-fasta')).toBeFocused()
 })
 
-test('Mass-shift survey: the FASTA is required, a wrong extension warns, a missing file is named and blocks Run', async ({ page }) => {
+test('Mass-shift survey: the FASTA is optional, a wrong extension warns, a missing file is named and blocks Run', async ({ page }) => {
   await openApp(page)
   await chooseTask(page, 'Mass-shift survey')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await expect(page.locator('#step-2 .badge.todo')).toHaveText('required')
-  await expect(page.locator('.still-missing')).toHaveText('Still missing: Protein database')
+  // Feedback 422372a2: no database needed to run (the shift reports wait for one).
+  await expect(page.locator('#step-2 .badge.todo')).toHaveCount(0)
+  await expect(page.locator('.still-missing')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
   await page.locator('#p-recon_fasta').fill('/data/proteins.txt')
   await expect(page.locator('#step-2')).toContainText('proteins.txt is not a FASTA file (.fasta, .fa, .faa).')
   await page.locator('#p-recon_fasta').fill('/data/missing.fasta')

@@ -1,7 +1,9 @@
-// The Setup screen as a wizard (doc/GUI-SETUP-WIZARD.md): a stepper with
-// four steps, Task -> Inputs -> Settings -> Outputs & run, one visible at a
-// time (all four mounted, the others hidden, so every field keeps its id and
-// state), Back/Next, and the run bar below steps 2-4. The task decides which
+// The Setup screen as a wizard (doc/GUI-SETUP-WIZARD.md): the page header
+// (the step's title, one line of context, Presets and Open earlier
+// results…) with the four steps under it, Task -> Inputs -> Settings ->
+// Outputs & run, one visible at a time (all four mounted, the others hidden,
+// so every field keeps its id and state), and the sticky action bar with
+// Back, Next or Continue and Run. The task decides which
 // inputs step 2 shows; every other option stays under Advanced in step 3.
 // While a run is in flight, a locked summary of what it uses.
 
@@ -10,17 +12,19 @@ import { BRIEF_HINT, SECTIONS, SECTION_OF, PARAM_BY_NAME, type Dependency, type 
 import ParamField, { type ParamValue } from '../ParamField'
 import { disclosure } from '../disclosure'
 import { baseName } from '../digestReport'
-import { IconChevron, IconError, IconFile, IconLock, JobIcon } from '../icons'
-import { HelpButton, HelpLink } from '../help/HelpLink'
+import { IconChevron, IconError, IconFile, IconLock } from '../icons'
 import HelpPopover from '../help/HelpPopover'
-import { isMac, keyText } from './shortcuts'
+import PageHeader from '../shell/PageHeader'
+import type { ActionNav } from '../run/RunBar'
 import type { Session } from './useSession'
 import type { RunState } from '../run/useRun'
+import { proteomeHint } from './proteomeHint'
 import type { SdrfState } from '../sdrf/useSdrf'
 import { Leftovers } from '../Leftovers'
-import { dirName, perJobOutputs, revealLabel } from '../app/paths'
-import { clock, duration, shellLine } from '../app/format'
-import TaskStep, { OriginRow, youNeed } from './TaskStep'
+import { NotCheckedHelp } from '../inspector/NotCheckedHelp'
+import { dirName, perJobOutputs } from '../app/paths'
+import { shellLine } from '../app/format'
+import TaskStep, { OriginRow, PresetMenu, StartRow, youNeed } from './TaskStep'
 import { LANDING_TASK, taskById, type Task, type TaskId } from './tasks'
 import {
   ALL_SECTION_PARAMS,
@@ -41,9 +45,9 @@ import {
   taskInputs,
   type Step
 } from './inputs'
-import { IconCheck, TaskIcon } from '../icons'
+import { IconCheck, IconUpload, TaskIcon } from '../icons'
 import { INSTRUMENTS, presetText, shownInstrument } from './presets'
-import { PRODUCT_OF, PRODUCTS, USI_PLACEHOLDER, fileName, isOn, missingDatabase, neededBy, productLabel, alkylationExtension, alkylationRaise, alkylationShipped, alkylationShort, toggleProduct, type Product } from './products'
+import { PRODUCT_OF, PRODUCTS, USI_PLACEHOLDER, fileName, hasDatabase, isOn, missingDatabase, neededBy, productLabel, alkylationExtension, alkylationRaise, alkylationShipped, alkylationShort, alkylationTagOnly, toggleProduct, type Product } from './products'
 
 // A parameter that exists in the CLI but nowhere in the layout would silently
 // be unreachable; surface it instead of hiding it.
@@ -57,6 +61,13 @@ const countSpec = PARAM_BY_NAME.get('subsample_spectra')
 function commonMasters(deps: Dependency[]): string[] {
   if (!deps.length) return []
   return masters(deps[0]).filter((m) => deps.every((d) => !d.say && masters(d).includes(m)))
+}
+
+/// A field brief of step 3, kept only when it states a default or a rule
+/// (a number: "3 suits most runs", "0 keeps all"); the rest is in the
+/// field's (?) popover.
+export function ruleBrief(text: string | undefined): string | undefined {
+  return text && /\d|default/i.test(text) ? text : undefined
 }
 
 export const FOLDED: ReadonlySet<string> = new Set(['subsample_spectra'])
@@ -128,8 +139,9 @@ export interface SetupFormProps {
   session: Session
   run: RunState
   onPickInput(): void
-  onSearch(): void
-  searchBtnRef: RefObject<HTMLButtonElement | null>
+  /// The action bar of steps 2-4 and of a run (App.tsx: the run bar, or
+  /// the wizard's buttons alone while the Batch view holds the queue).
+  actionBar?(nav?: ActionNav): JSX.Element | null
   // Show the Batch view, where the queue is.
   onOpenBatch(): void
   // Add the spectra files of a folder to the batch (P2b).
@@ -149,17 +161,19 @@ export interface SetupFormProps {
   detectedInstrument?: string | null
   // The step-2 input files not found on disk (pathStatus).
   notFound?: readonly string[]
-  // Run the queued batch from step 2 (null: not possible now, and why).
-  onRunBatch?(): void
-  runBatchDisabled?: boolean
+  // Why the input was not checked before the run, when that is no problem
+  // to act on (no -probe_input): behind a (?) by the Instrument brief.
+  notCheckedNote?: string | null
+  // The engine reads Alkylation proteome auto as the shipped human proteome
+  // (from before 1.16; Inspector.legacyAuto).
+  legacyAuto?: boolean
 }
 
 export default function SetupForm({
   session,
   run,
   onPickInput,
-  onSearch,
-  searchBtnRef,
+  actionBar,
   onOpenBatch,
   onAddFolder,
   folderNote,
@@ -169,11 +183,11 @@ export default function SetupForm({
   sdrf,
   detectedInstrument,
   notFound = [],
-  onRunBatch,
-  runBatchDisabled
+  notCheckedNote = null,
+  legacyAuto = false
 }: SetupFormProps): JSX.Element {
   const { input, out, values, setValue, openGroups, setOpenGroups, writingFiles, changedParams } = session
-  const { busy, jobs, lastRun, evidence, revealErr, reveal } = run
+  const { busy, jobs, revealErr } = run
   // The layout of steps 3 and 4: the task's, the landing task's for the
   // FASTag defaults (5.5). @p owner: the task step 2 is for (null: none).
   const task = taskById(session.task ?? LANDING_TASK)!
@@ -216,8 +230,24 @@ export default function SetupForm({
         required={opts.required}
         setBy={session.diff.includes(name) || (!!unitName && session.diff.includes(unitName)) ? undefined : session.originText}
         blocked={batchBlocked(name) ?? forced?.note}
-        unit={unitSpec && unitName ? { spec: unitSpec, value: values[unitName], onChange: (v) => setValue(unitName, v) } : undefined}
-        count={name === 'subsample_fraction' && countSpec ? { spec: countSpec, value: values['subsample_spectra'], onChange: (v) => setValue('subsample_spectra', v) } : undefined}
+        unit={
+          unitSpec && unitName
+            ? {
+                spec: unitSpec,
+                value: values[unitName],
+                onChange: (v) => setValue(unitName, v)
+              }
+            : undefined
+        }
+        count={
+          name === 'subsample_fraction' && countSpec
+            ? {
+                spec: countSpec,
+                value: values['subsample_spectra'],
+                onChange: (v) => setValue('subsample_spectra', v)
+              }
+            : undefined
+        }
       />
     )
   }
@@ -227,7 +257,11 @@ export default function SetupForm({
   // to the values it was raised in: a workflow, preset, reset or undo that
   // replaces them forgets it (gen), or a later workflow's own Extension
   // would read as the raise and be put back.
-  const raisedExt = useRef<{ from: ParamValue; to: ParamValue; gen: number } | null>(null)
+  const raisedExt = useRef<{
+    from: ParamValue
+    to: ParamValue
+    gen: number
+  } | null>(null)
   const raisedNow = (): { from: ParamValue; to: ParamValue } | null =>
     raisedExt.current && raisedExt.current.gen === session.formGen ? raisedExt.current : null
   const keepRaised = (r: { from: ParamValue; to: ParamValue } | null): void => {
@@ -258,7 +292,10 @@ export default function SetupForm({
   const raiseBase = useRef<{ gen: number; key: string }>({ gen: -1, key: '' })
   useEffect(() => {
     if (raiseBase.current.gen !== session.formGen) {
-      raiseBase.current = { gen: session.formGen, key: raiseKey(values['alkylation_proteome']) }
+      raiseBase.current = {
+        gen: session.formGen,
+        key: raiseKey(values['alkylation_proteome'])
+      }
       keepRaised(null)
       return
     }
@@ -305,7 +342,11 @@ export default function SetupForm({
     session.setStep(3)
     if (!extInSettings) {
       session.setAdvancedOpen(true)
-      setOpenGroups((g) => ({ ...g, [extGroup]: true, 'Other analyses': true }))
+      setOpenGroups((g) => ({
+        ...g,
+        [extGroup]: true,
+        'Other analyses': true
+      }))
     }
     setTimeout(() => {
       const el = document.getElementById('p-extension')
@@ -334,7 +375,22 @@ export default function SetupForm({
     if (!on.length) return ''
     return `; ${on.length === 2 ? 'species and digest are' : on[0] === 'species_out' ? 'species is' : 'digest is'} validated at 2`
   }
+  // feedback 202dbcf4: without a database the report needs no length; its
+  // votes need a C inside a tag, so longer tags give more.
+  // An engine from before 1.16 places such a run on the human proteome.
+  const tagOnlyNote = (): JSX.Element => legacyAuto ? (
+    <>This FASTag program is older than the app: with Proteome auto it places the tags on the shipped human proteome, not the call from the tags alone.</>
+  ) : (
+    <>
+      No database needed: the call is read off the tags; a longer{' '}
+      <button type="button" className="link small" onClick={goToExtension}>
+        Extension
+      </button>{' '}
+      ({extWhere}) gives more votes.
+    </>
+  )
   const alkylationWhy = (on: boolean): JSX.Element | string | null => {
+    if (alkylationTagOnly(values)) return tagOnlyNote()
     const need = alkylationExtension(values)
     const short = alkylationShort(values)
     const custom = !alkylationShipped(values)
@@ -366,10 +422,13 @@ export default function SetupForm({
   const productRow = (param: string): JSX.Element | null => {
     const p = PRODUCT_OF.get(param)
     if (!p) return null
-    const on = isOn(p, values) || (p.param === 'usi_collection' && usiEditing)
+    // Mass-shift survey (tasks.ts dbOptional): a report that needs a protein
+    // database is off, not a block, while none is chosen.
+    const noDb = !!owner?.dbOptional && !!p.db && !hasDatabase(p, values)
+    const on = !noDb && (isOn(p, values) || (p.param === 'usi_collection' && usiEditing))
     const needed = neededBy(p, values)
     const follows = p.follows ? PRODUCT_OF.get(p.follows) : undefined
-    const locked = p.param === 'out' || (on && needed.length > 0) || !!follows
+    const locked = p.param === 'out' || noDb || (on && needed.length > 0) || !!follows
     // A batch names each output after its input (jobOut, rebaseOutputs):
     // the rule, not one run's file.
     // Each job's names by the job's own rule (perJobOutputs over
@@ -381,6 +440,8 @@ export default function SetupForm({
     const why =
       p.param === 'out'
         ? 'always written'
+        : noDb
+          ? 'needs a protein database'
         : on && needed.length > 0
           ? // One line: two or more are counted, and named in the row's tooltip.
             needed.length > 1
@@ -613,7 +674,11 @@ export default function SetupForm({
 
   // Step 2: the inputs of the task (setup/inputs.ts).
   const ti = taskInputs(owner, values, batch ? 'batch' : 'one', session.revealed, ADV)
-  const missing = missingInputs(owner, values, { input, jobs: jobs.length, mode: batch ? 'batch' : 'one' })
+  const missing = missingInputs(owner, values, {
+    input,
+    jobs: jobs.length,
+    mode: batch ? 'batch' : 'one'
+  })
   const deps = inputDependents(task, owner, values)
   // Errors are shown once the user tried to move on or run, never on an
   // untouched step.
@@ -630,20 +695,24 @@ export default function SetupForm({
 
   // Moving between steps: focus goes to the step's heading, and a live
   // region says where the user is.
-  const focusHeading = useRef(false)
+  // One path for every caller (session.goStep): Back, Next, Alt+arrows,
+  // the stepper, and the run bar's Go to Inputs from another view. Pending
+  // until the step's heading is shown.
   const [said, setSaid] = useState('')
   const go = (n: Step): void => {
     if (n > 1 && !session.taskConfirmed) return
     if (step === 2 && n > 2) setTried(true)
-    focusHeading.current = true
-    setSaid(`Step ${n} of 4: ${STEPS[n - 1].name}`)
-    session.setStep(n)
+    session.goStep(n)
   }
+  const stepFocus = session.stepFocus
   useEffect(() => {
-    if (!focusHeading.current) return
-    focusHeading.current = false
-    document.getElementById(`step-h-${step}`)?.focus()
-  }, [step])
+    if (!stepFocus.current) return
+    const h = document.getElementById(`step-h-${step}`)
+    if (!h || h.closest('[hidden]')) return
+    stepFocus.current = false
+    setSaid(`Step ${step} of 4: ${STEPS[step - 1].name}`)
+    h.focus()
+  })
   // Continue with @p id (step 1): the task is confirmed, the form replaced
   // when it is another task, and the wizard moves on to Inputs when one is
   // missing, else back to the step the task was changed from.
@@ -652,11 +721,13 @@ export default function SetupForm({
     const back = session.cameFrom()
     session.chooseTask(id)
     session.setTaskConfirmed(true)
-    const miss = missingInputs(t, values, { input, jobs: jobs.length, mode: batch ? 'batch' : 'one' })
-    focusHeading.current = true
+    const miss = missingInputs(t, values, {
+      input,
+      jobs: jobs.length,
+      mode: batch ? 'batch' : 'one'
+    })
     const n: Step = miss.length || back === 1 || !session.taskConfirmed ? 2 : back
-    setSaid(`Step ${n} of 4: ${STEPS[n - 1].name}`)
-    session.setStep(n)
+    session.goStep(n)
   }
   // Alt+Left/Right: the previous and next step, not while typing.
   const onKey = (e: KeyboardEvent<HTMLDivElement>): void => {
@@ -670,17 +741,25 @@ export default function SetupForm({
   }
 
   const spectraName = batch ? (jobs.length ? `${jobs.length} ${jobs.length === 1 ? 'file' : 'files'}` : '') : input ? baseName(input) : ''
+  // The local navigation under the title: the four steps, underlined; a
+  // done step says what it holds (the task, the spectra) after its name.
   const stepper = (
-    <div className="stepper-row">
+    <div className="localnav stepper-row">
       <nav aria-label="Setup steps" className="stepper">
         <ol>
           {STEPS.map(({ n, name }) => {
             const st = states[n]
             const locked = st === 'locked'
-            const why =
-              locked ? 'Choose a task first' : st === 'blocked' && n === 2 ? (missing.length ? `${missingText(missing)} missing` : 'An input needs attention') : st === 'blocked' ? 'A value needs attention' : ''
-            const label =
-              n === 1 ? (session.taskConfirmed ? `Task: ${taskLabel}` : 'Task') : n === 2 && spectraName && session.taskConfirmed ? `Inputs: ${spectraName}` : name
+            const why = locked
+              ? 'Choose a task first'
+              : st === 'blocked' && n === 2
+                ? missing.length
+                  ? `${missingText(missing)} missing`
+                  : 'An input needs attention'
+                : st === 'blocked'
+                  ? 'A value needs attention'
+                  : ''
+            const ctx = n === 1 && session.taskConfirmed ? taskLabel : n === 2 && spectraName && session.taskConfirmed ? spectraName : ''
             return (
               <li key={n} className={`step-item ${st}`}>
                 <button
@@ -689,16 +768,18 @@ export default function SetupForm({
                   aria-current={step === n ? 'step' : undefined}
                   aria-disabled={locked || undefined}
                   aria-describedby={why ? `step-why-${n}` : undefined}
+                  title={ctx ? `${name}: ${ctx}` : undefined}
                   onClick={() => go(n)}
                 >
                   <span className="step-n" aria-hidden="true">
                     {st === 'done' ? <IconCheck /> : st === 'blocked' ? '!' : n}
                   </span>
-                  <span className="step-name">{label}</span>
-                  {n === 1 && session.taskConfirmed && (
-                    <span className="pencil" aria-hidden="true">
-                      ✎
-                    </span>
+                  <span className="step-name">{name}</span>
+                  {ctx && (
+                    <>
+                      <span className="sr-only">: </span>
+                      <span className="step-ctx">{ctx}</span>
+                    </>
                   )}
                 </button>
                 {why && (
@@ -711,75 +792,31 @@ export default function SetupForm({
           })}
         </ol>
       </nav>
-      {!batch && !!input && session.taskConfirmed && (
-        <button type="button" className="link small" onClick={onPickInput}>
+      {/* Files an unfinished run left: a compact notice on the stepper's
+          line, not a block that pushes the tiles down. */}
+      <Leftovers />
+      {!batch && !!input && session.taskConfirmed && step !== 2 && (
+        <button type="button" className="link small change-spectra" onClick={onPickInput}>
           Change spectra…
         </button>
       )}
-      <span className="spacer" />
-      <button
-        type="button"
-        className="secondary small"
-        ref={searchBtnRef}
-        aria-keyshortcuts={isMac() ? 'Meta+K /' : 'Control+K /'}
-        title={`Search all settings (${keyText('K')} or /)`}
-        onClick={onSearch}
-      >
-        Search settings… <kbd>{keyText('K')}</kbd>
-      </button>
     </div>
   )
 
-  const body = (n: Step, title: string, content: JSX.Element, extra?: JSX.Element): JSX.Element => (
+  const body = (n: Step, content: JSX.Element): JSX.Element => (
     <section className="wizard-step" id={`step-${n}`} data-step={n} hidden={step !== n} aria-labelledby={`step-h-${n}`}>
-      <div className="step-head">
-        <h2 id={`step-h-${n}`} tabIndex={-1}>
-          {title}
-        </h2>
-        {extra}
-      </div>
       {content}
-    </section>
-  )
-
-  const lastRunBlock = lastRun && jobs.length === 0 && (
-    <section className="block last-run" aria-labelledby="last-run-h">
-      <h2 id="last-run-h">Last run</h2>
-      <div className={`last-run-name ${lastRun.ok ? 'ok' : lastRun.cancelled ? 'cancelled' : 'bad'}`}>
-        <JobIcon status={lastRun.ok ? 'done' : lastRun.cancelled ? 'cancelled' : 'failed'} />
-        <span>{baseName(lastRun.input)}</span>
-      </div>
-      <div className="muted">
-        {lastRun.ok ? 'Finished' : lastRun.cancelled ? 'Cancelled' : 'Failed'}{' '}
-        {lastRun.earlier ? `in an earlier session, ${new Date(lastRun.at).toLocaleString()}` : clock(lastRun.at)} · {duration(lastRun.ms)}
-        {lastRun.cleaned > 0 && ' · partial outputs removed'}
-        {lastRun.ok && evidence.ms2 != null && ` · ${evidence.ms2.toLocaleString('en-US')} MS2 spectra`}
-      </div>
-      {/* The form may be edited since: what this run was given. */}
-      {lastRun.changed && <code className="last-run-params">{lastRun.changed.length ? lastRun.changed.join(' ') : 'all defaults'}</code>}
-      {lastRun.ok && lastRun.out && (
-        <div className="row reveal">
-          <button type="button" className="secondary small" onClick={() => reveal(false)} title={lastRun.out}>
-            {revealLabel()}
-          </button>
-          <button type="button" className="secondary small" onClick={() => reveal(true)}>
-            Open folder
-          </button>
-        </div>
-      )}
-      {revealErr && (
-        <p className="warn" role="alert">
-          <IconError />
-          <span>{revealErr}</span>
-        </p>
-      )}
     </section>
   )
 
   // An input's errors, under its field: missing, wrong extension, not found.
   const inputNotes = (n: string, required = false): JSX.Element | null => {
     const notes: { warn: boolean; text: string }[] = []
-    if (required && tried && !satisfied(values, n)) notes.push({ warn: true, text: `Required for ${requiredBy(owner, values, n)}: choose a protein FASTA.` })
+    if (required && tried && !satisfied(values, n))
+      notes.push({
+        warn: true,
+        text: `Required for ${requiredBy(owner, values, n)}: choose a protein FASTA.`
+      })
     for (const m of [n, ...(INPUTS[n]?.also ?? [])]) {
       const w = extensionWarning(m, String(values[m] ?? ''))
       if (w) notes.push({ warn: false, text: w })
@@ -803,11 +840,12 @@ export default function SetupForm({
     if (!d?.length || !hasValue(values, n)) return null
     return <div className="input-deps">{d.map((x) => field(x))}</div>
   }
-  const requiredInput = (n: string): JSX.Element => {
+  // The Filter database stands in (the CLI's own rule): said, not empty.
+  // Not while a shipped proteome is chosen: the CLI places on that first.
+  const standIn = (n: string): JSX.Element | null => {
     const alt = STANDS_IN[n]
     const spec = PARAM_BY_NAME.get(n)
-    // The Filter database stands in (the CLI's own rule): said, not empty.
-    if (alt && !hasValue(values, n) && hasValue(values, alt))
+    if (alt && !hasValue(values, n) && hasValue(values, alt) && !hasValue(values, 'recon_proteome'))
       return (
         <div className="field standin" key={n}>
           <span className="label-row">
@@ -823,26 +861,42 @@ export default function SetupForm({
           </p>
         </div>
       )
-    return (
+    return null
+  }
+  const requiredInput = (n: string): JSX.Element =>
+    standIn(n) ?? (
       <div key={n} className="input-block">
         {field(n, { brief: task.help[n] ?? INPUTS[n]?.why, required: true })}
         {inputNotes(n, true)}
       </div>
     )
+  // An input the task shows open (tasks.ts openInputs: Mass-shift survey's
+  // Protein database) has its stand-in said, and Remove only once it is set.
+  const optionalInput = (n: string): JSX.Element => {
+    const open = !!owner?.openInputs?.includes(n)
+    const alt = open ? standIn(n) : null
+    if (alt) return alt
+    return (
+      <div key={n} className="input-block optional">
+        {[n, ...(INPUTS[n]?.also ?? [])].map((m) =>
+          field(m, {
+            brief: m === n ? (open ? (task.help[n] ?? INPUTS[n]?.why) : (INPUTS[n]?.why ?? task.help[n])) : undefined
+          })
+        )}
+        {inputNotes(n)}
+        {dependentsOf(n)}
+        {(!open || hasValue(values, n)) && (
+          <button type="button" className="link small" aria-label={`Remove ${inputLabel(n)}`} onClick={() => session.removeInput(n)}>
+            Remove
+          </button>
+        )}
+      </div>
+    )
   }
-  const optionalInput = (n: string): JSX.Element => (
-    <div key={n} className="input-block optional">
-      {[n, ...(INPUTS[n]?.also ?? [])].map((m) => field(m, { brief: m === n ? (INPUTS[n]?.why ?? task.help[n]) : undefined }))}
-      {inputNotes(n)}
-      {dependentsOf(n)}
-      <button type="button" className="link small" aria-label={`Remove ${inputLabel(n)}`} onClick={() => session.removeInput(n)}>
-        Remove
-      </button>
-    </div>
-  )
 
   const spectraBlock = (
     <div className="spectra-block">
+      <h3 className="section-label">Spectra</h3>
       <div className={batch ? 'input-row batch' : 'input-row'}>
         <div className="seg" role="radiogroup" aria-label="Input mode">
           {(['one', 'batch'] as const).map((m) => (
@@ -876,10 +930,15 @@ export default function SetupForm({
               </button>
             </div>
           ) : (
-            <div className="input-card empty-input">
-              <IconFile />
-              <span className="muted">Spectra: mzML, mzPeak, MGF, Thermo .raw or timsTOF .d.zip (drop a .d folder)</span>
-              <button onClick={onPickInput}>Choose file…</button>
+            <div className="drop-zone">
+              <IconUpload />
+              <div className="drop-text">
+                <span className="drop-title">Drop a spectra file here</span>
+                <span>mzML, mzPeak, MGF, Thermo .raw or timsTOF .d.zip (drop a .d folder)</span>
+              </div>
+              <button type="button" onClick={onPickInput}>
+                Choose file…
+              </button>
             </div>
           ))}
       </div>
@@ -900,23 +959,22 @@ export default function SetupForm({
                 {jobs.length} {jobs.length === 1 ? 'file' : 'files'} in the batch; each runs with these settings. To use one file, clear the
                 batch.
               </span>
-              {onRunBatch && run.remaining > 0 && (
-                <button type="button" className="small" onClick={onRunBatch} disabled={runBatchDisabled}>
-                  Run {run.remaining} {run.remaining === 1 ? 'file' : 'files'}
-                </button>
-              )}
               <button type="button" className="secondary small" onClick={onOpenBatch}>
                 Open the batch
               </button>
             </div>
-          ) : (
-            <div className="input-card empty-input">
-              <IconFile />
-              <span className="muted">Spectra files (mzML, mzPeak, MGF, .raw, timsTOF .d), run in turn</span>
-            </div>
-          )}
-          <div className="row tight">
-            <button type="button" ref={addBatchRef} className={jobs.length ? 'secondary' : undefined} onClick={run.addBatchFiles}>
+          ) : null}
+          <div className={jobs.length > 0 ? 'row tight' : 'drop-zone'}>
+            {jobs.length === 0 && (
+              <>
+                <IconUpload />
+                <div className="drop-text">
+                  <span className="drop-title">Drop spectra files here</span>
+                  <span>mzML, mzPeak, MGF, .raw or timsTOF .d; each runs in turn with these settings</span>
+                </div>
+              </>
+            )}
+            <button type="button" ref={addBatchRef} className="secondary" onClick={run.addBatchFiles}>
               Add files…
             </button>
             {onAddFolder && (
@@ -939,7 +997,7 @@ export default function SetupForm({
             )}
           </div>
           {sdrf && (
-            <div className="out-row sdrf-row">
+            <div className="out-row sdrf-row" title="The Batch view compares each file's results with the sample metadata of the SDRF.">
               <span className="sublabel">SDRF file (optional)</span>
               <span className={sdrf.file ? 'mono' : 'muted'}>{sdrf.file ? baseName(sdrf.file.path) : 'none'}</span>
               <button type="button" className="secondary small" onClick={() => void sdrf.pick()} disabled={sdrf.loading}>
@@ -952,7 +1010,6 @@ export default function SetupForm({
               )}
             </div>
           )}
-          {sdrf && <p className="hint">The Batch view compares each file's results with the sample metadata of the SDRF.</p>}
           {sdrf?.error && <p className="warn">{sdrf.error}</p>}
         </div>
       ) : (
@@ -966,58 +1023,78 @@ export default function SetupForm({
 
   const ionTrap = (instrument?.id === 'iontrap-cid' || detectedInstrument === 'iontrap-cid') && (owner?.id === 'species' || owner?.id === 'characterize')
   const aboutBlock = (
-    <section className="about-spectra" aria-labelledby="about-h">
-      <h3 id="about-h">About these spectra</h3>
+    <section className="about-spectra" aria-labelledby="about-spectra-h">
+      <h3 id="about-spectra-h">About these spectra</h3>
       <div className="about-fields">
-      <div className="field instrument-field">
-        <span className="label-row">
-          <label htmlFor="instrument">
-            <span className="pname">Instrument</span>
-          </label>
-          <HelpPopover
-            name="fragment_tolerance"
-            label="Instrument"
-            description="A preset sets four options at once: the fragment tolerance, its unit, the ion series the MS/MS spectra are read as, and how hybrid (EThcD) spectra are read. Orbitrap and TOF HCD: 20 ppm, b/y ions. Orbitrap ETD: 20 ppm, c/z ions for electron-activated spectra (ion series auto). Orbitrap EThcD: as ETD, and hybrid spectra read as both b/y and c/z. Ion trap CID: 0.3 Da. timsTOF: 30 ppm. Astral: 20 ppm. Custom shows the tolerance and its unit."
-            deflt=""
-            more="The tolerance is the largest m/z error accepted between a fragment peak and a residue mass step. Too tight loses tags; too loose admits wrong ones. Species calls are unreliable at Da tolerances. Ion-trap MS2 spectra the file marks as such are tagged at the ion-trap tolerance (0.5 Da, Advanced › Fragment tolerance by analyzer), whatever the preset; the reports use this tolerance."
-            flags={['fragment_tolerance', 'fragment_tolerance_unit', 'ion_series', 'ion_series_hybrid'].map((n) => ({ name: n, deflt: PARAM_BY_NAME.get(n) ? defaultText(PARAM_BY_NAME.get(n)!) : '' }))}
-          />
-        </span>
-        <select id="instrument" value={custom ? 'custom' : instrument.id} onChange={(e) => session.chooseInstrument(e.target.value)} aria-describedby="instrument-h">
-          {INSTRUMENTS.map((x) => (
-            <option key={x.id} value={x.id}>
-              {presetText(x)}
-              {detectedInstrument === x.id ? ' (detected)' : ''}
-            </option>
-          ))}
-          <option value="custom">Custom</option>
-        </select>
-        <p id="instrument-h" className="help brief">
-          Sets the fragment tolerance and ion series.
-          {input && !batch && !detectedInstrument ? ' Not detected from the file: choose yours.' : ''}
-          {instrument && !instrument.validated && !custom ? ` ${instrument.label} is not validated against the paper's benchmark.` : ''}
-        </p>
-        {custom && <div className="custom-tol">{field('fragment_tolerance', { brief: 'The tolerance and its unit, for a custom analyzer.' })}</div>}
-        {ionTrap && (
-          <p className="warn" role="note">
-            <IconError />
-            <span>Species calls are unreliable on ion-trap spectra at Da tolerances: treat them as a hint.</span>
-          </p>
-        )}
-      </div>
-      {field('fixed_modifications', {
-        brief: 'Was the sample alkylated? Carbamidomethyl (C) is for alkylated samples; remove it if not.'
-      })}
-      {aboutParams(owner)
-        .filter((n) => !waitsOnShownFile(n))
-        .map((n) => field(n, { brief: task.help[n] }))}
+        <div className="field instrument-field">
+          <span className="label-row">
+            <label htmlFor="instrument">
+              <span className="pname">Instrument</span>
+            </label>
+            <HelpPopover
+              name="fragment_tolerance"
+              label="Instrument"
+              description="A preset sets four options at once: the fragment tolerance, its unit, the ion series the MS/MS spectra are read as, and how hybrid (EThcD) spectra are read. Orbitrap and TOF HCD: 20 ppm, b/y ions. Orbitrap ETD: 20 ppm, c/z ions for electron-activated spectra (ion series auto). Orbitrap EThcD: as ETD, and hybrid spectra read as both b/y and c/z. Ion trap CID: 0.3 Da. timsTOF: 30 ppm. Astral: 20 ppm. Custom shows the tolerance and its unit."
+              deflt=""
+              more="The tolerance is the largest m/z error accepted between a fragment peak and a residue mass step. Too tight loses tags; too loose admits wrong ones. Species calls are unreliable at Da tolerances. Ion-trap MS2 spectra the file marks as such are tagged at the ion-trap tolerance (0.5 Da, Advanced › Fragment tolerance by analyzer), whatever the preset; the reports use this tolerance."
+              flags={['fragment_tolerance', 'fragment_tolerance_unit', 'ion_series', 'ion_series_hybrid'].map((n) => ({
+                name: n,
+                deflt: PARAM_BY_NAME.get(n) ? defaultText(PARAM_BY_NAME.get(n)!) : ''
+              }))}
+            />
+          </span>
+          <select
+            id="instrument"
+            value={custom ? 'custom' : instrument.id}
+            onChange={(e) => session.chooseInstrument(e.target.value)}
+            aria-describedby="instrument-h"
+          >
+            {INSTRUMENTS.map((x) => (
+              <option key={x.id} value={x.id}>
+                {presetText(x)}
+                {detectedInstrument === x.id ? ' (detected)' : ''}
+              </option>
+            ))}
+            <option value="custom">Custom</option>
+          </select>
+          <div className="brief-row">
+            <p id="instrument-h" className="help brief">
+              {input && !batch && !detectedInstrument ? 'Not detected from the file.' : ''}
+              {instrument && !instrument.validated && !custom ? ` ${instrument.label} is not validated against the paper's benchmark.` : ''}
+            </p>
+            {notCheckedNote && input && !batch && <NotCheckedHelp text={notCheckedNote} />}
+          </div>
+          {custom && (
+            <div className="custom-tol">
+              {field('fragment_tolerance', {
+                brief: 'The tolerance and its unit, for a custom analyzer.'
+              })}
+            </div>
+          )}
+          {ionTrap && (
+            <p className="warn" role="note">
+              <IconError />
+              <span>Species calls are unreliable on ion-trap spectra at Da tolerances: treat them as a hint.</span>
+            </p>
+          )}
+        </div>
+        {field('fixed_modifications', {
+          brief: 'Remove if the sample was not alkylated.'
+        })}
+        {aboutParams(owner)
+          .filter((n) => !waitsOnShownFile(n))
+          .map((n) =>
+            field(n, {
+              // Shipped proteome: which one fits, from a species report of this file.
+              brief: n === 'recon_proteome' ? proteomeHint(!batch && run.speciesRun?.input === input ? run.species : null, String(values['recon_proteome'] ?? '')) : task.help[n]
+            })
+          )}
       </div>
     </section>
   )
 
   const inputsStep = body(
     2,
-    `Inputs for ${taskLabel}`,
     <>
       {session.carried && (
         <p className="hint carried" role="status">
@@ -1029,14 +1106,6 @@ export default function SetupForm({
           )}
         </p>
       )}
-      <p className="lead">
-        {taskLabel} needs {youNeed(owner)}.
-        {ti.required
-          .filter((n) => !(owner?.required ?? []).includes(n))
-          .map((n) => (
-            <span key={n}> Also required for {requiredBy(owner, values, n)}: a protein FASTA.</span>
-          ))}
-      </p>
       {spectraBlock}
       {(ti.required.length > 0 || ti.shown.length > 0 || ti.addable.length > 0) && (
         <section className="task-inputs" aria-label="Files of the task">
@@ -1084,25 +1153,23 @@ export default function SetupForm({
         </section>
       )}
       {aboutBlock}
-    </>,
-    <HelpButton to="files-inputs" what="input files" />
+    </>
   )
 
   const settingsStep = body(
     3,
-    `Settings for ${taskLabel}`,
     <>
-      <OriginRow session={session} learnMore={<HelpLink to={task.docs.to}>Learn more</HelpLink>} />
+      <OriginRow session={session} />
       {session.presetError && (
         <p className="warn" role="alert">
           {session.presetError}
         </p>
       )}
       <div className="settings">
-        {task.basic.filter((n) => !waitsOnShownFile(n)).map((n) => field(n, { brief: task.help[n] }))}
+        {task.basic.filter((n) => !waitsOnShownFile(n)).map((n) => field(n, { brief: ruleBrief(task.help[n]) }))}
         {task.settingsNote && (
           <p className="hint settings-note" role="note">
-            {task.settingsNote} <HelpLink to={task.docs.to}>Learn more</HelpLink>
+            {task.settingsNote}
           </p>
         )}
       </div>
@@ -1114,9 +1181,6 @@ export default function SetupForm({
           <h3>Advanced ({advChanged} changed)</h3>
         </summary>
         <div className="adv-body">
-          <p className="hint">
-            Every other option of FASTag, by topic{ownShown ? `; the groups of ${task.label} first` : ''}. <HelpLink to={task.docs.to}>Learn more</HelpLink>
-          </p>
           {ownGroups.map((s) => renderGroup(s, true))}
           <h3 className="adv-h">For every workflow</h3>
           {globalGroups.map((s) => renderGroup(s, false))}
@@ -1138,7 +1202,6 @@ export default function SetupForm({
   const idsSet = hasValue(values, 'census_ids')
   const outputsStep = body(
     4,
-    'Outputs and run',
     <>
       {batch ? (
         <p className="hint">
@@ -1193,15 +1256,24 @@ export default function SetupForm({
           )}
         </div>
       )}
-      {missingDatabase(values) && (
-        <p className="hint">
-          Some of these need the protein database:{' '}
-          <button type="button" className="link small" onClick={() => go(2)}>
-            choose it in Inputs
-          </button>
-          .
-        </p>
-      )}
+      {missingDatabase(values) &&
+        (owner?.dbOptional ? (
+          <p className="hint" role="note">
+            No protein database: only the tags table is written. The shift reports need your FASTA or a shipped proteome:{' '}
+            <button type="button" className="link small" onClick={() => go(2)}>
+              choose one in Inputs
+            </button>
+            .
+          </p>
+        ) : (
+          <p className="hint">
+            Some of these need the protein database:{' '}
+            <button type="button" className="link small" onClick={() => go(2)}>
+              choose it in Inputs
+            </button>
+            .
+          </p>
+        ))}
       <ul className="products" aria-label="Products">
         {task.outputs.map(productRow)}
       </ul>
@@ -1223,118 +1295,181 @@ export default function SetupForm({
           {idsSet && <span className="hint">Not used in Batch mode: one ID file cannot belong to every input.</span>}
         </div>
       )}
-    </>,
-    <HelpButton to="files-outputs" what="output files" />
+    </>
   )
 
   const tile = taskById(session.tile)
-  const footer = (
-    <div className="wizard-foot">
-      {step > 1 && (
-        <button type="button" className="secondary" onClick={() => go((step - 1) as Step)}>
-          ‹ Back
-        </button>
-      )}
-      <span className="spacer" />
-      {step === 1 ? (
-        <button type="button" className="continue" onClick={() => confirm(session.tile)}>
-          Continue with {tile?.label ?? 'this task'} ›
-        </button>
-      ) : (
-        step < 4 && (
-          <>
-            {missing.length > 0 && <span className="hint still-missing">Still missing: {missingText(missing)}</span>}
-            <button type="button" onClick={() => go((step + 1) as Step)}>
-              Next: {STEPS[step].name} ›
+  const stillMissing = missing.length > 0 ? <span className="still-missing">Still missing: {missingText(missing)}</span> : undefined
+  // The page header: the step's title (focused on a step change), one line
+  // of context, and the page's actions: Presets and Open earlier results…
+  // on every step (Continue last run on step 1).
+  const title = step === 1 ? 'What do you want to do?' : step === 2 ? `Inputs for ${taskLabel}` : step === 3 ? `Settings for ${taskLabel}` : 'Outputs and run'
+  const context =
+    step === 1 ? (
+      'FASTag reads sequence tags from MS/MS spectra. It is not a search engine.'
+    ) : step === 2 ? (
+      <span className="lead">
+        Needs {youNeed(owner)}.
+        {ti.required
+          .filter((n) => !(owner?.required ?? []).includes(n))
+          .map((n) => (
+            <span key={n}> Also required for {requiredBy(owner, values, n)}: a protein FASTA.</span>
+          ))}
+      </span>
+    ) : step === 3 ? (
+      'The main settings of the task; every other option is under Advanced.'
+    ) : (
+      'Where the outputs go and which files the run writes.'
+    )
+  const header = (
+    <PageHeader
+      title={title}
+      titleId={`step-h-${step}`}
+      focusable
+      context={context}
+      contextId={step === 1 ? 'not-search-engine' : undefined}
+      actions={
+        step === 1 ? (
+          <StartRow session={session} onOpenResults={onOpenResults} />
+        ) : (
+          <div className="row tight start-row">
+            <PresetMenu session={session} withSave={step === 3} />
+            <button type="button" onClick={onOpenResults}>
+              Open earlier results…
             </button>
-          </>
+          </div>
         )
-      )}
+      }
+      nav={stepper}
+    />
+  )
+  // The action bar: step 1 confirms the task; steps 2-4 are the run bar
+  // with Back and Next (App.tsx).
+  const bar = busy ? (
+    (actionBar?.() ?? null)
+  ) : step === 1 ? (
+    <div className="actionbar">
+      <div className="actionbar-col page-col">
+        <div className="actionbar-row">
+          <div className="actionbar-lead">
+            <span className="actionbar-status">
+              <b>{tile?.label ?? 'FASTag'}</b>
+              {tile ? ` · ${tile.time === 'short' ? 'Short' : 'Longer'}: ${tile.timeNote}` : ''}
+            </span>
+          </div>
+          <div className="actionbar-nav">
+            <button type="button" className="primary continue" onClick={() => confirm(session.tile)}>
+              Continue with {tile?.label ?? 'this task'} ›
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
+  ) : (
+    (actionBar?.({
+      status: stillMissing,
+      back: () => go((step - 1) as Step),
+      next:
+        step < 4
+          ? {
+              label: `Next: ${STEPS[step].name} ›`,
+              onClick: () => go((step + 1) as Step)
+            }
+          : undefined
+    }) ?? null)
   )
 
+  // Alt+arrows reach the handler from the action bar too (Back, Next).
   return (
-    <div
-      className="controls-body"
-      onBlur={(e) => {
-        if (e.target.id === 'p-alkylation_proteome') setProteome(values['alkylation_proteome'])
-      }}
-    >
-      {busy ? (
-        <>
-          {/* The form is not editable mid-run: a changed value would not
+    <div className="setup-view" onKeyDown={busy ? undefined : onKey}>
+      <div
+        className="controls-body"
+        onBlur={(e) => {
+          if (e.target.id === 'p-alkylation_proteome') setProteome(values['alkylation_proteome'])
+        }}
+      >
+        {busy ? (
+          <div className="setup-busy page-col">
+            <PageHeader title="Setup" context="FASTag is running: the form shows what the run uses." />
+            {/* The form is not editable mid-run: a changed value would not
               be what the run is using. */}
-          <p className="locked">
-            <IconLock />
-            <span>Input, output and parameters are locked while FASTag runs.</span>
-          </p>
-          <section className="block">
-            <h2>Input</h2>
-            {jobs.length > 0 ? (
-              <p>
-                A batch of {jobs.length} {jobs.length === 1 ? 'file' : 'files'}: each runs with the parameters below.
-              </p>
-            ) : (
-              <div className="path" title={input}>
-                <span className="fname">{baseName(input)}</span>
-                <span className="dir">{dirName(input)}</span>
-              </div>
-            )}
-          </section>
-          {jobs.length === 0 && (
-            <section className="block">
-              <h2>Writing</h2>
-              {writingFiles.map((f) => (
-                <code key={f}>{f}</code>
-              ))}
-            </section>
-          )}
-          <section className="block">
-            <h2>Changed from defaults</h2>
-            {changedParams.length ? changedParams.map((c) => <code key={c}>{c}</code>) : <span className="muted">nothing: all parameters at their defaults</span>}
-          </section>
-        </>
-      ) : (
-        <div className="wizard" onKeyDown={onKey}>
-          {stepper}
-          <p className="sr-only" role="status">
-            {said}
-          </p>
-          <Leftovers />
-          {lastRunBlock}
-          {body(
-            1,
-            'What do you want to do?',
-            <TaskStep session={session} onContinue={confirm} onOpenResults={onOpenResults} />
-          )}
-          {inputsStep}
-          {settingsStep}
-          {outputsStep}
-          {footer}
-          {(UNPLACED.length > 0 || UNKNOWN.length > 0) && (
-            <p className="warn">
-              {UNPLACED.length > 0 && (
-                <>
-                  {UNPLACED.length} {UNPLACED.length === 1 ? 'parameter of FASTag is' : 'parameters of FASTag are'} missing from the form:{' '}
-                  {UNPLACED.join(', ')}.{' '}
-                </>
-              )}
-              {UNKNOWN.length > 0 && (
-                <>
-                  {UNKNOWN.length} {UNKNOWN.length === 1 ? 'form entry names' : 'form entries name'} no such parameter: {UNKNOWN.join(', ')}.
-                </>
-              )}
+            <p className="locked">
+              <IconLock />
+              <span>Input, output and parameters are locked while FASTag runs.</span>
             </p>
-          )}
-        </div>
-      )}
+            <section className="block">
+              <h2>Input</h2>
+              {jobs.length > 0 ? (
+                <p>
+                  A batch of {jobs.length} {jobs.length === 1 ? 'file' : 'files'}: each runs with the parameters below.
+                </p>
+              ) : (
+                <div className="path" title={input}>
+                  <span className="fname">{baseName(input)}</span>
+                  <span className="dir">{dirName(input)}</span>
+                </div>
+              )}
+            </section>
+            {jobs.length === 0 && (
+              <section className="block">
+                <h2>Writing</h2>
+                {writingFiles.map((f) => (
+                  <code key={f}>{f}</code>
+                ))}
+              </section>
+            )}
+            <section className="block">
+              <h2>Changed from defaults</h2>
+              {changedParams.length ? (
+                changedParams.map((c) => <code key={c}>{c}</code>)
+              ) : (
+                <span className="muted">nothing: all parameters at their defaults</span>
+              )}
+            </section>
+          </div>
+        ) : (
+          <div className="wizard page-col">
+            {header}
+            <p className="sr-only" role="status">
+              {said}
+            </p>
+            {/* The menu's Reveal output refused: say so, not swallow it. */}
+            {revealErr && (
+              <p className="warn" role="alert">
+                <IconError />
+                <span>{revealErr}</span>
+              </p>
+            )}
+            {body(1, <TaskStep session={session} onContinue={confirm} />)}
+            {inputsStep}
+            {settingsStep}
+            {outputsStep}
+            {(UNPLACED.length > 0 || UNKNOWN.length > 0) && (
+              <p className="warn">
+                {UNPLACED.length > 0 && (
+                  <>
+                    {UNPLACED.length} {UNPLACED.length === 1 ? 'parameter of FASTag is' : 'parameters of FASTag are'} missing from the form:{' '}
+                    {UNPLACED.join(', ')}.{' '}
+                  </>
+                )}
+                {UNKNOWN.length > 0 && (
+                  <>
+                    {UNKNOWN.length} {UNKNOWN.length === 1 ? 'form entry names' : 'form entries name'} no such parameter: {UNKNOWN.join(', ')}.
+                  </>
+                )}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+      {bar}
     </div>
   )
 }
 
 /// Step 4's command preview: the command line Run would start, as text,
-/// refreshed (debounced) while the form changes. Copy and Export INI stay in
-/// the run bar.
+/// refreshed (debounced) while the form changes, behind a disclosure (Copy
+/// command line and Export INI… are in the action bar).
 function CommandPreview({ session, run, batch }: { session: Session; run: RunState; batch: boolean }): JSX.Element | null {
   const [line, setLine] = useState<string | null>(null)
   const { values, input, out } = session
@@ -1360,11 +1495,16 @@ function CommandPreview({ session, run, batch }: { session: Session; run: RunSta
   if (batch) return <p className="hint">Each file of the batch runs this command line with its own input and outputs; the Batch view logs each one.</p>
   if (!input) return null
   return (
-    <section className="command-preview" aria-labelledby="cmd-h">
-      <h3 id="cmd-h">Command line</h3>
+    <details className="command-preview">
+      <summary>
+        <span className="chev" aria-hidden="true">
+          <IconChevron />
+        </span>
+        Command line
+      </summary>
       <pre className="mono cmd" tabIndex={0} aria-label="The command line Run starts">
         {line ?? '…'}
       </pre>
-    </section>
+    </details>
   )
 }

@@ -189,10 +189,11 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     expect(o.argv).toContain('-species')
     expect(argOf(o.argv, 'extension')).toBe('2')
     expect(o.argv).toContain('-glyco')
-    expect(argOf(o.argv, 'subsample_fraction')).toBe('0.1')
+    // All spectra from 1.16 (no share), and the alkylation report on.
+    expect(argOf(o.argv, 'subsample_fraction')).toBe('0.0')
     // The task's reports, named after the run beside its tags table
     // (rebaseOutputs on Choose file and on the Run name).
-    for (const r of ['digest', 'label']) {
+    for (const r of ['digest', 'label', 'alkylation']) {
       expect(argOf(o.argv, `${r}_out`)).toBe(`${S}/characterize.${r}.tsv`)
       expect(existsSync(`${S}/characterize.${r}.tsv`)).toBe(true)
     }

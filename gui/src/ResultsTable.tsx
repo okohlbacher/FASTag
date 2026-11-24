@@ -3,9 +3,10 @@ import { useEffect, useId, useMemo, useRef, useState, type JSX, type KeyboardEve
 import { SPECTRUM_NEEDS } from './spectrum/support'
 import type { BrowserEvent, ResultsHead, ResultsPage, ResultsSort, ResultsView } from './types'
 import { baseName, DECIMAL } from './digestReport'
-import { HelpButton, HelpLink } from './help/HelpLink'
+import { HelpLink } from './help/HelpLink'
 import { READS_NAME, useExportJob, useExportJobs, type ExportJob } from './results/exportJobs'
 import { canExportReads, DENOVO_DEFAULTS, type DenovoFormat } from './export/denovo'
+import { dbCellsOf, dbHitText, dbHitTitle, parseDbProteins, proteinShort } from './results/dbProteins'
 
 // Hand-rolled fixed-row-height virtualization. Not react-window: above ~600k
 // rows the spacer div would exceed WebKit's ~16.7M px element-height limit and
@@ -69,7 +70,7 @@ const SPEC_ICON_W = 22
 const HIT_MIN_W = 120
 
 // The tags file's column names in words, the optional ones (-proforma,
-// -res_conf, -usi_collection, -entrapment_fasta) included; any other column
+// -res_conf, -usi_collection, -terminus, -entrapment_fasta) included; any other column
 // keeps its name.
 const LABEL: Record<string, string> = {
   spectrum: 'Spectrum',
@@ -86,16 +87,26 @@ const LABEL: Record<string, string> = {
   min_conf: 'Min. conf. (0–1)',
   mean_conf: 'Mean conf. (0–1)',
   fasta_hit: 'Database hit',
+  // -fasta_proteins (the GUI asks for 3 with every filter database): the
+  // Database hit cell names the first protein; these hold them all.
+  db_proteins: 'Proteins (position)',
+  db_genes: 'Gene',
+  db_protein_count: 'Proteins (n)',
   proforma: 'ProForma',
   res_conf: 'Residue conf. (%)',
   usi: 'USI',
+  // -terminus: the series a terminal anchor settles, and that terminus.
+  series: 'Series',
+  terminus: 'Terminus',
   q_db: 'Database q-value'
 }
 export const columnLabel = (c: string): string => LABEL[c] ?? c
 
 // Not shown until ticked under Columns: the tag says its length, the two
 // confidence columns sum up the per-residue ones.
-const DEFAULT_HIDDEN = ['length', 'extended', 'gapped', 'res_conf']
+// The db_* columns: the Database hit cell already names the first protein
+// and how many more there are.
+const DEFAULT_HIDDEN = ['length', 'extended', 'gapped', 'res_conf', 'db_proteins', 'db_genes', 'db_protein_count']
 // Best tags first, as the CLI ranks them.
 const DEFAULT_SORT: ResultsSort = { column: 'evalue', desc: false }
 
@@ -125,13 +136,26 @@ export function hitWords(v: string): string {
   return v
 }
 
+/// A Database hit cell in words: the first protein of the hit when the run
+/// named them (-fasta_proteins), else hitWords.
+export function hitCellText(columns: readonly string[], row: readonly string[], hit: string): string {
+  return dbHitText(hit, dbCellsOf(columns, row), hitWords(hit))
+}
+
+/// A db_proteins cell in words: each protein in short.
+export function proteinsCellText(v: string): string {
+  const ps = parseDbProteins(v)
+  return ps.length === 0 ? v : ps.map(proteinShort).join('; ')
+}
+
 export function autoWidths(columns: string[], rows: string[][]): Record<string, number> {
   const out: Record<string, number> = {}
   columns.forEach((c, j) => {
     let w = columnLabel(c).length * HEAD_CHAR_W + GLYPH_W + CELL_PAD
     for (const r of rows) {
       const v = r[j] ?? ''
-      w = Math.max(w, (c === 'fasta_hit' ? hitWords(v) : v).length * charW(c) + CELL_PAD)
+      const text = c === 'fasta_hit' ? hitCellText(columns, r, v) : c === 'db_proteins' ? proteinsCellText(v) : v
+      w = Math.max(w, text.length * charW(c) + CELL_PAD)
     }
     // The Database hit column is never narrower than its header and words.
     const floor = c === 'fasta_hit' ? HIT_MIN_W : MIN_W
@@ -342,10 +366,15 @@ interface Props {
   /// P4: the row action Open in Spectrum (and Enter on the active row).
   /// state 'no': the CLI has no -dump_spectrum, and the action says so;
   /// 'checking': the CLI is still being asked.
-  spectrum?: { state: 'yes' | 'no' | 'checking'; open(spectrum: string, rowId: number | null): void } | null
+  /// open: the row's spectrum, its file row and the table's view (its sort
+  /// and filters), whose order the Spectrum tab's ◀ ▶ walk.
+  spectrum?: { state: 'yes' | 'no' | 'checking'; open(spectrum: string, rowId: number | null, view: ResultsView): void } | null
+  /// The page header already names this file (opened from disk): no
+  /// heading of its own, only the count.
+  titled?: boolean
 }
 
-export default function ResultsTable({ path, source, rerunResConf, spectrum }: Props): JSX.Element {
+export default function ResultsTable({ path, source, rerunResConf, spectrum, titled = false }: Props): JSX.Element {
   const [meta, setMeta] = useState<Meta | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Best tags first, as the CLI ranks them. A file without an evalue column
@@ -374,6 +403,8 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
   const id = useId()
 
   const scrollerRef = useRef<HTMLDivElement>(null)
+  // Focus is on the active row's buttons (they go with the row).
+  const rowFocus = useRef(false)
   const pagesRef = useRef(new Map<number, Page>())
   // D5: the head rows of the open (file order), shown until a page arrives.
   const [head, setHead] = useState<ResultsHead | null>(null)
@@ -942,7 +973,7 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
       setCopyNote('This row names no spectrum.')
       return
     }
-    spectrum.open(sp, id ?? null)
+    spectrum.open(sp, id ?? null, view)
   }
 
   const onTableKey = (e: KeyboardEvent<HTMLDivElement>): void => {
@@ -1041,12 +1072,15 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
           shown.map((j) => {
             const c = row[j] ?? ''
             const name = columns[j] ?? ''
+            const hitTitle = name === 'fasta_hit' ? dbHitTitle(c, dbCellsOf(columns, row)) : c
             return (
-              <div className={`rt-cell${numeric.has(name) ? ' n' : ''}${SEQ_COLUMNS.has(name) ? ' seq' : ''}`} role="gridcell" key={j} title={c} aria-label={c}>
+              <div className={`rt-cell${numeric.has(name) ? ' n' : ''}${SEQ_COLUMNS.has(name) ? ' seq' : ''}`} role="gridcell" key={j} title={hitTitle} aria-label={hitTitle}>
                 {name === 'evalue' ? (
                   <EValue text={c} />
                 ) : name === 'fasta_hit' ? (
-                  hitWords(c)
+                  fitMiddle(hitCellText(columns, row, c), width(name))
+                ) : name === 'db_proteins' ? (
+                  fitMiddle(proteinsCellText(c), width(name))
                 ) : name === 'spectrum' ? (
                   // The scan number tells rows apart; the native ID is the tooltip.
                   <>
@@ -1085,12 +1119,24 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
     )
   }
 
+  const rowPos = currentPos()
+  // A filter or sort that drops the active row takes its buttons away: focus
+  // on one of them goes back to the table, not to the page.
+  const rowGone = rowPos == null
+  useEffect(() => {
+    if (!rowGone || !rowFocus.current) return
+    rowFocus.current = false
+    const a = document.activeElement
+    if (!a || a === document.body) scrollerRef.current?.focus()
+  }, [rowGone])
   return (
     <div className="rt">
       <div className="rt-title">
-        <h2 title={path}>
-          <code>{baseName(path)}</code>
-        </h2>
+        {!titled && (
+          <h2 title={path}>
+            <code>{baseName(path)}</code>
+          </h2>
+        )}
         <span className="muted">
           {meta
             ? `${meta.total.toLocaleString('en-US')} ${meta.total === 1 ? 'tag' : 'tags'}`
@@ -1099,9 +1145,9 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
               : head && head.rows.length > 0
                 ? `Reading… first ${head.rows.length.toLocaleString('en-US')} rows shown`
                 : 'Reading…'}
-          {source && ` · ${source}`}
+          {/* Titled: the page header's context line already says where it came from. */}
+          {source && !titled && ` · ${source}`}
         </span>
-        <HelpButton to="results-columns" what="the tags table" />
         {sort?.column === RANK_COLUMN && rank?.state === 'ranking' && (
           <span className="rt-rank" title="The table shows the file order until the E-value order is ready.">
             <span className="spin" aria-hidden="true">⟳</span> Ranking by E-value…{rank.pct != null ? ` ${rank.pct}%` : ''} (file order shown)
@@ -1111,6 +1157,53 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
         <span className="sr-only" role="status" aria-live="polite">
           {rankNote}
         </span>
+        {/* The active row's actions, only once a row is chosen: a calm
+            toolbar by default. Left of the spacer, so they push nothing.
+            A CLI without -dump_spectrum still says so with no row. */}
+        {(rowPos != null || spectrum?.state === 'no') && (
+          <span
+            className="rt-group"
+            role="group"
+            aria-label="Active row"
+            onFocus={() => (rowFocus.current = true)}
+            onBlur={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) rowFocus.current = false
+            }}
+          >
+            {rowPos != null && (
+              <>
+                <button type="button" className="secondary" title="Copy the active row's shown cells, tab-separated (⌘C)" onClick={copyRow}>
+                  Copy row
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  title={usiCol >= 0 ? "Copy the active row's USI (⇧⌘C)" : 'This file has no USI column: turn on USI column under Outputs and run again'}
+                  onClick={copyUsi}
+                >
+                  Copy USI
+                </button>
+              </>
+            )}
+            {spectrum && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={spectrum.state !== 'yes' || rowPos == null || spectrumCol < 0}
+                title={
+                  spectrum.state === 'no'
+                    ? `${SPECTRUM_NEEDS}: this FASTag has no -dump_spectrum`
+                    : spectrum.state === 'checking'
+                      ? 'Asking FASTag whether it can show spectra…'
+                      : "The active row's spectrum, with FASTag's processed peaks and the tag's ladder (Enter)"
+                }
+                onClick={() => openSpectrum()}
+              >
+                {spectrum.state === 'no' ? SPECTRUM_NEEDS : 'Open in Spectrum'}
+              </button>
+            )}
+          </span>
+        )}
         <span className="spacer" />
         <button
           type="button"
@@ -1122,46 +1215,6 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
         >
           Columns…
         </button>
-        <span className="rt-group" role="group" aria-label="Active row">
-        <span className="rt-group-label" aria-hidden="true">
-          Row
-        </span>
-        <button
-          type="button"
-          className="secondary"
-          disabled={currentPos() == null}
-          title="Copy the active row's shown cells, tab-separated (⌘C)"
-          onClick={copyRow}
-        >
-          Copy row
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          disabled={currentPos() == null}
-          title={usiCol >= 0 ? "Copy the active row's USI (⇧⌘C)" : 'This file has no USI column: turn on USI column under Outputs and run again'}
-          onClick={copyUsi}
-        >
-          Copy USI
-        </button>
-        {spectrum && (
-          <button
-            type="button"
-            className="secondary"
-            disabled={spectrum.state !== 'yes' || currentPos() == null || spectrumCol < 0}
-            title={
-              spectrum.state === 'no'
-                ? `${SPECTRUM_NEEDS}: this FASTag has no -dump_spectrum`
-                : spectrum.state === 'checking'
-                  ? 'Asking FASTag whether it can show spectra…'
-                  : "The active row's spectrum, with FASTag's processed peaks and the tag's ladder (Enter)"
-            }
-            onClick={() => openSpectrum()}
-          >
-            {spectrum.state === 'no' ? SPECTRUM_NEEDS : 'Open in Spectrum'}
-          </button>
-        )}
-        </span>
         {/* One export control: what to write, and the button that writes it. */}
         <span className="rt-exp rt-group" role="group" aria-label="Export">
           <label htmlFor={`${id}-fmt`}>Export as</label>

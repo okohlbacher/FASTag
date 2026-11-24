@@ -1,0 +1,67 @@
+/* The Run QC page (ReportTable QcView, QcCharts.tsx). Tokens only
+   (styles/tokens.css): --brand-tag, --brand-peaks and --brand-gap for the
+   series, --muted-foreground for muted marks, --flag for the threshold and
+   a kit without a call; the dark theme is its own. */
+
+/* Headline tiles: the QC strip as cards. */
+dl.qc-strip.qc-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--space-3); padding: 0; border: 0; background: none; }
+.qc-tiles .stat { margin: 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--card); padding: var(--space-3); display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.qc-tiles .stat dd { overflow-wrap: anywhere; }
+dl.qc-strip.qc-tiles .stat dd.qc-sub { font-size: var(--text-xs); font-weight: 400; color: var(--muted-foreground); }
+dl.qc-strip.qc-tiles .stat dd.qc-meter { height: 4px; margin-top: var(--space-1); border-radius: 2px; background: var(--track); overflow: hidden; }
+.qc-meter span { display: block; height: 100%; background: var(--brand-peaks); }
+dl.qc-strip.qc-tiles .stat.low dd:first-of-type { color: var(--flag-text); }
+.qc-tiles .stat.low { border-color: var(--flag); }
+
+/* Sections and the chart grid: two charts side by side when there is room. */
+.qc-block { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.qc-block > h3 { margin: 0; }
+.qc-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: var(--space-3); min-width: 0; }
+.qc-chart { min-width: 0; }
+.qc-chart .mg-plot svg { width: 100%; height: auto; }
+.qc-notes { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; font-size: var(--text-xs); color: var(--muted-foreground); }
+.qc-kit { margin: 0; font-size: var(--text-sm); }
+
+/* Marks */
+.qc-t-tag { --qc-c: var(--brand-tag); }
+.qc-t-peaks { --qc-c: var(--brand-peaks); }
+.qc-t-gap { --qc-c: var(--brand-gap); }
+.qc-t-muted { --qc-c: var(--muted-foreground); }
+.qc-seg { fill: var(--qc-c); stroke: var(--card); stroke-width: 1; }
+.qc-seg.qc-t-muted { opacity: 0.45; }
+.qc-seg.on { stroke: var(--foreground); stroke-width: 2; }
+.qc-bar { fill: var(--brand-peaks); }
+.qc-bar.muted { fill: var(--muted-foreground); opacity: 0.35; }
+.qc-bar.on { fill: var(--primary); opacity: 1; }
+.qc-rule line { stroke: var(--flag); stroke-width: 1; stroke-dasharray: 4 3; }
+.qc-rule text { fill: var(--flag-text); font-size: 11px; }
+.qc-dot { fill: var(--qc-c); stroke: var(--qc-c); stroke-width: 1.5; }
+.qc-dot.hollow { fill: var(--card); }
+.qc-dot.on { stroke: var(--foreground); }
+.qc-res-line { fill: none; stroke: var(--qc-c); stroke-width: 1; opacity: 0.6; }
+.qc-stated { stroke: var(--qc-c); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.qc-stated.on { stroke-width: 2.5; }
+.qc-row-label { fill: var(--foreground); }
+
+/* Legend keys */
+.qc-legend { flex-wrap: wrap; gap: var(--space-1) var(--space-4); }
+.qc-key { display: inline-block; flex: none; width: 12px; height: 10px; border-radius: 2px; background: var(--qc-c); }
+.qc-key.qc-t-muted.bar { opacity: 0.45; }
+.qc-key.dot { width: 9px; height: 9px; border-radius: 50%; }
+.qc-key.hollow { width: 7px; height: 7px; border-radius: 50%; background: none; border: 1.5px solid var(--qc-c); }
+.qc-key.dash { height: 0; background: none; border-top: 2px dashed var(--qc-c); border-radius: 0; }
+.qc-key.rule { height: 0; background: none; border-top: 1px dashed var(--flag); border-radius: 0; }
+
+/* All values */
+details.qc-all { display: flex; flex-direction: column; gap: var(--space-3); }
+details.qc-all > summary { cursor: pointer; width: max-content; }
+.qc-all-bar { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); align-items: center; margin: var(--space-2) 0; }
+.qc-all-bar input[type='search'] { width: 16em; }
+.qc-all .qc-section { margin-top: var(--space-3); }
+
+@media (forced-colors: active) {
+  .qc-seg, .qc-bar, .qc-dot { fill: CanvasText; stroke: Canvas; }
+  .qc-bar.on, .qc-seg.on, .qc-dot.on { fill: Highlight; }
+  .qc-stated, .qc-res-line { stroke: CanvasText; }
+  .qc-meter span { background: CanvasText; }
+}

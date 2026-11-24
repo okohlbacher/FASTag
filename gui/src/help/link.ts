@@ -51,11 +51,13 @@ export function rememberHelpPage(page: string): void {
 }
 
 /// Close Help, and give focus back to the control that opened it once the
-/// run view is shown again.
-export function closeHelp(): void {
+/// run view is shown again; not with @p opts.restoreFocus false (the caller
+/// moves focus itself, e.g. to the settings search).
+export function closeHelp(opts?: { restoreFocus?: boolean }): void {
   set({ ...state, open: false, target: null, back: null })
   const o = opener
   opener = null
+  if (opts?.restoreFocus === false) return
   setTimeout(() => {
     // A view switch can hide the opener while Help stays open; a finished
     // run can remove or disable it. Keep keyboard users on a usable control.

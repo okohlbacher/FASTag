@@ -280,7 +280,7 @@ export function labelFindings(r: Report): LabelFinding[] {
   }))
 }
 
-// ---- alkylation (1.12, -alkylation_out format 1) ---------------------------
+// ---- alkylation (1.12, -alkylation_out formats 1 to 4) ---------------------
 
 export interface AlkylationCall {
   status: 'call' | 'no_call' | 'unknown'
@@ -290,32 +290,96 @@ export interface AlkylationCall {
   mass: number | null
   /// Share of the binned spectra (the leading class's on no_call).
   share: number | null
-  /// Binned spectra the call is based on.
+  /// Binned spectra (placements) or votes (tags) the call is based on.
   binned: number | null
-  /// `few_cys_spectra` or `ambiguous` on no_call.
+  /// The share's denominator, the `share` row's n: from format 3 the binned
+  /// plus the conflicted votes (`voted`), up to format 2 the binned ones;
+  /// from format 4 also the abstained tag votes (`abstained`).
+  voted: number | null
+  /// Format 4, a call taken from the tags: the votes that abstained for want
+  /// of evidence against an alias (`alkt_form alias_unconfirmed`), which are
+  /// in `voted`; 0 otherwise.
+  abstained: number
+  /// `few_cys_spectra`, `ambiguous`, `tags_too_short` (format 1),
+  /// `unresolved_forms` or `disagree` (format 2), `alias_needs_database`
+  /// (format 4) on no_call.
   reason?: string
-  /// `recon_fasta`, `fasta`, `proteome` or `bundled:<name>`.
+  /// Format 4, no_call `alias_needs_database`: the form the tags favour,
+  /// which an alias of the same mass leaves for a protein database to
+  /// confirm (the `candidate` row).
+  candidate?: string
+  /// `none` (format 2: no database), `recon_fasta`, `fasta`, `proteome` or `bundled:<name>`.
   databaseSource?: string
-  /// The `alk_run format` value; a reader knows format 1.
+  /// Format 2: where the call comes from, `tags`, `placement` or
+  /// `tags+placement`; absent in format 1 (placements only).
+  source?: string
+  /// The `alk_run format` value; a reader knows formats 1 to 4 (3 adds the
+  /// conflicts to the share's denominator, 4 the alias_unconfirmed row and
+  /// those abstentions to the tag call's denominator).
   format: number | null
+  /// Format 2 with a database: the placement call on its own
+  /// (`alkylation_placement_call`), whatever the call of the report took
+  /// from it; its `tags_too_short` is there only. Undefined in format 1,
+  /// whose `alkylation_call` is the placement call, and without a database.
+  placement?: AlkylationPart
 }
 
-/// The call of an -alkylation_out report, read by (section, key) as
-/// doc/ALKYLATION-REPORT.md requires.
-export function alkylationCall(r: Report): AlkylationCall {
-  const v = (k: string): string | undefined => value(r, 'alkylation_call', k)
+/// One component call of a format 2 report (its section's rows).
+export interface AlkylationPart {
+  status: 'call' | 'no_call' | 'unknown'
+  reagent?: string
+  share: number | null
+  /// Binned spectra.
+  binned: number | null
+  /// The share's denominator (the `share` row's n; binned plus conflicted from format 3).
+  voted: number | null
+  reason?: string
+}
+
+/// The rows of the call in @p sect of @p r.
+function alkylationPart(r: Report, sect: string): AlkylationPart {
+  const v = (k: string): string | undefined => value(r, sect, k)
   const st = v('status')
   const called = st === 'call'
   const reagent = v('reagent')
   return {
     status: called || st === 'no_call' ? st : 'unknown',
     reagent: called && reagent != null && reagent !== '-' ? reagent : undefined,
-    mass: called ? num(v('mass')) : null,
     share: num(v('share')),
-    binned: row(r, 'alkylation_call', 'status')?.n ?? null,
-    reason: v('reason') == null || v('reason') === '-' ? undefined : v('reason'),
+    binned: row(r, sect, 'status')?.n ?? null,
+    voted: row(r, sect, 'share')?.n ?? row(r, sect, 'status')?.n ?? null,
+    reason: v('reason') == null || v('reason') === '-' ? undefined : v('reason')
+  }
+}
+
+/// The call of an -alkylation_out report, read by (section, key) as
+/// doc/ALKYLATION-REPORT.md requires.
+export function alkylationCall(r: Report): AlkylationCall {
+  const v = (k: string): string | undefined => value(r, 'alkylation_call', k)
+  const { status, reagent, share, binned, voted, reason } = alkylationPart(r, 'alkylation_call')
+  const placed = row(r, 'alkylation_placement_call', 'status') != null
+  const source = v('source')
+  const format = num(value(r, 'alk_run', 'format'))
+  // Codex6 review n1: from format 4 the tag call's denominator holds its
+  // abstentions; the call of the report is the tag call unless it comes
+  // from the placements (source), and a format 1 report has no tag call.
+  const fromTags = source === 'tags' || source === 'tags+placement'
+  const abstained = fromTags && format != null && format >= 4 ? (num(value(r, 'alkt_form', 'alias_unconfirmed')) ?? 0) : 0
+  const candidate = reason === 'alias_needs_database' ? v('candidate') : undefined
+  return {
+    status,
+    reagent,
+    ...(candidate && candidate !== '-' ? { candidate } : {}),
+    mass: status === 'call' ? num(v('mass')) : null,
+    share,
+    binned,
+    voted,
+    abstained,
+    reason,
     databaseSource: value(r, 'alk_run', 'database_source'),
-    format: num(value(r, 'alk_run', 'format'))
+    source,
+    format,
+    ...(placed ? { placement: alkylationPart(r, 'alkylation_placement_call') } : {})
   }
 }
 

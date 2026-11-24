@@ -20,7 +20,7 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::events::{Batcher, RunEvent, RunResult, Sink, FLUSH_INTERVAL};
 use crate::reveal::ResolvedOutputs;
-use crate::{history, lifetime, outputs, sweep};
+use crate::{history, inspect, lifetime, outputs, sweep};
 
 // name -> declared type, straight from the tool's own -write_ini. This is the
 // allowlist build_args() validates against. Embedded at compile time from the
@@ -87,6 +87,19 @@ pub struct RunManager {
     // reveal_output may show (reveal.rs). Earlier sessions' come from the
     // run record.
     pub revealable: Mutex<Vec<PathBuf>>,
+    // The databases (-fasta, -entrapment_fasta) of the runs of this session,
+    // by run and with the identity each had when the run started: the files
+    // fasta_segment may read for that run's tags (fasta.rs), once the run
+    // has ended with exit 0 and recorded the identity of its tags table.
+    // Earlier sessions' come from the run record. Shared with the run's
+    // finish, which sets that identity.
+    pub databases: Arc<Mutex<Vec<crate::fasta::SessionRun>>>,
+    // The files open_output may open (reveal.rs): the -recon_id_out,
+    // -fasta_out and -search_config_out of a run of this session that ended
+    // with exit 0, and an identification file dropped on the window, each
+    // with its identity when it was committed or dropped. Shared with the
+    // run's finish.
+    pub openable: Arc<Mutex<Vec<crate::fasta::FileIdentity>>>,
 }
 
 impl RunManager {
@@ -188,20 +201,51 @@ pub struct Resolved {
     pub source: &'static str,
 }
 
-// Resolve the binary in priority order: FASTAG_BIN env override, then bundled
-// beside the app (the resource dir). Debug builds also try the dev resources
-// dir baked in at compile time, then the bare name on PATH. A release build
+/// The first @p exe in the folders of @p path_env (a PATH value) that is a
+/// file (and executable, on Unix), canonical: the program the CLI itself is
+/// (File::getExecutablePath), so the data checks look beside its real
+/// folder, not relative to the app's working folder. None when there is none.
+pub fn find_on_path(path_env: &std::ffi::OsStr, exe: &str) -> Option<PathBuf> {
+    std::env::split_paths(path_env).filter(|d| !d.as_os_str().is_empty()).map(|d| d.join(exe)).find_map(|c| {
+        let m = std::fs::metadata(&c).ok()?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if m.permissions().mode() & 0o111 == 0 {
+                return None;
+            }
+        }
+        if !m.is_file() {
+            return None;
+        }
+        dunce::canonicalize(&c).ok()
+    })
+}
+
+/// The binary FASTAG_BIN names (@p env_bin), when it exists: canonical, so a
+/// symlinked override (a Homebrew bin/FASTag into the Cellar) looks for its
+/// data where the CLI does (File::getExecutablePath), beside the target.
+pub fn env_override(env_bin: &str) -> Option<Resolved> {
+    if env_bin.is_empty() || !Path::new(env_bin).exists() {
+        return None;
+    }
+    let data = std::env::var("OPENMS_DATA_PATH").ok().map(PathBuf::from);
+    // The CLI already honours a user-set FASTAG_TAXONOMY_DIR itself.
+    let bin = dunce::canonicalize(env_bin).unwrap_or_else(|_| PathBuf::from(env_bin));
+    Some(Resolved { bin, data, taxonomy: None, source: "env" })
+}
+
+// Resolve the binary in priority order: FASTAG_BIN env override (canonical,
+// as the CLI resolves its own path), then bundled beside the app (the
+// resource dir). Debug builds also try the dev resources dir baked in at
+// compile time, then the first FASTag on PATH (find_on_path). A release build
 // does neither: the baked-in path is the CI runner's (and on Windows would sit
 // on a drive any user can create), and a PATH lookup cannot find the Windows
 // CLI (FASTag.bat) and could pick up an unrelated binary. It reports
 // "missing" instead, which the probe turns into a clear error.
 pub fn resolve_binary(app: &AppHandle) -> Resolved {
-    if let Ok(env_bin) = std::env::var("FASTAG_BIN") {
-        if !env_bin.is_empty() && PathBuf::from(&env_bin).exists() {
-            let data = std::env::var("OPENMS_DATA_PATH").ok().map(PathBuf::from);
-            // The CLI already honours a user-set FASTAG_TAXONOMY_DIR itself.
-            return Resolved { bin: PathBuf::from(env_bin), data, taxonomy: None, source: "env" };
-        }
+    if let Some(r) = std::env::var("FASTAG_BIN").ok().and_then(|b| env_override(&b)) {
+        return r;
     }
     let mut roots: Vec<PathBuf> = Vec::new();
     if let Ok(rd) = app.path().resource_dir() {
@@ -229,7 +273,9 @@ pub fn resolve_binary(app: &AppHandle) -> Resolved {
         }
     }
     if cfg!(debug_assertions) {
-        return Resolved { bin: PathBuf::from(EXE), data: None, taxonomy: None, source: "path" };
+        if let Some(bin) = std::env::var_os("PATH").and_then(|p| find_on_path(&p, EXE)) {
+            return Resolved { bin, data: None, taxonomy: None, source: "path" };
+        }
     }
     Resolved { bin: expected.unwrap_or_else(|| PathBuf::from(EXE)), data: None, taxonomy: None, source: "missing" }
 }
@@ -571,7 +617,15 @@ fn unit_without_value(name: &str, params: &Map<String, Value>) -> bool {
 
 // Build the argv from typed params. Only names the tool declares are emitted,
 // arrays only for list-typed options, and each value is its own argv element.
+// For the current CLI (the manifest's): build_args_for with every option.
 pub(crate) fn build_args(p: &RunParams) -> Vec<String> {
+    build_args_for(p, &|_| true)
+}
+
+/// build_args for the CLI whose options @p engine_has answers (the resolved
+/// binary's --helphelp, inspect::cli_has): an option the GUI adds on its own
+/// (-fasta_proteins) is given only to a CLI that has it.
+pub(crate) fn build_args_for(p: &RunParams, engine_has: &dyn Fn(&str) -> bool) -> Vec<String> {
     let types = &*PARAM_TYPES;
 
     let base = base_dir(&p.input);
@@ -636,9 +690,29 @@ pub(crate) fn build_args(p: &RunParams) -> Vec<String> {
         args.push(s);
     }
 
+    // With a filter database the tables name the proteins of each hit
+    // (db_proteins, db_genes, db_protein_count): the GUI asks for up to
+    // FASTA_PROTEINS of them unless the user gave a value. The resolved
+    // binary's --helphelp gates the flag: an older CLI (FASTAG_BIN) aborts on
+    // an unknown option, and its tables then simply have no db_proteins.
+    if wants_fasta_proteins(&p.params, types) && engine_has("fasta_proteins") {
+        args.push("-fasta_proteins".into());
+        args.push(FASTA_PROTEINS.to_string());
+    }
+
     // The GUI always wants machine-readable progress.
     args.push("-progress".into());
     args
+}
+
+/// The proteins a GUI run lists per database hit (-fasta_proteins).
+pub(crate) const FASTA_PROTEINS: u32 = 3;
+
+/// A run with a non-empty -fasta, an engine that knows -fasta_proteins, and
+/// no value of the user's for it.
+fn wants_fasta_proteins(params: &Map<String, Value>, types: &HashMap<String, ParamType>) -> bool {
+    let set = |name: &str| params.get(name).and_then(value_to_scalar).is_some_and(|s| !s.trim().is_empty());
+    types.contains_key("fasta_proteins") && set("fasta") && !set("fasta_proteins")
 }
 
 /// build_args for a run request as the renderer sends it (JSON), for the
@@ -948,6 +1022,9 @@ pub fn record_of(
         params: None,
         tags: if end.ok { history::tags_of_log(&end.log) } else { None },
         workflow: None,
+        databases: Vec::new(),
+        tags_identity: None,
+        open_identities: Vec::new(),
     }
 }
 
@@ -970,6 +1047,9 @@ pub fn marker_of(files: &RunFiles<'_>, argv: &[String], start: u64) -> history::
         params: None,
         tags: None,
         workflow: None,
+        databases: Vec::new(),
+        tags_identity: None,
+        open_identities: Vec::new(),
     }
 }
 
@@ -1010,40 +1090,17 @@ struct Plan {
     resolved: ResolvedOutputs,
 }
 
-/// @p args (build_args) with -resolved_out and -tag_graph_out beside the
-/// tags output (<stem>.resolved.tsv, <stem>.taggraph.tsv, as rebaseOutputs
-/// names a report) when the CLI lists both in @p options (its --helphelp)
-/// and the run names neither. -progress stays last.
-pub(crate) fn with_tag_graph(mut args: Vec<String>, options: &[String]) -> Vec<String> {
-    let has = |o: &str| options.iter().any(|x| x == o);
-    let given = |o: &str| args.iter().any(|a| a.strip_prefix('-') == Some(o));
-    let out = args.iter().position(|a| a == "-out").and_then(|i| args.get(i + 1)).cloned().unwrap_or_default();
-    if out.is_empty() || !outputs::TAG_GRAPH_OUTPUTS.iter().all(|(o, _)| has(o) && !given(o)) {
-        return args;
-    }
-    let slash = out.rfind(['/', '\\']).map_or(0, |s| s + 1);
-    let stem = match out.strip_suffix(".tags.tsv") {
-        Some(s) if s.len() >= slash => s.to_string(),
-        _ => match out.rfind('.') {
-            Some(dot) if dot > slash => out[..dot].to_string(),
-            _ => out.clone(),
-        },
-    };
-    let at = args.iter().position(|a| a == "-progress").unwrap_or(args.len());
-    for (k, (o, suffix)) in outputs::TAG_GRAPH_OUTPUTS.iter().enumerate() {
-        args.insert(at + 2 * k, format!("-{o}"));
-        args.insert(at + 2 * k + 1, format!("{stem}{suffix}"));
-    }
-    args
+/// The argv of a run of @p params with the binary @p r: build_args gated on
+/// the options its --helphelp lists (cached per binary).
+fn args_for(r: &Resolved, params: &RunParams) -> Vec<String> {
+    build_args_for(params, &|o| inspect::cli_has(r, o))
 }
 
-/// The options the CLI of @p r lists (inspect.rs, cached per binary).
-fn cli_options(r: &Resolved) -> Vec<String> {
-    crate::inspect::cached_capabilities(r).options
+fn plan(r: &Resolved, params: &RunParams) -> Plan {
+    plan_of(args_for(r, params), params)
 }
 
-fn plan(params: &RunParams, options: &[String]) -> Plan {
-    let args = with_tag_graph(build_args(params), options);
+fn plan_of(args: Vec<String>, params: &RunParams) -> Plan {
     // Anything still relative (e.g. a path the CLI derives itself) lands next
     // to the input, not in the app's cwd ("/" for a Finder launch).
     let cwd = base_dir(&params.input).filter(|d| d.is_dir());
@@ -1055,8 +1112,9 @@ fn plan(params: &RunParams, options: &[String]) -> Plan {
 /// The outputs a run of @p params would write, and those already on disk,
 /// resolved exactly as `run` resolves them (build_args, the input's folder).
 #[tauri::command]
-pub fn outputs_check(app: AppHandle, params: RunParams) -> OutputsCheck {
-    let pl = plan(&params, &cli_options(&resolve_binary(&app)));
+pub fn outputs_check(params: RunParams) -> OutputsCheck {
+    // -fasta_proteins adds no output: no --helphelp needed to list them.
+    let pl = plan_of(build_args(&params), &params);
     let paths = outputs::resolve(&pl.outputs, pl.cwd.as_deref());
     let inputs = outputs::run_inputs(&params.input, &pl.args, &params.protect, pl.cwd.as_deref());
     let show = |v: &[PathBuf]| v.iter().map(|p| p.display().to_string()).collect();
@@ -1073,7 +1131,7 @@ pub fn outputs_check(app: AppHandle, params: RunParams) -> OutputsCheck {
 /// run, with no binary path that is gone once the app quits
 /// (history::argv_as_run).
 pub(crate) fn command_of(r: &Resolved, params: &RunParams) -> Vec<String> {
-    argv_of(r, &with_tag_graph(build_args(params), &cli_options(r)))
+    argv_of(r, &args_for(r, params))
 }
 
 fn argv_of(r: &Resolved, args: &[String]) -> Vec<String> {
@@ -1083,9 +1141,13 @@ fn argv_of(r: &Resolved, args: &[String]) -> Vec<String> {
 
 /// The command line a run of @p params is (command_of), for the Setup
 /// footer's Copy command: the same argv `run` would start.
+/// Off the main thread: with a FASTA, the first call per binary runs its
+/// --helphelp (inspect::cli_has).
 #[tauri::command]
-pub fn command_line(app: AppHandle, params: RunParams) -> Vec<String> {
-    command_of(&resolve_binary(&app), &params)
+pub async fn command_line(app: AppHandle, params: RunParams) -> Vec<String> {
+    tauri::async_runtime::spawn_blocking(move || command_of(&resolve_binary(&app), &params))
+        .await
+        .unwrap_or_default()
 }
 
 fn refused(reason: String) -> RunStarted {
@@ -1099,7 +1161,7 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
     if mgr.current.lock().map(|c| c.is_some()).unwrap_or(true) {
         return refused("a run is already in progress".into());
     }
-    let Plan { args, cwd, outputs, resolved } = plan(&params, &cli_options(r));
+    let Plan { args, cwd, outputs, resolved } = plan(r, &params);
     let command = argv_of(r, &args);
     let mut cmd = Command::new(&r.bin);
     // stdin is null: the CLI never reads it, and an inherited one could block.
@@ -1108,42 +1170,87 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
         cmd.current_dir(d);
     }
     new_process_group(&mut cmd);
-    if let Some(d) = &r.data {
-        cmd.env("OPENMS_DATA_PATH", d);
-    }
+    // OpenMS's share data, and FASTag's own data passed explicitly (the CLI's
+    // own <bin>/../share lookup fails for a copied/symlinked binary): the
+    // user's own folders if set, the ones species.rs and data.rs report on.
+    crate::data::data_env(&mut cmd, r);
     cli_env(&mut cmd);
     no_console_window(&mut cmd);
-    if let Some(t) = taxonomy_dir(r) {
-        // Point -species at the taxonomy explicitly (the CLI's own
-        // <bin>/../share lookup fails for a copied/symlinked binary) -- the
-        // user's own directory if set, the same one species.rs reports on.
-        cmd.env("FASTAG_TAXONOMY_DIR", t);
-    }
     let start = history::now_ms();
     let files = RunFiles { input: &params.input, outputs: &outputs, cwd: cwd.as_deref(), overwrite: params.overwrite, protect: &params.protect };
+    // The databases as the run reads them, resolved and opened once before
+    // the CLI starts: the only files the Spectrum tab's alignment of this
+    // run's tags reads, while each is still that file (fasta.rs).
+    let dbs = crate::fasta::identities_of(&args, cwd.as_deref());
     // Before the CLI starts: if the app is killed while it runs, the next
     // start finds this run's marker and offers what it left (sweep.rs).
-    let marker = history_dir.as_deref().and_then(|d| sweep::mark_running(d, &marker_of(&files, &command, start)).ok());
+    let marker = history_dir.as_deref().and_then(|d| {
+        let mut m = marker_of(&files, &command, start);
+        m.databases = dbs.clone();
+        sweep::mark_running(d, &m).ok()
+    });
     // When the run has ended: record it (history.rs).
     let (rec_input, rec_outputs, rec_cwd, rec_argv) = (params.input.clone(), outputs.clone(), cwd.clone(), command.clone());
     let rec_params = params.params.clone();
     let rec_workflow = params.workflow.clone();
+    let rec_databases = dbs.clone();
     let run_marker = marker.clone();
+    // The outputs whose identity the run commits when it ends with exit 0:
+    // its tags table (fasta.rs, the alignment) and the files Open may open
+    // (reveal.rs). Absolute: a relative one against the app's own cwd, as
+    // the child, which runs there when no cwd is given, resolves it.
+    let absolute = |p: &str| {
+        let p = PathBuf::from(p);
+        if p.is_relative() {
+            std::env::current_dir().map(|c| c.join(&p)).unwrap_or(p)
+        } else {
+            p
+        }
+    };
+    let tags_out = resolved.out.as_deref().map(absolute);
+    let open_outs: Vec<PathBuf> =
+        [&resolved.recon_id_out, &resolved.fasta_out, &resolved.search_config_out].into_iter().flatten().map(|p| absolute(p)).collect();
+    let session_runs = mgr.databases.clone();
+    let openable = mgr.openable.clone();
     let finish = Box::new(move |end: &RunEnd| {
         // The marker first: a record next to a stale marker would be
         // followed by a second, "interrupted" one at the next start.
         if let Some(m) = &run_marker {
             sweep::clear_running(m);
         }
+        // Only a run that ended with exit 0 committed its outputs: their
+        // identity now, after the CLI wrote them.
+        let tags_identity = if end.ok { tags_out.as_deref().and_then(crate::fasta::identity_of_file) } else { None };
+        // The files Open may open, as committed: for this session and, in
+        // the run record, for later ones (reveal.rs open_allowed).
+        let open_identities: Vec<crate::fasta::FileIdentity> =
+            if end.ok { open_outs.iter().filter_map(|p| crate::reveal::openable_identity(p)).collect() } else { Vec::new() };
+        if let Ok(mut o) = openable.lock() {
+            o.extend(open_identities.iter().cloned());
+        }
+        if let Ok(mut runs) = session_runs.lock() {
+            if let Some(r) = runs.iter_mut().find(|r| r.start == start) {
+                r.tags = tags_identity.clone();
+            }
+        }
         if let Some(d) = history_dir {
             let files = RunFiles { input: &rec_input, outputs: &rec_outputs, cwd: rec_cwd.as_deref(), overwrite: true, protect: &[] };
             let mut rec = record_of(&files, &rec_argv, start, end);
             rec.params = Some(rec_params);
             rec.workflow = rec_workflow;
+            rec.databases = rec_databases;
+            rec.tags_identity = tags_identity;
+            rec.open_identities = open_identities;
             record_run(&d, &rec, &end.log);
         }
     });
     let abs: Vec<PathBuf> = resolved.paths().into_iter().map(PathBuf::from).collect();
+    // The session's entry before the CLI starts: a run that ends at once
+    // finds it to set its tags identity on. No tags identity until then, so
+    // it authorizes nothing while it runs.
+    if let Ok(mut d) = mgr.databases.lock() {
+        d.push(crate::fasta::SessionRun { start, outputs: abs.clone(), databases: dbs, tags: None });
+    }
     // A spawn failure is known synchronously: report it as a non-start so the
     // frontend reports "FASTag could not start" and settles cleanly.
     match start_run(mgr, cmd, files, sink, finish) {
@@ -1160,6 +1267,9 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
             }
         }
         Err(e) => {
+            if let Ok(mut d) = mgr.databases.lock() {
+                d.retain(|r| r.start != start || r.tags.is_some());
+            }
             // Its own marker only: a refusal because another run is live
             // must not take that run's marker.
             if let Some(m) = &marker {
@@ -1293,31 +1403,9 @@ mod tests {
         serde_json::from_str(json).unwrap()
     }
 
-    // A plan with a CLI that has no tag graph options.
-    fn plan_of(p: &RunParams) -> Plan {
-        plan(p, &[])
-    }
-
-    #[test]
-    fn the_tag_graph_tables_go_beside_the_tags_when_the_cli_has_them() {
-        let v = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        let both = v(&["resolved_out", "tag_graph_out"]);
-        let args = v(&["-in", "/d/a.mzML", "-out", "/d/a.tags.tsv", "-progress"]);
-        assert_eq!(
-            with_tag_graph(args.clone(), &both),
-            v(&["-in", "/d/a.mzML", "-out", "/d/a.tags.tsv", "-resolved_out", "/d/a.resolved.tsv", "-tag_graph_out", "/d/a.taggraph.tsv", "-progress"])
-        );
-        // Another name loses its extension only; a dotted folder keeps its name.
-        assert_eq!(with_tag_graph(v(&["-out", "/r.1/x.tsv"]), &both)[3], "/r.1/x.resolved.tsv");
-        assert_eq!(with_tag_graph(v(&["-out", "/r.1/x"]), &both)[3], "/r.1/x.resolved.tsv");
-        // A CLI with one of them, or none: nothing added.
-        assert_eq!(with_tag_graph(args.clone(), &both[..1]), args);
-        assert_eq!(with_tag_graph(args.clone(), &[]), args);
-        // The outputs of the run, revealed and cleaned up like the others.
-        let pl = plan(&rp(r#"{"in":"/d/a.mzML","out":"/d/a.tags.tsv"}"#), &both);
-        assert_eq!(pl.resolved.resolved_out.as_deref(), Some("/d/a.resolved.tsv"));
-        assert_eq!(pl.resolved.tag_graph_out.as_deref(), Some("/d/a.taggraph.tsv"));
-        assert!(pl.outputs.iter().any(|o| o == "/d/a.taggraph.tsv"));
+    /// plan for the current CLI (every manifest option), no binary asked.
+    fn plan_default(p: &RunParams) -> Plan {
+        plan_of(build_args(p), p)
     }
 
     // P5: the manifest is parsed once and every reader shares that parse.
@@ -1349,6 +1437,51 @@ mod tests {
     fn build_args_minimal() {
         let a = build_args(&rp(r#"{"in":"i.mzML","out":"o.tsv"}"#));
         assert_eq!(a, vec!["-in", "i.mzML", "-out", "o.tsv", "-progress"]);
+    }
+
+    #[test]
+    fn a_run_with_a_filter_database_lists_three_proteins_per_hit() {
+        let a = build_args(&rp(r#"{"in":"i.mzML","out":"o.tsv","params":{"fasta":"/db/e.fasta"}}"#));
+        let at = a.iter().position(|x| x == "-fasta_proteins").expect("-fasta_proteins with -fasta");
+        assert_eq!(a[at + 1], "3");
+        assert_eq!(a.iter().filter(|x| *x == "-fasta_proteins").count(), 1);
+        assert_eq!(a.last().map(String::as_str), Some("-progress"));
+        // No database, or an empty one: not asked for (the CLI refuses it without -fasta).
+        for json in [r#"{"in":"i","out":"o"}"#, r#"{"in":"i","out":"o","params":{"fasta":""}}"#, r#"{"in":"i","out":"o","params":{"fasta":"  "}}"#] {
+            assert!(!build_args(&rp(json)).contains(&"-fasta_proteins".to_string()), "{json}");
+        }
+        // The user's own value wins, 0 (off) included, and is given once.
+        for (v, want) in [("0", "0"), ("7", "7")] {
+            let a = build_args(&rp(&format!(r#"{{"in":"i","out":"o","params":{{"fasta":"/db/e.fasta","fasta_proteins":"{v}"}}}}"#)));
+            let at: Vec<usize> = a.iter().enumerate().filter(|(_, x)| *x == "-fasta_proteins").map(|(i, _)| i).collect();
+            assert_eq!(at.len(), 1, "{a:?}");
+            assert_eq!(a[at[0] + 1], want);
+        }
+        // An engine without the option never receives it.
+        let mut old = PARAM_TYPES.clone();
+        old.remove("fasta_proteins");
+        let mut m = Map::new();
+        m.insert("fasta".into(), Value::String("/db/e.fasta".into()));
+        assert!(!wants_fasta_proteins(&m, &old));
+        assert!(wants_fasta_proteins(&m, &PARAM_TYPES));
+    }
+
+    // -fasta_proteins is the GUI's own addition: a CLI that does not list it
+    // (an older FASTAG_BIN) is not given it; one that does keeps today's argv.
+    #[test]
+    fn fasta_proteins_is_given_only_to_a_cli_that_has_it() {
+        let p = rp(r#"{"in":"i.mzML","out":"o.tsv","params":{"fasta":"/db/e.fasta"}}"#);
+        let without = build_args_for(&p, &|_| false);
+        assert!(!without.contains(&"-fasta_proteins".to_string()), "{without:?}");
+        assert_eq!(without, vec!["-in", "i.mzML", "-out", "o.tsv", "-fasta", "/db/e.fasta", "-progress"]);
+        assert_eq!(build_args_for(&p, &|_| true), build_args(&p));
+        assert!(build_args(&p).contains(&"-fasta_proteins".to_string()));
+        // Only that option is gated: the user's -fasta reaches every CLI.
+        let only = build_args_for(&p, &|o| o != "fasta_proteins");
+        assert_eq!(only, without);
+        let m = rp(r#"{"in":"i.mzML","out":"o.tsv"}"#);
+        assert_eq!(build_args_for(&m, &|_| false), build_args(&m));
+        assert_eq!(build_args_for(&m, &|_| true), vec!["-in", "i.mzML", "-out", "o.tsv", "-progress"]);
     }
 
     #[test]
@@ -1594,7 +1727,7 @@ mod tests {
                "recon_id_out":"a.ids.tsv","out_spectra":"a.spectra.mzML"}}}}"#,
             inp
         );
-        let pl = plan_of(&rp(&params));
+        let pl = plan_default(&rp(&params));
         assert_eq!(pl.cwd.as_deref(), Some(d.as_path()));
         let at = |n: &str| Some(d.join(n).display().to_string());
         assert_eq!(
@@ -1621,7 +1754,7 @@ mod tests {
         b.sort();
         assert_eq!(a, b);
         // Explicit report paths win over derived ones; an unset option is None.
-        let pl = plan_of(&rp(&format!(
+        let pl = plan_default(&rp(&format!(
             r#"{{"in":"{}","out":"a.tags.tsv","params":{{"species":true,"species_out":"s.tsv"}}}}"#,
             inp
         )));
@@ -1638,7 +1771,7 @@ mod tests {
     fn resolved_outputs_of_windows_paths_are_the_argv_values() {
         let params = r#"{"in":"\\data\\a.mzML","out":"C:\\r.1\\x","params":{"species":true,"digest_out":"\\data\\d.tsv",
                         "label_out":"D:\\l.tsv","out_spectra":"\\\\srv\\share\\s.mzML","glyco_out":"-g.tsv"}}"#;
-        let pl = plan_of(&rp(params));
+        let pl = plan_default(&rp(params));
         for (option, value) in argv_outputs(&pl.args) {
             let want = outputs::resolve(&[value], pl.cwd.as_deref()).remove(0).display().to_string();
             let got = pl.resolved.paths();
@@ -1659,7 +1792,7 @@ mod tests {
             // An absolute input: relative outputs land in its folder, and a
             // root-relative path joins its drive (the renderer's own guess
             // read it from \data on whatever drive it ran on).
-            let pl = plan_of(&rp(r#"{"in":"C:\\d\\a.mzML","out":"a.tags.tsv","params":{"species":true,"digest_out":"\\data\\x.tsv"}}"#));
+            let pl = plan_default(&rp(r#"{"in":"C:\\d\\a.mzML","out":"a.tags.tsv","params":{"species":true,"digest_out":"\\data\\x.tsv"}}"#));
             assert_eq!(pl.resolved.out.as_deref(), Some(r"C:\d\a.tags.tsv"));
             assert_eq!(pl.resolved.species_out.as_deref(), Some(r"C:\d\a.tags.species.tsv"));
             assert_eq!(pl.resolved.digest_out.as_deref(), Some(r"C:\data\x.tsv"));
@@ -2204,6 +2337,58 @@ mod tests {
             assert_eq!(rec.argv, copied);
         }
 
+        const STUB_111: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../testing/stub-fastag-1.11/FASTag");
+
+        fn count(v: &[String], flag: &str) -> usize {
+            v.iter().filter(|x| *x == flag).count()
+        }
+
+        // An older CLI as FASTAG_BIN (1.11, whose --helphelp has -fasta but no
+        // -fasta_proteins and which aborts on it): neither Copy command nor the
+        // run gives it the flag, and the run succeeds.
+        #[test]
+        fn an_older_cli_is_not_given_fasta_proteins() {
+            let d = dir("fp-old");
+            let req = r#"{"in":"$IN","out":"a.tags.tsv","params":{"fasta":"/db/e.fasta"}}"#;
+            let r = Resolved { bin: PathBuf::from(STUB_111), data: None, taxonomy: None, source: "env" };
+            assert!(inspect::cached_capabilities(&r).options.iter().any(|o| o == "fasta"));
+            assert!(!inspect::cli_has(&r, "fasta_proteins"));
+            let (mgr, started, wire) = launch_bin(&d, Path::new(STUB_111), req, "");
+            assert!(started.started, "{:?}", started.reason);
+            let p: RunParams = serde_json::from_str(&req.replace("$IN", &d.join("a.mzML").display().to_string())).unwrap();
+            let copied = command_of(&r, &p);
+            assert_eq!(count(&copied, "-fasta_proteins"), 0, "{copied:?}");
+            assert!(copied.contains(&"-fasta".to_string()));
+            assert_eq!(started.command.as_ref(), Some(&copied));
+            let v = until_done(&wire, Duration::from_secs(10));
+            assert_eq!(v.last().unwrap().1["ok"], true, "{:?}", v.last().unwrap().1);
+            assert!(mgr.wait_idle(Duration::from_secs(5)));
+            assert_eq!(history::list(&d.join("appdata"), 1).pop().expect("recorded").argv, copied);
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        // The current CLI lists -fasta_proteins: Copy command and the run both
+        // ask for FASTA_PROTEINS proteins per hit, once.
+        #[test]
+        fn a_cli_that_lists_fasta_proteins_is_given_it_once() {
+            let d = dir("fp-new");
+            let req = r#"{"in":"$IN","out":"a.tags.tsv","params":{"fasta":"/db/e.fasta"}}"#;
+            let r = Resolved { bin: PathBuf::from(STUB), data: None, taxonomy: None, source: "env" };
+            assert!(inspect::cli_has(&r, "fasta_proteins"));
+            let (mgr, started, wire) = launch_stub(&d, req, "");
+            assert!(started.started, "{:?}", started.reason);
+            let p: RunParams = serde_json::from_str(&req.replace("$IN", &d.join("a.mzML").display().to_string())).unwrap();
+            let copied = command_of(&r, &p);
+            assert_eq!(count(&copied, "-fasta_proteins"), 1, "{copied:?}");
+            let at = copied.iter().position(|x| x == "-fasta_proteins").unwrap();
+            assert_eq!(copied[at + 1], FASTA_PROTEINS.to_string());
+            assert_eq!(started.command.as_ref(), Some(&copied));
+            let v = until_done(&wire, Duration::from_secs(10));
+            assert_eq!(v.last().unwrap().1["ok"], true, "{:?}", v.last().unwrap().1);
+            assert!(mgr.wait_idle(Duration::from_secs(5)));
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
         // GUI-DESIGN 6.2: the real `run` against the stub CLI, its events on a
         // real Channel in order: batched Log{lines}, the phases, coalesced
         // progress, and Done last.
@@ -2287,6 +2472,65 @@ mod tests {
             // The stub's summary line: "4 MS2 spectra, 1 tags".
             assert_eq!(rec.tags, Some(1));
             let _ = std::fs::remove_dir_all(&d);
+        }
+
+        // Codex #3: the databases a run reads are bound to it by identity
+        // when it starts, in the session's list and in its record.
+        #[test]
+        fn a_run_records_its_databases_by_identity() {
+            let d = dir("hist-db");
+            std::fs::write(d.join("db.fasta"), ">p\nPEPTIDEK\n").unwrap();
+            let params = r#"{"in":"$IN","out":"a.tags.tsv","params":{"fasta":"db.fasta"}}"#;
+            let (mgr, started, wire) = launch_stub(&d, params, "");
+            assert!(started.started, "{:?}", started.reason);
+            let rec = record_after(&d, &wire);
+            let want = crate::fasta::identity_of("fasta", &d.join("db.fasta")).unwrap();
+            assert_eq!(rec.databases, vec![want.clone()]);
+            let tags = PathBuf::from(started.out.clone().unwrap());
+            // Codex #3, part 2: the run ended with exit 0, so the identity of
+            // the tags table it wrote is on its entry and in its record.
+            let written = crate::fasta::identity_of_file(&tags).unwrap();
+            assert_eq!(rec.tags_identity.as_ref(), Some(&written));
+            let session = mgr.databases.lock().unwrap();
+            assert_eq!(session.last().unwrap().tags.as_ref(), Some(&written));
+            assert_eq!(crate::fasta::run_databases(&session, None, &written), Some(vec![want.clone()]));
+            assert_eq!(crate::fasta::run_databases(&session, Some(rec), &written), Some(vec![want.clone()]));
+            assert_eq!(crate::fasta::tags_run_databases(&session, Some(&d.join("appdata")), &tags), Ok(vec![want]));
+            drop(session);
+            let _ = std::fs::remove_dir_all(&d);
+        }
+
+        // Codex #3 part 2 and n10: only a run that ended with exit 0 commits
+        // its outputs: the identity of its tags table (the alignment) and of
+        // its -recon_id_out (Open). A failed run commits neither, though its
+        // outputs are revealable from the start.
+        #[test]
+        fn only_a_run_that_ended_with_exit_0_commits_its_outputs() {
+            for (name, control, ok) in [("commit-ok", "", true), ("commit-fail", "STUB_FAIL=3\n", false)] {
+                let d = dir(name);
+                std::fs::write(d.join("db.fasta"), ">p\nPEPTIDEK\n").unwrap();
+                let params = r#"{"in":"$IN","out":"a.tags.tsv","params":{"recon_fasta":"db.fasta","recon_out":"a.recon.tsv","recon_id_out":"a.recon_id.idXML"}}"#;
+                let (mgr, started, wire) = launch_stub(&d, params, control);
+                assert!(started.started, "{:?}", started.reason);
+                let ids = PathBuf::from(started.outputs.as_ref().unwrap().recon_id_out.clone().expect("no -recon_id_out"));
+                let rec = record_after(&d, &wire);
+                assert_eq!(rec.status == history::Status::Ok, ok, "{name}");
+                assert!(mgr.revealable.lock().unwrap().contains(&ids), "{name}");
+                let openable = mgr.openable.lock().unwrap().clone();
+                let session_tags = mgr.databases.lock().unwrap().last().unwrap().tags.clone();
+                if ok {
+                    assert_eq!(crate::reveal::may_open(&ids, &openable), Some(dunce::canonicalize(&ids).unwrap()));
+                    assert!(session_tags.is_some() && rec.tags_identity == session_tags);
+                    // Codex New 11: the record keeps it for a later session.
+                    assert_eq!(rec.open_identities, openable);
+                    assert_eq!(crate::reveal::may_open(&ids, &rec.open_identities), Some(dunce::canonicalize(&ids).unwrap()));
+                } else {
+                    assert!(openable.is_empty(), "{openable:?}");
+                    assert!(session_tags.is_none() && rec.tags_identity.is_none());
+                    assert!(rec.open_identities.is_empty());
+                }
+                let _ = std::fs::remove_dir_all(&d);
+            }
         }
 
         // Review of PR h (GUI-DESIGN 3 S9, 6.5 history_rerun): a Re-run

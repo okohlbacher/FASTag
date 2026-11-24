@@ -14,7 +14,6 @@ describe('Results running state', () => {
         progress={{ done: 61204, total: 127551, ratePerSec: 1850, etaSec: 36 }}
         startedAt={Date.now() - 5000}
         cancelling={false}
-        onCancel={vi.fn()}
         onShowLog={vi.fn()}
       />
     )
@@ -27,7 +26,7 @@ describe('Results running state', () => {
 
   it('a phase without progress: an indeterminate bar, the step and the elapsed time', () => {
     render(
-      <RunningPanel input="/d/a.mzML" phase="Loading the taxonomy" progress={null} startedAt={Date.now() - 65000} cancelling={false} onCancel={vi.fn()} onShowLog={vi.fn()} />
+      <RunningPanel input="/d/a.mzML" phase="Loading the taxonomy" progress={null} startedAt={Date.now() - 65000} cancelling={false} onShowLog={vi.fn()} />
     )
     const s = screen.getByRole('region', { name: 'Running' })
     expect(s.textContent).toMatch(/a\.mzML — Loading the taxonomy/)
@@ -35,18 +34,18 @@ describe('Results running state', () => {
     expect(screen.getByRole('progressbar').hasAttribute('aria-valuenow')).toBe(false)
   })
 
-  it('Cancel and Show log; Cancel locked while cancelling', async () => {
-    const onCancel = vi.fn()
+  // Cancel has one home, the run status pill in the app bar
+  // (shell/TopBar.tsx); the running state keeps the progress and Show log.
+  it('Show log and no Cancel of its own; it says Cancelling… once Cancel is pressed', async () => {
     const onShowLog = vi.fn()
     const { rerender } = render(
-      <RunningPanel input="/d/a.mzML" phase={null} progress={null} startedAt={0} cancelling={false} onCancel={onCancel} onShowLog={onShowLog} />
+      <RunningPanel input="/d/a.mzML" phase={null} progress={null} startedAt={0} cancelling={false} onShowLog={onShowLog} />
     )
-    await click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull()
     await click(screen.getByRole('button', { name: 'Show log' }))
-    expect(onCancel).toHaveBeenCalledTimes(1)
     expect(onShowLog).toHaveBeenCalledTimes(1)
-    rerender(<RunningPanel input="/d/a.mzML" phase={null} progress={null} startedAt={0} cancelling onCancel={onCancel} onShowLog={onShowLog} />)
-    expect(screen.getByRole('button', { name: 'Cancel' }).hasAttribute('disabled')).toBe(true)
+    rerender(<RunningPanel input="/d/a.mzML" phase={null} progress={null} startedAt={0} cancelling onShowLog={onShowLog} />)
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull()
     expect(screen.getByRole('region', { name: 'Running' }).textContent).toMatch(/Cancelling…/)
   })
 })

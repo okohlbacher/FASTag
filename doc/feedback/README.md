@@ -6,7 +6,8 @@ shares it. This folder describes the GitHub side.
 ## Flow
 
 1. The app writes the **public export**, `<id>.feedback.zip` (`export.json` and, if kept, the annotated
-   screenshot). `export.json` follows [`feedback-public.schema.json`](feedback-public.schema.json)
+   screenshot), in a folder of its own per export (`export-<n>/` in the report's folder, `<n>` the export
+   request's number): a zip once written is never rewritten, and the one the app reveals is that file. `export.json` follows [`feedback-public.schema.json`](feedback-public.schema.json)
    (`fastag-feedback-public/1`): typed, allow-listed fields only, no paths or file names.
 2. **Open issue draft** opens
    `https://github.com/okohlbacher/FASTag/issues/new?template=feedback.yml&title=…&report-id=…&kind=…`

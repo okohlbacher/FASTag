@@ -8,7 +8,7 @@ import { act, fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
 import { TAXONOMY_ASSET } from '../releaseAssets'
-import { click, flush, goTo, key, openGroup, pickSingle, renderApp, renderCharacterizeApp, runButton, showView } from '../testing/render'
+import { click, currentStep, flush, goTo, key, openGroup, pickSingle, renderApp, renderCharacterizeApp, runButton, showStep, showView } from '../testing/render'
 import diaPseudoProbe from '../fixtures/probe/dia_pseudo.probe.jsonl?raw'
 import { applyLastUsed, formValue } from '../testing/lastUsed'
 import iontrapProbe from '../fixtures/probe/iontrap.probe.jsonl?raw'
@@ -104,6 +104,13 @@ describe('inspector before a run', () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, IN)
+    // No prose line under the card (SPEC step 2): the sentence is behind the
+    // (?) of the Instrument brief, one click away.
+    expect(document.querySelector('p.not-checked')).toBeNull()
+    const why = screen.getByRole('button', { name: 'Why the file was not checked' })
+    expect(why.closest('.field')?.querySelector('#instrument')).not.toBeNull()
+    await click(why)
+    expect(within(screen.getByRole('dialog', { name: 'Not checked before the run' })).getByText(/^The instrument and checks come from the reports after the run\.$/, { selector: 'p.not-checked' })).toBeDefined()
     notChecked(/^The instrument and checks come from the reports after the run\.$/)
     expect(summary()).toMatch(/^The instrument and checks come from the reports after the run\./)
     expect(mock.probeCalls).toEqual([])
@@ -143,6 +150,41 @@ describe('inspector before a run', () => {
     expect(runButton().getAttribute('aria-describedby')).toBeNull()
     await click(runButton())
     expect(mock.runCalls[0].params).toMatchObject({ fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' })
+  })
+
+  it('held on Settings: Review input checks goes to Inputs and focuses the red flag to answer', async () => {
+    const mock = installMockBridge()
+    withProbe(mock, iontrapProbe)
+    await renderApp(mock)
+    await pickSingle(mock, IN)
+    await flush()
+    showStep(3)
+    const held = document.getElementById('run-held')!
+    expect(held.textContent).toMatch(/^Run waits for the checks before the run: fix them, or choose Run anyway beside each red flag in Inputs\./)
+    await click(within(held).getByRole('button', { name: 'Review input checks' }))
+    await settle()
+    expect(currentStep()).toBe(2)
+    const flag = checkItem(/^Red flag: Ion-trap MS2 with a 20 ppm tolerance/)
+    expect(flag.contains(document.activeElement)).toBe(true)
+    expect(document.activeElement?.closest('.check-actions')).not.toBeNull()
+    // On Inputs the checks are on screen: no link.
+    expect(within(document.getElementById('run-held')!).queryByRole('button', { name: 'Review input checks' })).toBeNull()
+  })
+
+  it('held by a block on Outputs: no Run anyway in the bar, and Review input checks focuses the block', async () => {
+    const mock = installMockBridge()
+    withProbe(mock, diaRawProbe)
+    await renderApp(mock)
+    await pickSingle(mock, IN)
+    await flush()
+    showStep(4)
+    const held = document.getElementById('run-held')!
+    expect(held.textContent).toMatch(/^Run waits for the checks before the run: an input check blocks the run/)
+    expect(held.textContent).not.toContain('Run anyway')
+    await click(within(held).getByRole('button', { name: 'Review input checks' }))
+    await settle()
+    expect(currentStep()).toBe(2)
+    expect(checkItem(/^Blocks the run: Raw DIA/).contains(document.activeElement)).toBe(true)
   })
 
   it('the Orbitrap gate input (stale index, as FASTag 1.12 reports it) proposes Orbitrap HCD and holds nothing', async () => {
@@ -384,6 +426,14 @@ describe('the exit-11 raw-DIA refusal (real 1.12 output)', () => {
     // FASTag's own reason, not its sentinel line, and the Help entry for it.
     const reason = [...alert.querySelectorAll('code.why')].find((c) => !c.closest('.check-command'))
     expect(reason?.textContent).toMatch(/is raw DIA: /)
+    // C13: it repeats the block's explanation and command, so it is behind
+    // a closed disclosure; the block is one paragraph and one command.
+    const more = reason?.closest('details.why-more') as HTMLDetailsElement | null
+    expect(more).not.toBeNull()
+    expect(more!.open).toBe(false)
+    expect(more!.querySelector('summary')?.textContent).toBe("FASTag's full message")
+    expect(alert.querySelectorAll('.refusal p')).toHaveLength(1)
+    expect(alert.querySelector('.why-label')).toBeNull()
     expect(alert.textContent).not.toContain('FASTAG_REFUSED')
     expect(within(alert).getByRole('button', { name: 'What to do' }).getAttribute('data-help')).toBe('faq-raw-dia')
   })

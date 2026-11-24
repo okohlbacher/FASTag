@@ -13,7 +13,7 @@ for (const [w, h] of [
     await page.setViewportSize({ width: w, height: h })
     await openApp(page, 'big')
     await goTo(page, 'Results')
-    await page.getByRole('button', { name: 'Open a tags TSV…' }).click()
+    await page.getByRole('button', { name: 'Open tags…' }).click()
     await expect(page.getByText('Showing 10,000,000 of 10,000,000')).toBeVisible()
     const box = await page.evaluate(() => {
       const se = document.scrollingElement!
@@ -61,7 +61,7 @@ test('without a definite scroller height, MAX_DOM_ROWS alone keeps a 10 M-row fi
     content: '.rt-scroll { flex: none !important; height: auto !important; min-height: 0 !important; overflow: visible !important; }'
   })
   await goTo(page, 'Results')
-  await page.getByRole('button', { name: 'Open a tags TSV…' }).click()
+  await page.getByRole('button', { name: 'Open tags…' }).click()
   await expect(page.getByText('Showing 10,000,000 of 10,000,000')).toBeVisible()
   await expect(page.locator('.rt-row').first()).toBeVisible()
   const box = await page.evaluate(() => ({
@@ -91,7 +91,7 @@ test('a fling sends at most one page request per animation frame', async ({ page
   })
   await openApp(page, 'big')
   await goTo(page, 'Results')
-  await page.getByRole('button', { name: 'Open a tags TSV…' }).click()
+  await page.getByRole('button', { name: 'Open tags…' }).click()
   await expect(page.getByText('Showing 10,000,000 of 10,000,000')).toBeVisible()
   const result = await page.evaluate(async () => {
     const w = window as unknown as {
@@ -192,3 +192,42 @@ for (const w of [1000, 1400]) {
     expect(clipped).toEqual([])
   })
 }
+
+// C12: History is sized by its pane, not the window. With Help open at
+// 1024x700 the row keeps its Input and Outputs readable (Duration and Tags
+// give way) and its actions are Open and More: one button row, not five.
+test('1024x700 with Help open: History keeps the input and outputs visible and a row one button tall', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 700 })
+  await openApp(page, 'long-names')
+  await goTo(page, 'History')
+  await page.getByRole('button', { name: 'Help', exact: true }).click()
+  await expect(page.locator('#help-panel')).toBeVisible()
+  const table = page.getByRole('table', { name: 'Run history' })
+  await expect(table).toBeVisible()
+  const m = await page.evaluate(() => {
+    const w = (el: Element | null): number => (el ? el.getBoundingClientRect().width : 0)
+    const row = document.querySelector('table.history-table tbody tr') as HTMLElement
+    const btn = row.querySelector('td.hist-actions button') as HTMLElement
+    const t = document.querySelector('table.history-table')!.getBoundingClientRect()
+    return {
+      input: w(document.querySelector('td.hist-input .hist-name')),
+      outputs: [...document.querySelectorAll('td.hist-outputs li')].map(w),
+      inputHead: w(document.querySelectorAll('table.history-table th')[1]),
+      rowH: row.getBoundingClientRect().height,
+      // The actions cell alone: the outputs list makes the row taller.
+      actionsH: (row.querySelector('.hist-actions-row') as HTMLElement).getBoundingClientRect().height,
+      btnH: btn.getBoundingClientRect().height,
+      buttons: [...row.querySelectorAll('td.hist-actions button')].map((b) => b.textContent),
+      inside: t.right <= (document.querySelector('.view-history') as HTMLElement).getBoundingClientRect().right + 0.5
+    }
+  })
+  expect(m.input).toBeGreaterThanOrEqual(60)
+  expect(m.inputHead).toBeGreaterThanOrEqual(60)
+  expect(m.outputs.length).toBeGreaterThan(0)
+  for (const o of m.outputs) expect(o).toBeGreaterThanOrEqual(60)
+  expect(m.buttons).toEqual(['Open', 'More'])
+  // Open and More side by side: one button row.
+  expect(m.actionsH).toBeLessThanOrEqual(m.btnH + 4)
+  expect(m.inside).toBe(true)
+  await expect(table.locator('td.hist-input .hist-name').first()).toBeVisible()
+})

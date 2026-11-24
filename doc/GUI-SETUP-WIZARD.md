@@ -18,6 +18,46 @@ results, keyboard access, light and dark mode, the command preview (plan
 line, Copy command line, Export INI…), the run bar's refusals and fixes,
 the input checks (inspector), the History "Settings into form" path.
 
+## 1a. Screen regions (UI refresh, feat/ui-refresh, 2026-11-24)
+
+Every view (Setup, Results, Batch, History) is built from the same four
+regions, so the title, the page actions, the primary action, status and
+help are in the same place everywhere. This section overrides the layout
+sketches below where they differ.
+
+1. **App bar** (48 px, `shell/TopBar.tsx`). Left: logo, "FASTag", the views
+   Setup / Results / Batch / History as underline tabs. Right, in this
+   order: the run-status pill ("Idle", or the job's file, phase, % and
+   ETA with an outlined **Cancel**, the run's one Cancel on every view;
+   Esc or ⌘. cancel too), a quiet
+   "FASTag ready" (a red chip only when FASTag cannot start), **Search
+   settings… ⌘K** (works from every view and switches to Setup), **Help**
+   (icon, F1), **Feedback** (icon, ⌘⇧F) and the **Theme** (icon, "Theme:
+   System"). The version and "Built on OpenMS" are in About.
+2. **Page header** (`shell/PageHeader.tsx`): the title (20 px), at most one
+   line of context, the page actions at the right (secondary only), and
+   under it the local navigation: the four Setup steps, or the result tabs.
+   Setup: Presets and Open earlier results… on every step (Continue last
+   run on step 1). Results: the run or file shown as the title, the
+   workflow as context, Open tags… and Open report…. History: Open
+   results….
+3. **Content**: one column, at most 1200 px wide with a 24 px gutter
+   (`.page-col`), the same left edge in every view.
+4. **Action bar** (sticky bottom; Setup and Batch): at the left what is
+   missing ("Still missing: …", shown once) and the plan line with Copy
+   command line and Export INI…; at the right ‹ Back, Run and the step's
+   Next. One button per screen is filled: Continue on step 1, Next on steps
+   2 and 3, Run on step 4 and in Batch. A plain `<button>` is secondary;
+   only `.primary` fills. While a run goes the bar shows its progress and
+   an inert Running…, but no Cancel: that is the run-status pill's (1), as
+   is the Results running state's (progress and Show log only).
+
+Section labels use one style (12 px, semibold, muted, sentence case); empty
+states use one component (`shell/EmptyState.tsx`). The app bar's Help opens
+the Help page of the screen shown (the step, the result tab, Batch,
+History); the per-field (?) popovers stay, page-level "Learn more" and
+"How to read…" links are gone, and keyboard hints are tooltips or in Help.
+
 ## 0. Audit of the current Setup (main 9e458de2)
 
 Screenshots at 1280x800, chromium, web harness (`gui/e2e-web`, mocked
@@ -35,7 +75,7 @@ run bar, all visible at once, whatever the task:
 | Where | Control | Notes |
 |---|---|---|
 | Top bar | Setup / Results / Batch / History, Theme, Feedback, Help, status pill | not part of Setup; unchanged |
-| (above cards) | Leftovers warning; **Last run** block (status, duration, changed params, Reveal, Open folder) | shown after a run |
+| (above cards) | Leftovers warning | shown after a run |
 | 1 Input | One file / Batch switch; file chip with Choose file… / Change…; inspector (PreStartPanel: detected instrument, DIA check, Run anyway); head: **Open earlier results…**, (?) | Batch mode: Add files…, Add folder…, **Output folder** + Change…/Beside inputs, **SDRF file (optional)** Choose…/Replace…/Remove |
 | 2 Workflow | 7 radio tiles (label + "→ product"); blurb line; head: **Preset** select (Choose…, Save as preset…, Load ›, Load FASTag defaults, Delete preset), origin name "(modified)", Reset, Apply last-used (n), Undo, Learn more | Save as preset opens an inline name field + Save/Cancel |
 | 3 Settings | head: Search settings… ⌘K; the task's required inputs (Protein database + Browse… for Mass-shift, Database reduction); **Instrument** select (+ Custom tolerance); **Fixed modifications**; the task's basic fields; settings note (Database reduction) | Species: Report rank, Spectra to read. Generate tags: Seed length, Extension, E-value cutoff, Tags per spectrum, Per-residue confidence. Mass-shift: Extension, Missed cleavages |
@@ -88,14 +128,15 @@ What makes it convoluted (from the screenshots):
 ## 2. Layout
 
 ```
-[Top bar: Setup | Results | Batch | History              Theme Feedback Help]
-[Stepper: (1) Task: Mass-shift survey ✎ ─ (2) Inputs: run01.mzML ✓ ─ (3) Settings ─ (4) Outputs & run   Search settings… ⌘K]
+[App bar: FASTag  Setup Results Batch History        Idle · FASTag ready · Search settings ⌘K · Help · Feedback · Theme]
+[Page header: Inputs for Mass-shift survey                      Presets [Choose… ▾]  Open earlier results…]
+[             Needs spectra + a protein FASTA.                                                           ]
+[Steps:  ✓ Task Mass-shift survey   (2) Inputs run01.mzML   (3) Settings   (4) Outputs & run              ]
 [Leftovers warning, when there is one]
-┌ step body (one step visible, max 960 px wide) ────────────────────────────┐
+┌ step body (one step visible, the 1200 px content column) ─────────────────┐
 │ ...                                                                       │
 └───────────────────────────────────────────────────────────────────────────┘
-[Footer: ‹ Back                       (what is missing)      Next: Settings ›]
-[Run bar (steps 2-4, one-file mode): plan line · Copy command line · Export INI… · Run]
+[Action bar: Still missing: … · plan line · Copy command line · Export INI…      ‹ Back  Run  Next: Settings ›]
 ```
 
 **Mounting:** all four step bodies are rendered; the inactive ones carry
@@ -115,21 +156,26 @@ rendered only in the visible step.
   locks steps 2-4. Locked steps keep focus (`aria-disabled="true"` plus
   `aria-describedby` "Choose a task first"), never `disabled`. Once a task is
   confirmed all four steps are navigable; a step with an error shows "!".
-- Step 1's button reads **Task: <label>** once a task is confirmed, with a
-  pencil: **the task can be changed from any step** (section 4). With the
-  defaults origin it reads **Task: FASTag defaults (no workflow)** (5.5).
-- Step 2's button names the current spectra ("Inputs: run01.mzML", "Inputs: 3
-  files") and a **Change spectra…** button sits next to the stepper in one-file
-  mode, so the file can be changed from steps 3 and 4 without moving.
-- **Search settings… ⌘K** (and `/`) moves from the Settings card head to the
-  stepper row: it searches every option from every step (section 6).
+- The steps are underline tabs under the page title, with a numbered
+  circle (done: a green check). Step 1's button names the task once one is
+  confirmed, in muted text after the label (accessible name **Task: <label>**):
+  **the task can be changed from any step** (section 4). With the defaults
+  origin it reads **Task: FASTag defaults (no workflow)** (5.5).
+- Step 2's button names the current spectra ("Inputs run01.mzML", "Inputs 3
+  files"). The file is changed with **Change…** on its card in step 2, with
+  **Change spectra…** at the right of the steps (one file, once a task is
+  chosen, on every step but Inputs), or ⌘O from any step.
+- **Search settings… ⌘K** (and `/`) is in the app bar: it searches every
+  option from every view and switches to Setup (section 6).
 
-### 2.2 Footer
+### 2.2 Action bar
 
-- **‹ Back** and **Next: <step name> ›**. Next is always enabled once a task
-  is confirmed; when something is missing it says so beside the button
-  ("Still missing: Protein database") and lands on the next step anyway. Only
-  Run is blocked, as today (`canRun`).
+- **‹ Back** and **Next: <step name> ›** sit at the right of the sticky
+  action bar, so they never move. Next is always enabled once a task is
+  confirmed; when something is missing the bar says so once, at its left
+  ("Still missing: Protein database"), and Next lands on the next step
+  anyway. Only Run is blocked, as today (`canRun`). On steps 2 and 3 Next is
+  the filled button and Run is secondary; on step 4 Run is the filled one.
 - Keyboard: Back/Next are ordinary buttons; Alt+← / Alt+→ go to the
   previous/next step (not while typing in a field). ⌘1-4 stay the view
   shortcuts (shortcuts.ts VIEWS).
@@ -141,8 +187,8 @@ rendered only in the visible step.
 
 ### 2.3 Run bar and batch
 
-The run bar (RunBar + PlanFooter) is unchanged in content and stays at the
-bottom on steps 2, 3 and 4 in one-file mode (not on step 1, where no task is
+The run bar (RunBar + PlanFooter) is the action bar of steps 2, 3 and 4 in
+one-file mode (step 1 has its own bar with Continue and no Plan, as no task is
 confirmed yet). Run is enabled when the run is valid, as today (`canRun`,
 `session.blocked`, inspector held). Its refusals and fixes are unchanged; a
 refusal whose first parameter is a step-2 input adds **Go to Inputs**, one
@@ -151,51 +197,57 @@ assumptions about the sample (instrument preset, fixed modifications), so
 they are visible from every step.
 
 **Batch mode (option b).** With a queue the run bar and the log drawer stay
-in the Batch view (`runBarView`, unchanged). The step-2 queue block holds
-**Run n files** and **Open the batch**, and the batch output folder (Change…,
-Beside inputs) stays next to the queue in step 2, where it is today. Step 4
-shows the batch output folder as a read-only line with a link to step 2, so it
-has one control. Many files: tile, Continue, Add folder…, Run n files.
+in the Batch view (`runBarView`, unchanged). Setup's action bar (NavBar) keeps
+Back and Next and puts **Run n files** in Run's slot on steps 2-4: secondary
+beside Next on steps 2 and 3, the filled button on step 4, so the run control
+never sits in the content. Once every file has run and some failed, the slot
+holds **Retry failed** instead; the Batch view's bar does the same (Retry
+failed filled, no disabled "Run 0 remaining files"; with nothing failed, a
+disabled "All files run"). The step-2 queue block holds **Open the batch**,
+and the batch output folder (Change…, Beside inputs) stays next to the queue
+in step 2, where it is today. Step 4 shows the batch output folder as a
+read-only line with a link to step 2, so it has one control. Many files:
+tile, Continue, Add folder…, Run n files (in the bar).
 
 ## 3. The steps
 
 ### Step 1: What do you want to do?
 
-Heading: **What do you want to do?** Under it, two fixed lines:
+Heading: **What do you want to do?** Under it, one line of context
+(`#not-search-engine`): "FASTag reads sequence tags from MS/MS spectra. It is
+not a search engine." The recommendation is the "Start here" chip (its tooltip: "Recommended to start")
+of Characterize a run; no paragraph above the tiles.
 
-- "FASTag reads short amino-acid stretches (tags) from each MS/MS spectrum.
-  It does not identify proteins with FDR control: use a search engine for
-  that. Database reduction prepares the database and the settings for one."
-- "Not sure? Start with **Characterize a run**: it reports protease, labels,
-  glycopeptides and species from 10% of the spectra in a few minutes."
-
-The "start from" row above the tiles:
+The "start from" row (`StartRow`), the page actions of step 1:
 
 - **Continue last run** (when the last session recorded settings, D6):
   "Continue: <workflow of the last run> with your last settings (n)". Click =
   `applyLastUsed()`; goes to step 2 only if an input of the task is missing,
   else stays.
 - **Presets ▾** (`PresetMenu`): Load <name>, Load FASTag defaults, Delete
-  preset <name>. The same component sits in the step 3 head; it is rendered
-  only in the visible step. Loading from step 1 goes to step 2 only if an
-  input of the new task is missing; loading from step 3 stays on step 3.
-- **Open earlier results…** (link, right): `openResults()`, goes to Results.
+  preset <name>. The same component is in the page header of every step
+  (with Save as preset… on step 3). Loading from step 1 goes to step 2 only
+  if an input of the new task is missing; on the other steps it stays.
+- **Open earlier results…** (secondary button): `openResults()`, goes to
+  Results.
 
 Tiles, in three groups, each a `<ul>` under an `h3`:
 
 | Group | Tiles |
 |---|---|
 | **Look at the tags** | Generate tags |
-| **Learn about the sample** | Characterize a run (Recommended to start) · Species · Mass-shift survey · Database reduction |
+| **Learn about the sample** | Characterize a run (Start here) · Species · Mass-shift survey · Database reduction |
 | **Check run quality** | Run QC · Identifiability triage |
 
 **Two levels.** A tile (about 70 px high, 3-4 per row at 1280 px, 1 per row
 under 640 px) shows the icon, the label, the plain question and one badge
 ("needs FASTA", "IDs optional"), plus "Current" on the current task and
-"Recommended to start" on Characterize. The selected tile fills one shared
-**detail panel** beside the grid (under it below 900 px): You get, You need,
-Use when, Not for, Run time and Learn more. Step 1 fits at 1280x800 and
-1024x700 without vertical scrolling.
+"Start here" on Characterize. The selected tile fills one shared
+**detail card** beside the grid (300 px; under it below 820 px): the task's
+name, then You get, You need and Run time, and **More about this task**, which
+opens Help at the task (Getting started › The seven tasks: Use when, Not
+for). Tiles sit three to a row (two below 1100 px). Step 1 fits at 1280x800
+without vertical scrolling.
 
 Detail texts (new fields in `tasks.ts`, 5.1; written as consequences, without
 format names; the blurb stays for the plan line, History and the Overview):
@@ -203,8 +255,8 @@ format names; the blurb stays for the plan line, History and the Overview):
 | Task | Question | You get | Use when | Not for | Run time |
 |---|---|---|---|---|---|
 | Generate tags | Which sequence tags do my spectra carry? | a table of tags per spectrum with a confidence per residue, for assembly or other tools | de novo assembly, export of tags to other tools | identifying peptides: these are tags, not identifications | short: tagging only |
-| Characterize a run | What was done to this sample before it was measured? | the protease, labels, glycopeptides and species, from 10% of the spectra | an unknown or legacy data set, before choosing search settings | a final call on very few spectra: the calls then say "too little evidence" | short: 10% of the spectra |
-| Species | Which organisms does my sample contain? | only the species, ranked at a rank you choose (Characterize a run includes this) | contamination checks, mixed or unknown samples | ion-trap data: the calls are unreliable at the wide tolerances it needs | short; 10% of the spectra is usually enough |
+| Characterize a run | What was done to this sample before it was measured? | the protease, labels, alkylation, glycopeptides and species, from all spectra | an unknown or legacy data set, before choosing search settings | a final call on very few spectra: the calls then say "too little evidence" | short: tagging plus the survey reports |
+| Species | Which organisms does my sample contain? | only the species, ranked at a rank you choose (Characterize a run includes this) | contamination checks, mixed or unknown samples | ion-trap data: the calls are unreliable at the wide tolerances it needs | short: tagging plus a lookup in the bundled index |
 | Mass-shift survey | Which modifications does my sample carry, without guessing them first? | the mass shifts between tags and your proteins, with sites and modification names | unexpected or unknown modifications | confirmed identifications: shifts and placements are candidates without FDR control | longer: places every tag on the FASTA |
 | Database reduction | Can my search use a smaller database? | files to run your own Sage, Comet or MSFragger search with: a protein shortlist, a reduced FASTA and its settings | large or multi-species databases before a search | a final result: it may drop proteins your full search would find; compare with a full search before relying on it | longer: places every tag on the FASTA |
 | Run QC | Is this run usable, and how was it measured? | a QC report: spectra counts and resolution per analyzer, charges, labels, tag yield, instrument | checking a run before analysis, comparing runs in a batch | sample content: use Characterize a run | short: tagging only |
@@ -223,10 +275,10 @@ its label, `aria-describedby` its question and You need line, the current
 task `aria-current="true"` with the visible text "Current". Click, Space or
 Tab focus selects the tile and fills the detail panel; nothing is replaced.
 Arrow keys move focus within the grid (a plain focus group, no radio
-semantics). **Continue with <task> ›** in the step footer (and Enter on a
-tile) confirms it: `chooseTask` runs only then, so browsing never takes Undo
-snapshots or shows drop messages. Learn more is a sibling button in the
-detail panel (`docs.to`), never inside a tile.
+semantics). **Continue with <task> ›** at the right of the action bar (and
+Enter on a tile) confirms it: `chooseTask` runs only then, so browsing never
+takes Undo snapshots or shows drop messages. More about this task is a
+sibling button in the detail card, never inside a tile.
 
 - On a fresh launch the current task is Generate tags (LANDING, values
   unchanged) and it is the selected tile; nothing is confirmed. Continuing
@@ -259,8 +311,8 @@ Order:
 1. **Spectra** (always first). One file | Batch switch, then:
    - One file: the file chip (Choose file… / Change…, drop target), then the
      input checks (PreStartPanel) under it, as today.
-   - Batch: Add files…, Add folder…, the queue count, **Run n files**, **Open
-     the batch**, the batch output folder (Change…, Beside inputs) and the SDRF
+   - Batch: Add files…, Add folder…, the queue count, **Open the batch**
+     (**Run n files** is in the action bar, 2.3), the batch output folder (Change…, Beside inputs) and the SDRF
      file (mode-level input, Batch only; in One file mode a set SDRF shows as
      "used only in Batch mode").
 2. **Required inputs**, each a file field with Browse…, a help line ("A
@@ -335,11 +387,13 @@ and leave Advanced (5.4). The Triage settings that wait on Identifications
 
 ### Step 3: Settings
 
-Heading: **Settings for <task>**. Head row: the origin, "(modified)",
-**Reset**, **Undo**, **Save as preset…** (inline name field as today),
-**Presets ▾** (the same PresetMenu as step 1), Learn more.
+Heading: **Settings for <task>**. Origin row: the origin, "(modified)",
+**Reset**, **Undo**, and the inline name field of **Save as preset…** (chosen
+from Presets in the page header).
 
-Body: the task's basic fields (`basic`, settings only) with their help lines;
+Body: the task's basic fields (`basic`, settings only), with a brief only
+where it states a default or a rule ("0 keeps all"; the rest is in each
+field's (?) popover);
 the task's settings note (Database reduction); **Advanced (n changed)**,
 collapsed: today's Advanced minus the step-2 controls of this task (5.4). An
 empty group is not rendered. A "Turn on X" whose master is a step-2 input
@@ -353,14 +407,15 @@ Heading: **Outputs and run**.
    output folder as a read-only line with "Change in Inputs".
 2. **Products** checklist of the task (`outputs`), unchanged. The "needs the
    protein database" hint becomes a link to step 2.
-3. **Command preview**: the full command line as text (read-only, monospace,
-   wraps; `window.fastag.commandLine(run.paramsFor())`, refreshed on change,
-   debounced). Copy and Export INI stay in the run bar.
+3. **Command preview**: behind a **Command line** disclosure, the full command
+   line as text (read-only, monospace, wraps;
+   `window.fastag.commandLine(run.paramsFor())`, refreshed on change,
+   debounced). Copy command line and Export INI… are in the action bar.
 4. **Add to batch** (one-file mode, with a file): queues the file, switches to
    Batch mode with the same settings; the Batch view opens as it does for the
    first queued file. Disabled while Identifications are set ("Not used in
    Batch mode: one ID file cannot belong to every input").
-5. The **Last run** block shows under the stepper on every step after a run, as it showed above the cards.
+5. There is no Last run block: a finished run opens in Results, and History lists every run with its status.
 
 ## 4. Changing the task from any step
 
@@ -472,7 +527,8 @@ shows, debounced.
 
 ## 6. Parameter search (⌘K) and reachability of every option
 
-The search is in the stepper row and works from every step. A hit opens the
+The search is in the app bar and works from every view (it switches to
+Setup). A hit opens the
 step whose body holds the control (`data-step` of the element found), first
 revealing an unset optional input of step 2, then focuses it as today:
 
@@ -490,18 +546,18 @@ Nothing is dropped. Every control of the audit (section 0):
 |---|---|---|
 | Task radios (7, one line each) | 2 Workflow | Step 1 tiles, grouped, with the detail panel; Continue |
 | Blurb line under the grid | 2 Workflow | the detail panel (blurb kept in tasks.ts for plan line, History, Overview) |
-| Preset select: Load, Load FASTag defaults, Delete | 2 Workflow head | Presets ▾ in step 1 and step 3 (one component, rendered in the visible step) |
-| Preset select: Save as preset… (+ name, Save, Cancel) | 2 Workflow head | Step 3 head |
+| Preset select: Load, Load FASTag defaults, Delete | 2 Workflow head | Presets ▾ in the page header of every step (one component) |
+| Preset select: Save as preset… (+ name, Save, Cancel) | 2 Workflow head | Presets ▾ on step 3; the name field in step 3's origin row |
 | Origin "(modified)", Reset, Undo | 2 Workflow head | Step 3 head; Undo also in the carry-over status line |
 | Apply last-used (n) | 2 Workflow head | Step 1 "Continue last run" |
-| Learn more (task) | 2 Workflow head | detail panel; step 3 head |
-| Open earlier results… | 1 Input head | Step 1, right of the start row |
+| Learn more (task) | 2 Workflow head | More about this task (detail card); the app bar's Help on step 3 |
+| Open earlier results… | 1 Input head | Page header, right, every step |
 | One file / Batch switch, file chip, Choose/Change, Add files…, Add folder… | 1 Input | Step 2, Spectra |
 | Input checks (PreStartPanel) | 1 Input | Step 2, under the file |
 | Batch output folder (Change…, Beside inputs) | 1 Input | Step 2, next to the queue; step 4 read-only |
 | SDRF file (optional) | 1 Input (Batch) | Step 2, Batch mode |
-| Help on input files (?) | 1 Input head | Step 2 head |
-| Search settings… ⌘K | 3 Settings head | Stepper row (all steps) |
+| Help on input files (?) | 1 Input head | The app bar's Help on step 2 |
+| Search settings… ⌘K | 3 Settings head | App bar (every view) |
 | Protein database (required) | 3 Settings | Step 2, required, Mass-shift and Database reduction only |
 | Background proteins, Identifications | 3 Settings | Step 2, Add optional input |
 | Instrument, Fixed modifications | 3 Settings | Step 2, About these spectra |
@@ -513,12 +569,12 @@ Nothing is dropped. Every control of the audit (section 0):
 | Taxonomy group for Species / Characterize | Advanced | Step 2 optional input (one entry); Advanced for others |
 | Filter / entrapment database, Shortest tag matched for Generate tags | Advanced | Step 2; Advanced for others |
 | Protein database of Characterize (alkylation) | Advanced | Advanced, unchanged (review decision 5) |
-| Last run block | above the cards | under the stepper, every step |
+| Last run block | above the cards | removed (Results and History) |
 | Leftovers warning | above the cards | under the stepper, every step |
 | Locked summary while running | replaces the form | unchanged, replaces the step bodies; stepper hidden |
 | Unplaced/unknown parameter warning | under the cards | under the step body, every step |
 | Run bar | sticky | sticky on steps 2-4 (one file); refusals link to their step |
-| — | — | New: stepper, Back/Next, Continue, detail panel, command preview, Add to batch, Add optional input, Also set, file-not-found check, Change spectra… |
+| — | — | New: stepper, Back/Next, Continue, detail card, command preview, Add to batch, Add optional input, Also set, file-not-found check |
 
 ## 8. Implementation order (local commits on feat/setup-wizard)
 
@@ -621,8 +677,9 @@ The design review of the first draft (23 issues). Each adopted or rejected:
 6. Auto-advance on tile click — **adopted**: select, then Continue.
 7. Settings and Outputs locked — **adopted**: steps reachable once a task is
    confirmed; Next always enabled; a wizard.spec preset case without a file.
-8. Batch run bar — **adopted, option (b)**: Run n files in the step-2 queue
-   block, batch output folder stays in step 2, step 4 read-only.
+8. Batch run bar — **adopted, option (b)**: Run n files in the action bar's
+   Run slot (filled on step 4), Retry failed in that slot after a failed
+   batch, batch output folder stays in step 2, step 4 read-only.
 9. Re-running with a changed input — **adopted**: the step is kept, Change
    spectra… in the stepper row, ⌘O/drop rules, a 2-action test.
 10. Presets only on step 1, loading wipes inputs — **adopted**: PresetMenu

@@ -23,7 +23,7 @@ use std::time::{Duration, Instant, SystemTime};
 use serde::Serialize;
 use tauri::AppHandle;
 
-use crate::fastag::{no_console_window, cli_env, resolve_binary, taxonomy_dir, Resolved};
+use crate::fastag::{no_console_window, cli_env, resolve_binary, Resolved};
 use crate::lifetime;
 
 /// How long a probe may take: it reads metadata only (the 1.12 acquisition
@@ -104,12 +104,7 @@ pub fn probe_args(options: &[String], input: &str, fasta: Option<&str>) -> Resul
 fn command(r: &Resolved) -> Command {
     let mut cmd = Command::new(&r.bin);
     no_console_window(&mut cmd);
-    if let Some(d) = &r.data {
-        cmd.env("OPENMS_DATA_PATH", d);
-    }
-    if let Some(t) = taxonomy_dir(r) {
-        cmd.env("FASTAG_TAXONOMY_DIR", t);
-    }
+    crate::data::data_env(&mut cmd, r);
     cli_env(&mut cmd);
     // Started by the spawner thread like every CLI child (lifetime.rs, see
     // run_bounded): the blocking-pool thread that asks may exit when idle.
@@ -276,6 +271,30 @@ pub(crate) fn cached_capabilities(r: &Resolved) -> Capabilities {
         }
     }
     c
+}
+
+/// Whether the binary @p r resolves to lists @p opt (no dash) in its
+/// --helphelp (cached_capabilities). A --helphelp that failed or timed out
+/// lists nothing, so an optional flag gated on it is left out.
+pub(crate) fn cli_has(r: &Resolved, opt: &str) -> bool {
+    let c = cached_capabilities(r);
+    c.ok && c.options.iter().any(|o| o == opt)
+}
+
+/// The JSON line `-data_paths` prints with the binary @p r and the data
+/// environment its runs get (command: data_env), when it exits 0 within
+/// HELP_TIMEOUT. None for a binary without the flag (cli_has) or one that
+/// fails.
+pub(crate) fn data_paths_of(r: &Resolved) -> Option<String> {
+    if !cli_has(r, "data_paths") {
+        return None;
+    }
+    let mut cmd = command(r);
+    cmd.arg("-data_paths");
+    match run_bounded(cmd, HELP_TIMEOUT, 1 << 20, &|| false) {
+        Ok(b) if !b.timed_out && b.code == Some(0) => b.stdout.lines().map(str::trim).find(|l| l.starts_with('{')).map(str::to_string),
+        _ => None,
+    }
 }
 
 #[tauri::command]

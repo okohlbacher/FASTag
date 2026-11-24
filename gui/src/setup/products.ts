@@ -45,7 +45,7 @@ export const PRODUCTS: readonly Product[] = [
   { param: 'delta_spectra_out', label: 'Spectra per mass shift', what: 'The spectra behind each mass shift, with the site.', needs: ['delta_out'], db: true, experimental: true },
   { param: 'delta_counts_out', label: 'Mass-shift accounting', what: 'How many spectra reach each step of the survey.', needs: ['delta_out'], db: true, experimental: true },
   { param: 'massgap_out', label: 'Mass-gap report', what: 'Peaks of the mass gaps, explained as UniMod combinations.', needs: ['recon_out'], db: true },
-  { param: 'recon_id_out', label: 'Placements as identifications', what: 'The placements as idXML, mzid or mzTab, for other tools: candidates, not FDR-controlled.', needs: ['recon_out'], db: true },
+  { param: 'recon_id_out', label: 'Placements as identifications', what: 'The placements as mzTab (shown under Mass shifts) for other tools: candidates, not FDR-controlled. Name the file .idXML or .mzid for those formats.', needs: ['recon_out'], db: true },
   { param: 'species_out', label: 'Species report', what: 'The taxa the tags point to, ranked.', flag: 'species' },
   { param: 'shortlist_out', label: 'Protein shortlist', what: 'Proteins ranked by the spectra placed on them.', db: true },
   { param: 'fasta_out', label: 'Reduced FASTA', what: 'The shortlisted proteins plus your background proteins.', db: true },
@@ -57,7 +57,7 @@ export const PRODUCTS: readonly Product[] = [
   { param: 'census_sorted_out', label: 'Spectra ranked by identifiability', what: 'The table ordered by the identifiability score (experimental).', needs: ['census_out'], experimental: true, also: { census: true, census_score: true } },
   { param: 'digest_out', label: 'Digest report', what: 'Terminal residues and the protease they fit.' },
   { param: 'label_out', label: 'Label report', what: 'Isobaric and SILAC labels the tags carry.' },
-  { param: 'alkylation_out', label: 'Alkylation report', what: 'The reagent that alkylated the cysteines, from a shipped proteome.' },
+  { param: 'alkylation_out', label: 'Alkylation report', what: 'The reagent that alkylated the cysteines, read off the tags (no database needed).' },
   { param: 'alkylation_tags_out', label: 'Alkylation from tags', what: 'The alkylation call without a database.', experimental: true },
   { param: 'glyco_out', label: 'Glycopeptide report', what: 'Spectra with oxonium ions.', flag: 'glyco' },
   { param: 'check_header_out', label: 'Precursor charge check', what: 'Each precursor charge of the file against the MS1 isotope spacing.', also: { check_header_charge: 'warn' }, experimental: true }
@@ -117,20 +117,30 @@ export function fileName(p: Product, values: V, tagsOut: string): string {
   const stem = tagsOut ? baseName(tagsOut.endsWith('.tags.tsv') ? tagsOut.slice(0, -'.tags.tsv'.length) : stripExt(tagsOut)) : ''
   // A report the CLI derives from -out: <out> with its extension replaced.
   if (p.flag && !set) return tagsOut ? `${baseName(stripExt(tagsOut))}.${outputKind(p.param)}.tsv` : ''
-  const ext = set ? set.slice(stripExt(set).length) : `.${PARAM_BY_NAME.get(p.param)?.formats?.[0] ?? (p.param === 'out_spectra' ? 'mzML' : 'tsv')}`
+  const ext = set ? set.slice(stripExt(set).length) : `.${defaultExt(p.param, values['search_engine'])}`
   return stem ? `${stem}.${outputKind(p.param)}${ext || '.tsv'}` : ''
 }
 
 /// The default file of a product before it has a folder: its kind and
 /// extension (qc.tsv), moved beside the tags table by rebaseOutputs.
 function bareName(p: Product, engine?: unknown): string {
-  const fmt = PARAM_BY_NAME.get(p.param)?.formats?.[0]
-  const ext = p.param === 'out_spectra' ? 'mzML' : p.param === 'search_config_out' ? searchConfigExt(engine) : p.param === 'recon_id_out' ? 'idXML' : fmt ?? 'tsv'
-  return `${outputKind(p.param)}.${ext}`
+  return `${outputKind(p.param)}.${defaultExt(p.param, engine)}`
 }
 
-/// The shipped proteomes of -alkylation_proteome (auto is human).
-const SHIPPED_PROTEOMES = new Set(['auto', 'human', 'mouse', 'yeast', 'ecoli'])
+/// The extension the GUI gives a product it names itself. -recon_id_out is
+/// mzTab, the form the Mass shifts tab reads (the CLI lists idXML first, but
+/// a file the GUI chose must be one it can show); idXML and mzid stay a
+/// choice of the user's, for other tools.
+export function defaultExt(param: string, engine?: unknown): string {
+  if (param === 'out_spectra') return 'mzML'
+  if (param === 'search_config_out') return searchConfigExt(engine)
+  if (param === 'recon_id_out') return 'mzTab'
+  return PARAM_BY_NAME.get(param)?.formats?.[0] ?? 'tsv'
+}
+
+/// The shipped proteomes of -alkylation_proteome. auto is none of them: it
+/// reads no proteome (the tags alone, or the run's -recon_fasta or -fasta).
+const SHIPPED_PROTEOMES = new Set(['human', 'mouse', 'yeast', 'ecoli'])
 
 /// The proteome the alkylation report is sent, lower case (its default
 /// when cleared).
@@ -140,7 +150,7 @@ const proteomeOf = (values: V): string =>
 /// The tag length the alkylation report's database needs (FASTag.cpp: the
 /// placement index's minimum, -recon_min_length when it is above 0, else
 /// derived from the database): 8 residues on the shipped human or mouse
-/// proteome (auto is human), 7 on yeast or E. coli. A FASTA of the user's
+/// proteome, 7 on yeast or E. coli. A FASTA of the user's
 /// (an -alkylation_proteome file or -recon_fasta) is indexed with a minimum
 /// that grows with its size: 8 for a human-sized one, the length used for
 /// the note, never for a raise (alkylationShipped).
@@ -155,11 +165,26 @@ export function alkylationTarget(values: V): number {
 }
 
 /// The alkylation report places its tags on a shipped proteome: no protein
-/// database is given and -alkylation_proteome names one (not a FASTA). Only
-/// then is its length known before the run (and only then does the CLI
-/// give tags_too_short), so only then does the report raise Extension.
+/// database is given and -alkylation_proteome names one (not a FASTA, not
+/// auto). Only then is its length known before the run (and only then does
+/// the CLI give tags_too_short), so only then does the report raise Extension.
 export function alkylationShipped(values: V): boolean {
   return !isActive('recon_fasta', values) && SHIPPED_PROTEOMES.has(proteomeOf(values))
+}
+
+/// Whether another report places the run's tags on a database (placements,
+/// shortlist, reduced FASTA, search configuration): the alkylation report
+/// then reads those placements too, and needs no length of its own.
+export function alkylationTagsPlaced(values: V): boolean {
+  return ['recon_out', 'shortlist_out', 'fasta_out', 'search_config_out'].some((n) => isActive(n, values))
+}
+
+/// The alkylation report reads no database at all (FASTag.cpp alk_place
+/// false): -alkylation_proteome auto, no Protein or Filter database and no
+/// other report that places tags. Its call is then read off the tags.
+export function alkylationTagOnly(values: V): boolean {
+  const prot = proteomeOf(values)
+  return (prot === '' || prot === 'auto') && !isActive('recon_fasta', values) && !isActive('fasta', values) && !alkylationTagsPlaced(values)
 }
 
 /// The extension the alkylation report needs in @p values, whatever
@@ -170,7 +195,9 @@ export function alkylationShipped(values: V): boolean {
 /// search configuration); those set the index up themselves. The extension
 /// rises so that the longest seed plus both ends reach the tag length.
 export function alkylationNeed(values: V): number | null {
-  if (['recon_out', 'shortlist_out', 'fasta_out', 'search_config_out'].some((n) => isActive(n, values))) return null
+  // auto with no database: the call is read off the tags, nothing places
+  // (feedback 202dbcf4), so no length is needed.
+  if (alkylationTagsPlaced(values) || alkylationTagOnly(values)) return null
   const target = alkylationTarget(values)
   const seed = longestSeed(values)
   if (seed == null) return null
@@ -279,7 +306,38 @@ export function productsOn(params: readonly string[], values: V): Product[] {
   return params.map((n) => PRODUCT_OF.get(n)).filter((p): p is Product => !!p && p.param !== 'out' && !p.column && isOn(p, values))
 }
 
+/// The products a shipped proteome (-recon_proteome) serves: the placements
+/// and what is made from them. The shortlist, reduced FASTA and engine
+/// configuration name their database to the engine: they need a FASTA file.
+const PROTEOME_SERVES = new Set(['recon_out', 'delta_out', 'delta_spectra_out', 'delta_counts_out', 'massgap_out', 'recon_id_out'])
+
+/// The database product @p p has one in @p values: a Protein or Filter
+/// database, or for the placements a shipped proteome.
+export function hasDatabase(p: Product, values: V): boolean {
+  return isActive('recon_fasta', values) || isActive('fasta', values) || (PROTEOME_SERVES.has(p.param) && text(values['recon_proteome']) !== '')
+}
+
 /// A product is on and its report needs the protein database, which is not set.
 export function missingDatabase(values: V): boolean {
-  return PRODUCTS.some((p) => p.db && isOn(p, values)) && !isActive('recon_fasta', values) && !isActive('fasta', values)
+  return PRODUCTS.some((p) => p.db && isOn(p, values) && !hasDatabase(p, values))
+}
+
+/// The products on in @p values that wait for a protein database (none is
+/// chosen for them), by label.
+export function waitingForDatabase(values: V): Product[] {
+  return PRODUCTS.filter((p) => p.db && isOn(p, values) && !hasDatabase(p, values))
+}
+
+/// @p values with every product that has no database off: what a workflow
+/// whose database reports wait for one (tasks.ts dbOptional) runs. The form
+/// keeps them on, so choosing a database brings them back.
+export function withoutDatabase(values: V): V {
+  const off = waitingForDatabase(values)
+  if (!off.length) return values
+  const next: V = { ...values }
+  for (const p of off) {
+    if (p.flag) next[p.flag] = false
+    next[p.param] = ''
+  }
+  return next
 }

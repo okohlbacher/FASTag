@@ -7,7 +7,10 @@
 // --------------------------------------------------------------------------
 
 #include "FASTagTool.h"
-#include "TagGraph.h"
+#include "Terminus.h"
+
+#include <tuple>
+#include <unordered_set>
 
 #ifdef FASTAG_MIMALLOC
 #include <mimalloc.h> // Windows: mimalloc with CRT redirection (CMakeLists.txt)
@@ -30,33 +33,162 @@ namespace
   /// peak when -out_spectra is mzPeak, which cannot store it.
   struct IonMobilityRefused {};
 
+  /// -fasta_proteins writes a protein as its identifier only: warn once per
+  /// database (@p what) whose entries repeat an identifier, since a hit in
+  /// one of them cannot be told from one in another (the GUI does not align
+  /// such an identifier).
+  void warnRepeatedIdentifiers_(const std::vector<FASTAFile::FASTAEntry>& entries, const char* what)
+  {
+    std::unordered_set<std::string> seen;
+    seen.reserve(entries.size());
+    size_t repeated = 0;
+    const std::string* first = nullptr;
+    for (const auto& e : entries)
+    {
+      if (seen.insert(e.identifier).second) continue;
+      if (!first) first = &e.identifier;
+      ++repeated;
+    }
+    if (repeated == 0) return;
+    OPENMS_LOG_WARN << "-fasta_proteins: " << repeated << (repeated == 1 ? " entry" : " entries") << " of the " << what
+                    << " repeat an earlier identifier (first: " << *first << "); db_proteins names a protein by its "
+                    << "identifier only, so a hit in such an entry cannot be told from one in another entry of that "
+                    << "identifier." << std::endl;
+  }
+
+
+  /// The value of environment variable @p name, "" when it is unset or empty.
+  std::string envOf_(const char* name)
+  {
+    const char* env = std::getenv(name);
+    return env == nullptr ? std::string() : std::string(env);
+  }
+
+  /// The folders beside the executable where the shipped digest data is
+  /// looked for: the cmake --install tree (../share/FASTag/digest), the flat
+  /// release layout (share-FASTag-digest; a build tree links data/digest
+  /// there, CMakeLists.txt FASTAG_STAGE_DATA_IN_BUILD) and a plain digest/.
+  std::vector<std::string> digestCandidates_()
+  {
+    const std::string exe = File::getExecutablePath();
+    return {exe + "../share/FASTag/digest", exe + "share-FASTag-digest", exe + "digest"};
+  }
 
   /// Directory holding the shipped digest data (protease models, mass-gap
-  /// modifications): $FASTAG_DIGEST_DIR, else beside the executable in the
-  /// two layouts taxonomyDir_() knows. "" when there is none.
+  /// modifications): $FASTAG_DIGEST_DIR, else the first candidate beside the
+  /// executable that holds digest_models.tsv. "" when there is none. A
+  /// FASTAG_DIGEST_DIR that names no folder finds nothing (the error says
+  /// so): it is not silently replaced by other data.
   std::string digestDir_()
   {
-    const char* env = std::getenv("FASTAG_DIGEST_DIR");
-    if (env != nullptr && *env != '\0' && File::isDirectory(std::string(env))) return std::string(env);
-    const std::string exe = File::getExecutablePath();
-    for (const std::string& c : {exe + "../share/FASTag/digest", exe + "share-FASTag-digest", exe + "digest"})
+    const std::string env = envOf_("FASTAG_DIGEST_DIR");
+    if (!env.empty()) return File::isDirectory(env) ? env : std::string();
+    for (const std::string& c : digestCandidates_())
       if (File::exists(c + "/digest_models.tsv")) return c;
     return std::string();
+  }
+
+  /// @p d with a trailing "digest" replaced by "alkylation"; "" when it does
+  /// not end in "digest".
+  std::string alkylationSibling_(std::string d)
+  {
+    while (!d.empty() && (d.back() == '/' || d.back() == '\\')) d.pop_back();
+    if (d.size() < 6 || d.compare(d.size() - 6, 6, "digest") != 0) return std::string();
+    return d.substr(0, d.size() - 6) + "alkylation";
   }
 
   /// 1.12 D (#3g): directory of the shipped -alkylation_proteome proteomes:
   /// $FASTAG_ALKYLATION_DIR, else "alkylation" beside the digest data
   /// directory (share/FASTag/digest -> share/FASTag/alkylation,
   /// share-FASTag-digest -> share-FASTag-alkylation). "" when there is none.
+  /// As for the digest data, a FASTAG_ALKYLATION_DIR that names no folder
+  /// finds nothing.
   std::string alkylationDir_()
   {
-    const char* env = std::getenv("FASTAG_ALKYLATION_DIR");
-    if (env != nullptr && *env != '\0' && File::isDirectory(std::string(env))) return std::string(env);
-    std::string d = digestDir_();
-    while (!d.empty() && (d.back() == '/' || d.back() == '\\')) d.pop_back();
-    if (d.size() < 6 || d.compare(d.size() - 6, 6, "digest") != 0) return std::string();
-    const std::string a = d.substr(0, d.size() - 6) + "alkylation";
-    return File::isDirectory(a) ? a : std::string();
+    const std::string env = envOf_("FASTAG_ALKYLATION_DIR");
+    if (!env.empty()) return File::isDirectory(env) ? env : std::string();
+    const std::string a = alkylationSibling_(digestDir_());
+    return !a.empty() && File::isDirectory(a) ? a : std::string();
+  }
+
+  /// @p p without "." and ".." steps, for messages.
+  std::string shownPath_(const std::string& p)
+  {
+    return std::filesystem::path(p).lexically_normal().string();
+  }
+
+  /// Where a shipped data file was looked for, for the error that names it:
+  /// the folder @p env_name names (and whether it is one), else the folder
+  /// found (@p dir), else every candidate (@p cands).
+  std::string searchedFor_(const char* env_name, const std::string& dir, const std::vector<std::string>& cands)
+  {
+    const std::string env = envOf_(env_name);
+    if (!env.empty())
+      return File::isDirectory(env) ? "it is not in '" + env + "', the folder " + env_name + " names"
+                                    : std::string(env_name) + " is set to '" + env + "', which is not a folder";
+    if (!dir.empty()) return "it is not in '" + shownPath_(dir) + "'";
+    std::string where;
+    for (const std::string& c : cands) where += (where.empty() ? "" : ", ") + shownPath_(c);
+    return "looked in " + where;
+  }
+
+  /// -data_paths (the desktop app's capability check): one JSON line with the
+  /// folders this FASTag reads its shipped data from, as a run would
+  /// (digestDir_, alkylationDir_, with this process's environment), the
+  /// digest folders looked in (FASTAG_DIGEST_DIR as given, or the three
+  /// beside the executable), the shipped proteomes whose file is there, and
+  /// what -alkylation_proteome auto reads without a database: "none" (the
+  /// call from the tags alone; before 1.16 auto meant the human proteome).
+  std::string dataPathsJson_()
+  {
+    namespace P = FASTag::Probe;
+    const std::string env = envOf_("FASTAG_DIGEST_DIR");
+    const std::string digest = digestDir_();
+    const std::string alk = alkylationDir_();
+    std::string j = "{\"digest_dir\":" + (digest.empty() ? std::string("null") : P::jsonString(shownPath_(digest)));
+    j += ",\"digest_from_env\":" + std::string(env.empty() ? "false" : "true") + ",\"digest_searched\":[";
+    const std::vector<std::string> searched = env.empty() ? digestCandidates_() : std::vector<std::string>{env};
+    for (std::size_t i = 0; i < searched.size(); ++i) j += (i ? "," : "") + P::jsonString(env.empty() ? shownPath_(searched[i]) : env);
+    j += "],\"alkylation_dir\":" + (alk.empty() ? std::string("null") : P::jsonString(shownPath_(alk))) + ",\"proteomes\":[";
+    std::string mtext;
+    const bool manifest = !alk.empty() && File::exists(alk + "/proteomes.tsv");
+    if (manifest)
+    {
+      std::ifstream mf((alk + "/proteomes.tsv").c_str(), std::ios::binary);
+      mtext.assign(std::istreambuf_iterator<char>(mf), std::istreambuf_iterator<char>());
+    }
+    bool first = true;
+    for (const char* name : {"human", "mouse", "yeast", "ecoli"})
+    {
+      if (alk.empty()) break;
+      FASTag::Alkylation::ShippedProteome sp;
+      const std::string file = manifest ? (FASTag::Alkylation::findShippedProteome(mtext, name, sp) ? sp.file : std::string())
+                                        : std::string(name) + ".fasta.gz";
+      if (file.empty() || file.find_first_of("/\\") != std::string::npos || !File::exists(alk + "/" + file)) continue;
+      j += (first ? "" : ",") + P::jsonString(name);
+      first = false;
+    }
+    j += "],\"alkylation_auto\":\"none\"}\n";
+    return j;
+  }
+
+  /// The error for shipped digest data a run needs and does not find: what
+  /// needs it (@p what), the file, where it was looked for, and the fixes in
+  /// order, ending with @p tail (an option that replaces the file, or the
+  /// output to leave out). One line: the GUI shows the first line.
+  void missingDigestData_(const std::string& what, const std::string& file, const std::string& dir, const std::string& tail)
+  {
+    OPENMS_LOG_ERROR << what << " needs " << file << " from FASTag's shipped digest data, and it was not found ("
+                     << searchedFor_("FASTAG_DIGEST_DIR", dir, digestCandidates_())
+                     << "). To fix: use an installed FASTag (cmake --install puts the data in "
+                        "<prefix>/share/FASTag/digest), or set FASTAG_DIGEST_DIR to a folder that holds "
+                     << file << " (data/digest in the FASTag sources), or " << tail << "." << std::endl;
+  }
+
+  /// @p dir/@p file when the file is there, else "".
+  std::string shippedFile_(const std::string& dir, const std::string& file)
+  {
+    return !dir.empty() && File::exists(dir + "/" + file) ? dir + "/" + file : std::string();
   }
 
   /// k of a taxonomy index, read from its 16-byte header alone.
@@ -246,6 +378,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                       << "; an option given on the command line or in an INI wins." << std::endl;
   }
   const bool dump_mode = !getFlag_("stream") && !getStringOption_("dump_spectrum").empty();
+  // -data_paths: a GUI mode like the two above (JSON on the sealed stdout).
+  const bool data_paths_mode = !getFlag_("stream") && getFlag_("data_paths");
 
   if (getIntOption_("threads") == 0)
   {
@@ -254,11 +388,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     TOPPBase::setMaxNumberOfThreads(n);  // omp_set_num_threads, or a no-op without OpenMP
     // Not under -stream: this runs before stdout is rewired into the data
     // channel, and a log line there is a corrupt spectrum block.
-    if (!getFlag_("stream") && !probe_mode && !dump_mode)
+    if (!getFlag_("stream") && !probe_mode && !dump_mode && !data_paths_mode)
       OPENMS_LOG_INFO << "-threads 0: using " << n << " of " << cores << " logical cores." << std::endl;
   }
 
-  if (getFlag_("stream") || probe_mode || dump_mode)
+  if (getFlag_("stream") || probe_mode || dump_mode || data_paths_mode)
   {
     // stdout is the -stream DATA CHANNEL. OpenMS logs through thread-local
     // streams that do not follow a global reconfig, and TOPPBase prints its
@@ -272,7 +406,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
 #ifndef _WIN32
       if (data_fd >= 0 && !stream_data_) close(data_fd);
 #endif
-      OPENMS_LOG_ERROR << (getFlag_("stream") ? "-stream" : probe_mode ? "-probe_input" : "-dump_spectrum")
+      OPENMS_LOG_ERROR << (getFlag_("stream") ? "-stream" : probe_mode ? "-probe_input" : dump_mode ? "-dump_spectrum" : "-data_paths")
                        << ": cannot rewire stdout." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
@@ -291,6 +425,20 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     return ILLEGAL_PARAMETERS;
   }
   if (probe_mode) return probeInputMode_();
+  if (data_paths_mode)
+  {
+    if (dump_mode)
+    {
+      OPENMS_LOG_ERROR << "-data_paths and -dump_spectrum are separate modes; give one of them." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (!writeGuiStream_(dataPathsJson_()))
+    {
+      OPENMS_LOG_ERROR << "-data_paths: cannot write to stdout." << std::endl;
+      return CANNOT_WRITE_OUTPUT_FILE;
+    }
+    return EXECUTION_OK;
+  }
 
   // ---- phase 1: option checks, refusals and tagging parameters ----------
 
@@ -414,6 +562,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     static const StreamRefusal stream_refusals[] = {
         {"fasta", nullptr},
         {"entrapment_fasta", nullptr},
+        {"fasta_proteins", nullptr},
         {"recon_out", nullptr},
         {"species_out", nullptr},
         {"taxdb", nullptr},
@@ -467,9 +616,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         // ---- 1.12 G: -stream refusals ----
         {"probe_input", nullptr},
         {"dump_spectrum", nullptr},
-        // ---- tag merging: -stream refusals ----
-        {"resolved_out", nullptr},
-        {"tag_graph_out", nullptr},
+        {"data_paths", nullptr},
+        {"terminus", nullptr},  // the -terminus columns need the run's precursor hypotheses
     };
     // 1.13 item 15: the probe needs random access to the run.
     if (getStringOption_("complement_tolerance_unit") == "auto")
@@ -775,6 +923,21 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                         "give -fasta too." << std::endl;
     return ILLEGAL_PARAMETERS;
   }
+  // -fasta_proteins: the proteins (and positions) of each written -fasta hit.
+  const int fasta_proteins = getIntOption_("fasta_proteins");
+  if (fasta_proteins > 0 && !filtering)
+  {
+    OPENMS_LOG_ERROR << "-fasta_proteins names the -fasta proteins a tag matches; "
+                        "give -fasta too." << std::endl;
+    return ILLEGAL_PARAMETERS;
+  }
+  // Their locate indexes (the -recon_out one when it reads the same -fasta),
+  // gene names and decoy flags, per protein ordinal; the entrapment ones
+  // annotate efwd/erev rows.
+  FASTag::ProteomeIndex db_index_own, db_entrap_index;
+  const FASTag::ProteomeIndex* db_index = nullptr;
+  std::vector<std::string> db_genes, db_entrap_genes;
+  std::vector<char> db_decoy, db_entrap_decoy;
   if (entrap_on && lengths.size() > 1)
   {
     // q_db is one curve over the run's E-values. Pooling several seed
@@ -794,18 +957,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   }
 
   const std::string recon_out = getStringOption_("recon_out");
-  // Tag merging (src/TagGraph.h): the spectrum's tags merged into resolved
-  // tags and ranked, computed only when one of the two tables is written.
-  const std::string resolved_out = getStringOption_("resolved_out");
-  const std::string tag_graph_out = getStringOption_("tag_graph_out");
-  const bool resolved_on = !resolved_out.empty();
-  const bool tag_graph_on = !tag_graph_out.empty();
-  const bool graph_on = resolved_on || tag_graph_on;
-  FASTag::TagGraph::Options graph_opt;
-  graph_opt.scheme = FASTag::TagGraph::schemeFromString(getStringOption_("resolve_score"));
-  graph_opt.threshold = getDoubleOption_("resolve_threshold");
-  graph_opt.join = getFlag_("resolve_join");
-  const double resolve_max_e = getDoubleOption_("resolve_max_evalue");
+  // -subsume_tags (on by default): rows lying wholly in another row of their
+  // spectrum are left out of -out (FASTag::subsumedTags); -terminus: the
+  // series and terminus columns (src/Terminus.h).
+  const bool subsume_on = getStringOption_("subsume_tags") == "on";
+  const bool terminus_on = getFlag_("terminus");
   const std::string delta_out = getStringOption_("delta_out");
   const std::string delta_spectra_out = getStringOption_("delta_spectra_out");
   // recon_on: -recon_out is written. place_on: tags are placed on the
@@ -820,25 +976,45 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   const std::string search_config_out = getStringOption_("search_config_out");
   const bool shortlist_on = !shortlist_out.empty() || !fasta_out.empty();
   const bool handoff_on = shortlist_on || !search_config_out.empty();
-  // #3g: -alkylation_out reads the placements of the run's own reconciler.
+  // #3g: -alkylation_out. Its call is read off the tags (the shadow pass of
+  // 1.13 #22, no database); since feedback 202dbcf4 the placements of the
+  // run's own reconciler only refine it, when there is a database: another
+  // placement reader, -recon_fasta, -fasta or a non-default
+  // -alkylation_proteome. The default auto no longer means the human proteome.
   const std::string alkylation_out = getStringOption_("alkylation_out");
   const bool alkylation_on = !alkylation_out.empty();
   // 1.13 #22: -alkylation_tags_out tags every MS2 a second time; it places nothing.
   const std::string alkylation_tags_out = getStringOption_("alkylation_tags_out");
   const bool alkylation_tags_on = !alkylation_tags_out.empty();
+  // The shadow pass runs for either report (one tally, run_acc.d.alkt).
+  const bool alkylation_shadow_on = alkylation_on || alkylation_tags_on;
+  const std::string alk_prot_opt = alkylation_on ? getStringOption_("alkylation_proteome") : std::string();
+  const bool alk_place = alkylation_on && (recon_on || handoff_on || !getStringOption_("recon_fasta").empty() ||
+                                           !fasta.empty() || !(alk_prot_opt.empty() || alk_prot_opt == "auto"));
   const bool place_on = recon_on
       // ---- 1.12 A: placement readers ----
       || handoff_on
       // ---- 1.12 D: placement readers ----
-      || alkylation_on
+      || alk_place
       ;
   // Only -alkylation_out places: every other placement reader is off, so
   // the index is built on its database and only the tags it reads are
   // placed (recon_out, the hand-off and -delta_out read every tag).
-  const bool alkylation_only_db = alkylation_on && !recon_on && !handoff_on;
+  const bool alkylation_only_db = alk_place && !recon_on && !handoff_on;
   // The placement-report checks below keep their 1.11 meaning: placing for
   // -alkylation_out alone does not satisfy them (1.12 D #3g).
   const bool place_reports = place_on && !alkylation_only_db;
+  // Feedback 422372a2: -recon_proteome, a shipped proteome as the database
+  // of -recon_out (after -recon_fasta, before -fasta). The hand-off outputs
+  // name their database to the engine and still need a FASTA file.
+  const std::string recon_prot = getStringOption_("recon_proteome");
+  const bool recon_prot_on = !recon_prot.empty() && recon_on && !handoff_on && getStringOption_("recon_fasta").empty();
+  if (!recon_prot.empty() && !recon_prot_on)
+    OPENMS_LOG_WARN << "-recon_proteome is ignored: "
+                    << (!recon_on ? "it is only read with -recon_out."
+                        : !getStringOption_("recon_fasta").empty() ? "the tags place on -recon_fasta."
+                        : "-shortlist_out, -fasta_out and -search_config_out need a FASTA file (-recon_fasta).")
+                    << std::endl;
   if (!delta_out.empty() && !place_reports)
   {
     OPENMS_LOG_ERROR << "-delta_out requires -recon_out (the histogram is "
@@ -991,58 +1167,95 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // 1.13 (#24): a shipped proteome's manifest row (entries 0 = no manifest).
   FASTag::Alkylation::ShippedProteome alk_shipped;
   std::string alk_manifest;
-  if (alkylation_on)
+  // The shipped proteome @p name (human, mouse, yeast, ecoli) in @p path, its
+  // manifest row in alk_shipped; @p who starts each message, @p alt is the
+  // advice when it is missing. EXECUTION_OK when found.
+  const auto findShipped = [&](const std::string& name, const char* who, const char* alt, std::string& path) -> ExitCodes
   {
-    const std::string prot = getStringOption_("alkylation_proteome");
-    if (!getStringOption_("recon_fasta").empty() || !alkylation_only_db)
+    const std::string dir = alkylationDir_();
+    path = dir.empty() ? std::string() : dir + "/" + name + ".fasta.gz";
+    // 1.13 (#24): the shipped directory's proteomes.tsv names each file and
+    // records its UniProt release, entries and sha256. A directory without
+    // it (a FASTAG_ALKYLATION_DIR of one's own) is read as in 1.12.
+    const std::string manifest = dir.empty() ? std::string() : dir + "/proteomes.tsv";
+    if (!manifest.empty() && File::exists(manifest))
+    {
+      std::ifstream mf(manifest.c_str(), std::ios::binary);
+      const std::string mtext((std::istreambuf_iterator<char>(mf)), std::istreambuf_iterator<char>());
+      if (!mf.good() && !mf.eof())
+      {
+        OPENMS_LOG_ERROR << who << ": cannot read '" << manifest << "'." << std::endl;
+        return INPUT_FILE_NOT_READABLE;
+      }
+      if (!FASTag::Alkylation::findShippedProteome(mtext, name, alk_shipped))
+      {
+        OPENMS_LOG_ERROR << who << ": '" << manifest << "' has no valid row for the " << name
+                         << " proteome (columns name, proteome, taxon, release, release_date, entries, "
+                            "sha256, fasta_sha256, file; one row per name)." << std::endl;
+        return INPUT_FILE_CORRUPT;
+      }
+      path = dir + "/" + alk_shipped.file;
+      alk_manifest = manifest;
+    }
+    if (path.empty() || !File::exists(path))
+    {
+      // Where it was looked for: the folder beside the digest data, or
+      // beside each place the digest data is looked for.
+      std::vector<std::string> alk_cands;
+      const std::string dd = digestDir_();
+      for (const std::string& c : dd.empty() ? digestCandidates_() : std::vector<std::string>{dd})
+        alk_cands.push_back(alkylationSibling_(c));
+      OPENMS_LOG_ERROR << who << ": no shipped " << name << " proteome found ("
+                       << searchedFor_("FASTAG_ALKYLATION_DIR", dir, alk_cands) << "). Give " << alt
+                       << ", or use an installed FASTag "
+                          "(cmake --install puts the proteomes in <prefix>/share/FASTag/alkylation), or set "
+                          "FASTAG_ALKYLATION_DIR to a folder that holds "
+                       << name << ".fasta.gz (data/alkylation in the FASTag sources)." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    return EXECUTION_OK;
+  };
+  // -recon_proteome: the file -recon_out places on.
+  std::string recon_prot_path;
+  if (recon_prot_on)
+  {
+    const ExitCodes rc = findShipped(recon_prot, "-recon_proteome", "-recon_fasta <fasta>", recon_prot_path);
+    if (rc != EXECUTION_OK) return rc;
+  }
+  if (alk_place)
+  {
+    const std::string prot = alk_prot_opt;
+    if (recon_prot_on)
+    {
+      if (optionNonDefault_("alkylation_proteome"))
+        OPENMS_LOG_WARN << "-alkylation_proteome is ignored: -alkylation_out reads the placements on "
+                           "-recon_proteome." << std::endl;
+      alk_db_source = "bundled:" + recon_prot;
+    }
+    else if (!getStringOption_("recon_fasta").empty() || !alkylation_only_db)
     {
       if (optionNonDefault_("alkylation_proteome"))
         OPENMS_LOG_WARN << "-alkylation_proteome is ignored: -alkylation_out reads the placements on "
                         << (getStringOption_("recon_fasta").empty() ? "-fasta" : "-recon_fasta") << "." << std::endl;
       alk_db_source = getStringOption_("recon_fasta").empty() ? "fasta" : "recon_fasta";
     }
+    else if (prot.empty() || prot == "auto")
+    {
+      // feedback 202dbcf4: auto with -fasta places on -fasta (the run's own
+      // database); auto without any database places nothing (alk_place).
+      alk_db = fasta;
+      alk_db_source = "fasta";
+    }
     else
     {
-      const bool named = prot == "auto" || prot == "human" || prot == "mouse" || prot == "yeast" || prot == "ecoli";
+      const bool named = prot == "human" || prot == "mouse" || prot == "yeast" || prot == "ecoli";
       if (named)
       {
-        // auto: the human proteome. Taking the top -species genus would need
-        // the species call before the tagging loop that places the tags.
-        const std::string name = prot == "auto" ? "human" : prot;
-        const std::string dir = alkylationDir_();
-        std::string path = dir.empty() ? std::string() : dir + "/" + name + ".fasta.gz";
-        // 1.13 (#24): the shipped directory's proteomes.tsv names each file and
-        // records its UniProt release, entries and sha256. A directory without
-        // it (a FASTAG_ALKYLATION_DIR of one's own) is read as in 1.12.
-        const std::string manifest = dir.empty() ? std::string() : dir + "/proteomes.tsv";
-        if (!manifest.empty() && File::exists(manifest))
-        {
-          std::ifstream mf(manifest.c_str(), std::ios::binary);
-          const std::string mtext((std::istreambuf_iterator<char>(mf)), std::istreambuf_iterator<char>());
-          if (!mf.good() && !mf.eof())
-          {
-            OPENMS_LOG_ERROR << "-alkylation_out: cannot read '" << manifest << "'." << std::endl;
-            return INPUT_FILE_NOT_READABLE;
-          }
-          if (!FASTag::Alkylation::findShippedProteome(mtext, name, alk_shipped))
-          {
-            OPENMS_LOG_ERROR << "-alkylation_out: '" << manifest << "' has no valid row for the " << name
-                             << " proteome (columns name, proteome, taxon, release, release_date, entries, "
-                                "sha256, fasta_sha256, file; one row per name)." << std::endl;
-            return INPUT_FILE_CORRUPT;
-          }
-          path = dir + "/" + alk_shipped.file;
-          alk_manifest = manifest;
-        }
-        if (path.empty() || !File::exists(path))
-        {
-          OPENMS_LOG_ERROR << "-alkylation_out: no shipped " << name << " proteome found (expected "
-                              "<bin>/../share/FASTag/alkylation/" << name << ".fasta.gz, or set "
-                              "FASTAG_ALKYLATION_DIR). Give -alkylation_proteome <fasta> or -recon_fasta." << std::endl;
-          return ILLEGAL_PARAMETERS;
-        }
+        std::string path;
+        const ExitCodes rc = findShipped(prot, "-alkylation_out", "-alkylation_proteome <fasta> or -recon_fasta", path);
+        if (rc != EXECUTION_OK) return rc;
         alk_db = path;
-        alk_db_source = "bundled:" + name;
+        alk_db_source = "bundled:" + prot;
       }
       else if (File::exists(prot) && !File::isDirectory(prot))
       {
@@ -1052,7 +1265,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       else
       {
         OPENMS_LOG_ERROR << "-alkylation_proteome '" << prot << "' is neither auto, human, mouse, yeast, ecoli "
-                            "nor a readable FASTA file." << std::endl;
+                            "nor a readable FASTA file. auto (the default) needs no database." << std::endl;
         return ILLEGAL_PARAMETERS;
       }
     }
@@ -1063,39 +1276,43 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   if (place_on)
   {
     recon_db = getStringOption_("recon_fasta");
-    if (recon_db.empty()) recon_db = alkylation_only_db ? alk_db : fasta;
+    if (recon_db.empty()) recon_db = recon_prot_on ? recon_prot_path : alkylation_only_db ? alk_db : fasta;
     if (recon_db.empty())
     {
       OPENMS_LOG_ERROR << "-recon_out needs a database: give -recon_fasta "
-                          "(or -fasta)." << std::endl;
+                          "(or -fasta), or -recon_proteome for a shipped proteome." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
     std::vector<FASTAFile::FASTAEntry> rentries;
     // #3g: the shipped proteomes are gzip-compressed, which FASTAFile cannot read.
     // 1.13 (#24): of a shipped proteome also the sha256 of the FASTA text read.
     std::string alk_fasta_sha;
-    if (alkylation_only_db)
+    // A shipped proteome (gzip-compressed): -alkylation_proteome's or -recon_proteome's.
+    const bool shipped_db = alkylation_only_db || recon_prot_on;
+    const char* shipped_who = recon_prot_on ? "-recon_proteome" : "-alkylation_out";
+    const char* shipped_alt = recon_prot_on ? "-recon_fasta <fasta>" : "-alkylation_proteome <fasta>";
+    if (shipped_db)
       FASTag::Alkylation::loadFasta(recon_db, rentries, alk_shipped.entries > 0 ? &alk_fasta_sha : nullptr);
     else FASTAFile().load(recon_db, rentries);
     // 1.13 (#24): a shipped proteome must be the FASTA its manifest records,
     // byte for byte (the report's database_release states that sha256), and
     // hold its entries; otherwise the file is truncated, edited or replaced.
-    if (alkylation_only_db && alk_shipped.entries > 0 && alk_fasta_sha != alk_shipped.fasta_sha256)
+    if (shipped_db && alk_shipped.entries > 0 && alk_fasta_sha != alk_shipped.fasta_sha256)
     {
-      OPENMS_LOG_ERROR << "-alkylation_out: the shipped " << alk_shipped.name << " proteome '" << recon_db
+      OPENMS_LOG_ERROR << shipped_who << ": the shipped " << alk_shipped.name << " proteome '" << recon_db
                        << "' reads as a FASTA with sha256 " << alk_fasta_sha << ", its proteomes.tsv records "
                        << alk_shipped.fasta_sha256 << " (UniProt " << alk_shipped.release
                        << "); the file is damaged or was replaced. Reinstall FASTag, or give "
-                          "-alkylation_proteome <fasta>." << std::endl;
+                       << shipped_alt << "." << std::endl;
       return INPUT_FILE_CORRUPT;
     }
-    if (alkylation_only_db && alk_shipped.entries > 0 && rentries.size() != alk_shipped.entries)
+    if (shipped_db && alk_shipped.entries > 0 && rentries.size() != alk_shipped.entries)
     {
-      OPENMS_LOG_ERROR << "-alkylation_out: the shipped " << alk_shipped.name << " proteome '" << recon_db
+      OPENMS_LOG_ERROR << shipped_who << ": the shipped " << alk_shipped.name << " proteome '" << recon_db
                        << "' holds " << rentries.size() << " entries, its proteomes.tsv records "
                        << alk_shipped.entries << " (UniProt " << alk_shipped.release
                        << "); the file is damaged or was replaced. Reinstall FASTag, or give "
-                          "-alkylation_proteome <fasta>." << std::endl;
+                       << shipped_alt << "." << std::endl;
       return INPUT_FILE_CORRUPT;
     }
     pindex.build(rentries, fixed_deltas, iso_tol);
@@ -1196,11 +1413,16 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     // 1.13 (#24): a run whose tags cannot reach that length places nothing,
     // and -alkylation_out cannot call (the default -tag_length 3 on a
     // shipped proteome, which needs 7 or 8).
-    if (alkylation_on && max_len < rmin)
+    if (alk_place && max_len < rmin)
       OPENMS_LOG_WARN << "-alkylation_out: tags place on '" << recon_db << "' from " << rmin
                       << " residues, but this run's longest tag has " << max_len
-                      << " (seed length + 2 x -extension); no tag will place and there will be no call. "
-                         "Give -tag_length " << rmin << " or more." << std::endl;
+                      << " (seed length + 2 x -extension); no tag will place and the placements will make no call "
+                         "(the call comes from the tags alone). Give -tag_length " << rmin << " or more." << std::endl;
+    if (recon_prot_on && max_len < rmin)
+      OPENMS_LOG_WARN << "-recon_proteome: tags place on the shipped " << recon_prot << " proteome from " << rmin
+                      << " residues, but this run's longest tag has " << max_len
+                      << " (seed length + 2 x -extension); no tag will place. Raise -extension or -tag_length."
+                      << std::endl;
   }
 
   // ---- phase 2: report setup ---------------------------------------------
@@ -1220,6 +1442,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         // ---- 1.12 A: tag-end counting readers ----
         || handoff_on  // #5 protease check
         // ---- 1.12 D: tag-end counting readers ----
+        // -qc_out (qc_version 3): the label mass decides the isobaric kit.
+        || !getStringOption_("qc_out").empty()
         ;
   };
   const bool count_on = needCounting();
@@ -1317,7 +1541,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         {"digest_models", "-digest_out", digest_on},
         {"digest_tag_min", "-digest_out", digest_on},
         {"digest_background_share", "-digest_out", digest_on},
-        {"digest_window", "-digest_out or -label_out", count_on},
+        {"digest_window", "-digest_out, -label_out or -qc_out", count_on},
         {"digest_silac_min", "-label_out", label_on},
         {"glyco_out", "-glyco", glyco_flag},
         {"glyco_min_fraction", "-glyco", glyco_flag},
@@ -1380,7 +1604,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
          alkylation_on || alkylation_tags_on},
         {"alkylation_min_share", alkylation_tags_on ? "-alkylation_out or -alkylation_tags_out" : "-alkylation_out",
          alkylation_on || alkylation_tags_on},
-        {"alkylation_window", "-alkylation_out", alkylation_on},
+        {"alkylation_window", "-alkylation_out with a database (-recon_fasta, -fasta or -alkylation_proteome)", alk_place},
         // ---- 1.12 F: ignored-option warnings ----
         {"census_out", "-census", getFlag_("census")},
         {"census_summary_out", "-census", getFlag_("census")},
@@ -1407,10 +1631,10 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // run consumes although no option names them, so the path guard checks
   // every output against them too ({label, path}).
   std::vector<std::pair<std::string, std::string>> resolved_inputs;
-  const auto no_digest_dir = [&](const char* what) {
-    OPENMS_LOG_ERROR << "No shipped " << what << " found (expected <bin>/../share/FASTag/digest). "
-                        "Set FASTAG_DIGEST_DIR to the directory holding digest_models.tsv and "
-                        "massgap_mods.tsv" << (digest_on ? ", or give -digest_models." : ".") << std::endl;
+  // A shipped table a run needs and does not find: the error names it, where
+  // it was looked for and what to do (missingDigestData_), before any output.
+  const auto no_digest_data = [&](const std::string& what, const std::string& file, const std::string& tail) {
+    missingDigestData_(what, file, digest_dir, tail);
     return ILLEGAL_PARAMETERS;
   };
   // 1.12 D (#3c-#3f): the v2 models, detection, flank2 and calibration.
@@ -1424,8 +1648,10 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     std::string models_path = digest_models;
     if (models_path.empty())
     {
-      if (digest_dir.empty()) return no_digest_dir("protease models");
-      models_path = digest_dir + (digest_v2 ? "/digest_models_v2.tsv" : "/digest_models.tsv");
+      const std::string file = digest_v2 ? "digest_models_v2.tsv" : "digest_models.tsv";
+      models_path = shippedFile_(digest_dir, file);
+      if (models_path.empty())
+        return no_digest_data("-digest_out", file, "give -digest_models <tsv>, or leave out -digest_out");
     }
     else if (digest_v2)
       OPENMS_LOG_WARN << "-digest_models_version v2 is ignored: -digest_models '" << digest_models
@@ -1450,8 +1676,10 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     const std::string cal_path = getStringOption_("digest_calibration");
     if (digest_v2 || digest_settings.min_confidence > 0.0 || !cal_path.empty())
     {
-      if (cal_path.empty() && digest_dir.empty()) return no_digest_dir("calibration");
-      const std::string cp = cal_path.empty() ? digest_dir + "/digest_calibration.tsv" : cal_path;
+      const std::string cp = cal_path.empty() ? shippedFile_(digest_dir, "digest_calibration.tsv") : cal_path;
+      if (cp.empty())
+        return no_digest_data(digest_v2 ? "-digest_out with -digest_models_version v2" : "-digest_out with -digest_min_confidence",
+                              "digest_calibration.tsv", "give -digest_calibration <tsv>");
       if (!FD::loadCalibration(cp, digest_settings.calibration, &err))
       {
         OPENMS_LOG_ERROR << "-digest_calibration '" << cp << "': " << err << std::endl;
@@ -1480,7 +1708,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     else if (!protease_models.has_bg)
     {
       FD::ModelTable shipped;
-      if (digest_dir.empty()) return no_digest_dir("background");
+      if (shippedFile_(digest_dir, "digest_models.tsv").empty())
+        return no_digest_data("-digest_out with a -digest_models table without a background", "digest_models.tsv",
+                              "give -fasta or -recon_fasta for the background");
       if (!FD::loadModelTable(digest_dir + "/digest_models.tsv", shipped, &err) || !shipped.has_bg)
       {
         OPENMS_LOG_ERROR << "The shipped digest_models.tsv in '" << digest_dir << "' has no background: " << err << std::endl;
@@ -1512,7 +1742,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   FD::GapSettings gap_settings;
   if (gap_needed)
   {
-    if (digest_dir.empty()) return no_digest_dir("mass-gap modifications");
+    if (shippedFile_(digest_dir, "massgap_mods.tsv").empty())
+      return no_digest_data("-massgap_out", "massgap_mods.tsv", "leave out -massgap_out");
     std::ifstream mf((digest_dir + "/massgap_mods.tsv").c_str());
     std::string err;
     if (!mf || !FD::parseGapMods(mf, gap_mods, &err))
@@ -1567,11 +1798,16 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     {
       const std::string dd = digestDir_();
       std::string err;
-      if (dd.empty())
+      if (shippedFile_(dd, "digest_models.tsv").empty())
       {
-        OPENMS_LOG_ERROR << "No shipped protease models found (expected <bin>/../share/FASTag/digest); the "
-                            "shortlist's protease check needs them. Set FASTAG_DIGEST_DIR to the directory "
-                            "holding digest_models.tsv." << std::endl;
+        // Name the outputs given: the protease check runs for each of them.
+        std::string given;
+        for (const auto& o : {std::make_pair("-shortlist_out", &shortlist_out), std::make_pair("-fasta_out", &fasta_out),
+                              std::make_pair("-search_config_out", &search_config_out)})
+          if (!o.second->empty()) given += (given.empty() ? "" : ", ") + std::string(o.first);
+        missingDigestData_(given + " (the protease check of the hand-off)", "digest_models.tsv", dd,
+                           "give -digest_out with -digest_models <tsv> (the check then uses that table), or leave out "
+                               + given);
         return ILLEGAL_PARAMETERS;
       }
       if (!FD::loadModelTable(dd + "/digest_models.tsv", sl_models, &err))
@@ -1753,9 +1989,13 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         if (!spec.empty())
         {
           const auto tags = tag_all(spec, prec_mz, charge, stream_tables);
-          n = tags.size();
-          for (const auto& t : tags)
-            appendTagRow_(buf, t, id, "-", stream_proforma, stream_proforma_prefix, p.per_residue_conf);
+          const std::vector<char> drop = subsume_on ? FASTag::subsumedTags(tags) : std::vector<char>();
+          for (size_t ti = 0; ti < tags.size(); ++ti)
+          {
+            if (!drop.empty() && drop[ti]) continue;
+            appendTagRow_(buf, tags[ti], id, "-", stream_proforma, stream_proforma_prefix, p.per_residue_conf);
+            ++n;
+          }
         }
         if (std::fprintf(dataf, "%s#end %s %zu\n", buf.c_str(), id.c_str(), n) < 0
             || std::fflush(dataf) != 0)
@@ -1881,6 +2121,38 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       OPENMS_LOG_INFO << "Entrapment: " << entrap.sequenceCount() << " sequences, "
                       << entrap.residueCount() << " residues, "
                       << entrap.indexedKeys() << " keys" << std::endl;
+      if (fasta_proteins > 0)
+      {
+        db_entrap_index.build(eentries, fixed_deltas, iso_tol);
+        warnRepeatedIdentifiers_(eentries, "-entrapment_fasta");
+        const std::vector<std::string> affixes = FASTag::Shortlist::defaultDecoyAffixes();
+        for (const auto& e : eentries)
+        {
+          db_entrap_genes.push_back(FASTag::fastaGeneName(e.description));
+          db_entrap_decoy.push_back(FASTag::Shortlist::isDecoy(e.identifier, affixes) ? 1 : 0);
+        }
+      }
+    }
+    if (fasta_proteins > 0)
+    {
+      // The -recon_out index serves when it was built from this -fasta (same
+      // fixed modifications and isobaric tolerance, database order).
+      if (place_on && recon_db == fasta && !alkylation_only_db && pindex.proteinCount() == entries.size())
+        db_index = &pindex;
+      else
+      {
+        db_index_own.build(entries, fixed_deltas, iso_tol);
+        db_index = &db_index_own;
+      }
+      warnRepeatedIdentifiers_(entries, "-fasta");
+      const std::vector<std::string> affixes = FASTag::Shortlist::defaultDecoyAffixes();
+      for (const auto& e : entries)
+      {
+        db_genes.push_back(FASTag::fastaGeneName(e.description));
+        db_decoy.push_back(FASTag::Shortlist::isDecoy(e.identifier, affixes) ? 1 : 0);
+      }
+      OPENMS_LOG_INFO << "Protein index: " << db_index->proteinCount() << " proteins"
+                      << (db_index == &pindex ? " (the reconciliation index)" : "") << std::endl;
     }
   }
 
@@ -2832,12 +3104,18 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   std::vector<FASTag::Param> alkt_params;
   std::vector<FASTag::Tables> alkt_tables;
   std::vector<std::string> alkt_dropped;
-  if (alkylation_tags_on)
+  // The shadow alphabet's other residue steps, for the twin and alias checks.
+  std::vector<FASTag::AlkylationTags::Step> alkt_alpha;
+  // Review n1/n2: the per-vote checks (aliases against the spectrum, the
+  // twin windows at the C edge's m/z).
+  FASTag::AlkylationTags::VoteContext alkt_ctx;
+  const char* const alkt_opt = alkylation_on ? "-alkylation_out" : "-alkylation_tags_out";
+  if (alkylation_shadow_on)
   {
     try { alkt_cands = FASTag::AlkylationTags::candidates(FASTag::Alkylation::forms()); }
     catch (const std::exception& e)
     {
-      OPENMS_LOG_ERROR << "-alkylation_tags_out: " << e.what() << "." << std::endl;
+      OPENMS_LOG_ERROR << alkt_opt << ": " << e.what() << "." << std::endl;
       return INTERNAL_ERROR;
     }
     for (const FASTag::Param& lp : len_params)
@@ -2846,10 +3124,12 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     // must not push a large -variable_modifications list past it.
     if (FASTag::AlkylationTags::alphabetSize(alkt_params.front().mods) > 255)
     {
-      OPENMS_LOG_ERROR << "-alkylation_tags_out: the variable modifications and the five C alternatives make more "
+      OPENMS_LOG_ERROR << alkt_opt << ": the variable modifications and the five C alternatives make more "
                           "than 255 residue entries; give fewer -variable_modifications." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
+    alkt_alpha = FASTag::AlkylationTags::alphabet(alkt_params.front().mods);
+    alkt_ctx = FASTag::AlkylationTags::voteContext(alkt_params.front(), alkt_cands, &alkt_alpha);
     alkt_tables.reserve(alkt_params.size());
     for (const FASTag::Param& lp : alkt_params) alkt_tables.emplace_back(lp);
   }
@@ -2899,6 +3179,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     // A named proteome (bundled:<name>) is read as much as a given one.
     if (!alk_db.empty()) guard.input("alkylation_proteome", alk_db);
     if (!alk_manifest.empty()) guard.input("alkylation_proteome", alk_manifest);
+    // -recon_proteome's shipped file (its manifest is alk_manifest above).
+    if (!recon_prot_path.empty()) guard.input("recon_proteome", recon_prot_path);
     // Inputs resolved from defaults: the shipped digest tables loaded above,
     // and the bundled taxonomy -species reads when no -taxdb set is given.
     for (const auto& ri : resolved_inputs) guard.input(ri.first.c_str(), ri.second);
@@ -2917,8 +3199,6 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     guard.output("out", out);
     guard.output("out_spectra", out_spectra);
     guard.output("recon_out", recon_out);
-    guard.output("resolved_out", resolved_out);
-    guard.output("tag_graph_out", tag_graph_out);
     guard.output("delta_out", delta_out);
     guard.output("delta_spectra_out", delta_spectra_out);
     guard.output("delta_counts_out", delta_counts_out);
@@ -3037,7 +3317,15 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     return CANNOT_WRITE_OUTPUT_FILE;
   }
   const bool want_proforma = getFlag_("proforma");
-  tsv << tagHeader_(want_proforma, p.per_residue_conf, !usi_prefix.empty(), hyp_on, ion_column);
+  tsv << tagHeader_(want_proforma, p.per_residue_conf, !usi_prefix.empty(), hyp_on, ion_column, terminus_on,
+                    fasta_proteins > 0);
+  // -terminus: the run's termini (its terminal modifications, residues and
+  // precursor isotope offsets).
+  std::vector<std::string> mod_names = getStringList_("fixed_modifications");
+  for (const std::string& nm : getStringList_("variable_modifications")) mod_names.push_back(nm);
+  const FASTag::Terminus::Termini termini = terminus_on
+      ? FASTag::Terminus::terminiOfRun(p.mods, mod_names, hyp_param.isotope_errors)
+      : FASTag::Terminus::Termini();
 
   std::ofstream rtsv;
   if (recon_on)
@@ -3051,53 +3339,6 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     rtsv << "spectrum\ttag\tprotein\tpeptide\tpos\treversed\tnterm_match\tcterm_match"
             "\tdelta_mass\tregion\tdelta_interp"
          << (recon_loc ? "\tloc_site\tloc_score\tloc_ties" : "") << "\n";
-  }
-  std::ofstream vtsv, ttsv;  // -resolved_out, -tag_graph_out
-  if (resolved_on)
-  {
-    vtsv.open(resolved_out.c_str());
-    if (!vtsv)
-    {
-      OPENMS_LOG_ERROR << "Cannot open output file " << resolved_out << " for writing." << std::endl;
-      return CANNOT_WRITE_OUTPUT_FILE;
-    }
-    vtsv << FASTag::TagGraph::resolvedHeader();
-  }
-  if (tag_graph_on)
-  {
-    ttsv.open(tag_graph_out.c_str());
-    if (!ttsv)
-    {
-      OPENMS_LOG_ERROR << "Cannot open output file " << tag_graph_out << " for writing." << std::endl;
-      return CANNOT_WRITE_OUTPUT_FILE;
-    }
-    ttsv << FASTag::TagGraph::graphHeader();
-  }
-  // The residue masses of the tagger's alphabet, for walking tags onto peaks.
-  const FASTag::TagGraph::Residues graph_res =
-      graph_on ? FASTag::TagGraph::residuesFrom(p.mods) : FASTag::TagGraph::Residues();
-  // -resolved_out terminus: the terminal modifications of the run (any
-  // residue, fixed or variable; resolveMods_ absorbs them into the flanks),
-  // its residues and its precursor isotope offsets.
-  FASTag::TagGraph::Termini graph_termini;
-  if (resolved_on)
-  {
-    std::vector<double> term_n, term_c;
-    for (const char* list : {"fixed_modifications", "variable_modifications"})
-      for (const std::string& nm : getStringList_(list))
-      {
-        if (nm.empty()) continue;
-        const ResidueModification* mod = nullptr;
-        try { mod = ModificationsDB::getInstance()->getModification(nm); }
-        catch (Exception::BaseException&) { continue; }  // refused by resolveMods_ already
-        if (!mod || mod->getOrigin() != 'X') continue;
-        const auto spec = mod->getTermSpecificity();
-        if (spec == ResidueModification::N_TERM || spec == ResidueModification::PROTEIN_N_TERM)
-          term_n.push_back(mod->getDiffMonoMass());
-        else if (spec == ResidueModification::C_TERM || spec == ResidueModification::PROTEIN_C_TERM)
-          term_c.push_back(mod->getDiffMonoMass());
-      }
-    graph_termini = FASTag::TagGraph::terminiFrom(graph_res, term_n, term_c, hyp_param.isotope_errors);
   }
 
 
@@ -3199,7 +3440,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
 
   // ---- phase 6: the tagging loop -----------------------------------------
 
-  size_t n_ms2 = 0, n_tags = 0, n_reported = 0;
+  size_t n_ms2 = 0, n_tags = 0, n_reported = 0, n_subsumed = 0;
   size_t n_untaggable_msn = 0;  // 1.16: MS2 without peaks or a precursor, and non-MS2 with a precursor
   size_t n_glyco = 0, n_glyco_scanned = 0;
   std::map<int, std::pair<size_t, size_t>> by_len;   // length -> (seen, matched)
@@ -3222,7 +3463,6 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     size_t base = 0;                 ///< input index of slot 0
     std::vector<std::string> rows;
     std::vector<std::string> recon_rows;  ///< recon rows (recon_on only)
-    std::vector<std::string> resolved_rows, graph_rows;  ///< (resolved_on, tag_graph_on only)
     std::vector<std::vector<PeptideIdentification>> recon_id_lists;  ///< (recon_ids_on only)
     std::vector<std::string> glyco_rows;  ///< glyco rows (glyco_on only)
     std::vector<std::vector<std::pair<double, bool>>> row_meta;  ///< (entrap_on only)
@@ -3231,6 +3471,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     /// want_species only. A flag beside the rows, never a column read back
     /// off them, so adding TSV columns cannot change it.
     std::vector<std::vector<char>> row_species;
+    /// -species: per spectrum, every row incl. the ones -subsume_tags left
+    /// out of -out (SpecResult::sbuf), when it left any out; else empty.
+    std::vector<std::string> species_rows;
     std::vector<char> keep, keep_target;
     /// #15 phase B: per spectrum, whether its rows were read as c/z-dot
     /// ions (SpecResult::cz); every row of a spectrum shares its series.
@@ -3290,7 +3533,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   struct alignas(64) PerThread
   {
     std::map<int, std::pair<size_t, size_t>> len;  ///< length -> (seen, matched)
-    size_t ms2 = 0, tags = 0, reported = 0;
+    size_t ms2 = 0, tags = 0, reported = 0, subsumed = 0;
     size_t untaggable_msn = 0;  ///< spectra not tagged although MS2 or with a precursor
     size_t no_charge = 0;  ///< MS2 whose precursor carries no charge (tagged as 2+)
     size_t multi_charge = 0;  ///< ... of them, those listing several possible charges
@@ -3383,13 +3626,17 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   struct SpecResult
   {
     std::string buf, rbuf;
-    std::string vbuf, gbuf;  ///< -resolved_out, -tag_graph_out rows
     /// Per reported row, in row order: (evalue, is_entrapment) -- the
     /// material the q_db post-pass consumes without ever reparsing a
     /// serialized %g evalue back off the TSV.
     std::vector<std::pair<double, bool>> meta;
-    bool any_target = false;  ///< at least one non-entrapment reported tag
-    /// Per written tag row: may it be species evidence (Block::row_species).
+    bool any_target = false;  ///< at least one non-entrapment tag the filter keeps (written or subsumed)
+    /// -species when -subsume_tags dropped rows of the spectrum: every row,
+    /// written or not, in row order (Block::species_rows); empty otherwise,
+    /// and then the species pass reads the written rows (buf).
+    std::string sbuf;
+    /// Per row the species pass reads (sbuf when set, else buf): may it be
+    /// species evidence (Block::row_species).
     std::vector<char> row_species;
     /// -recon_id_out: the spectrum's identification, when it placed anything.
     std::vector<PeptideIdentification> ids;
@@ -3639,8 +3886,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     };
     // 1.13 #22: the shadow pass of -alkylation_tags_out, on the selected
     // hypothesis with the run's multiplicity. Its tags are counted, never
-    // written; a spectrum read as c/z is not shadow-tagged.
-    if (alkylation_tags_on)
+    // written; a spectrum read as c/z is not shadow-tagged. Also for
+    // -alkylation_out, whose default call it is.
+    if (alkylation_shadow_on)
     {
       if (read_cz) ++pt.acc.d.alkt.spectra_cz;
       else
@@ -3651,8 +3899,31 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           const std::vector<FASTag::Tag> st = alkt_params.size() == 1
               ? FASTag::tagSpectrum(spec, hy.mz, hy.charge, alkt_params[0], alkt_tables[0], nullptr, H)
               : FASTag::mergeLengths(FASTag::tagSpectrum(spec, hy.mz, hy.charge, alkt_params, alkt_tables, nullptr, H));
+          // The alias check reads the peaks the tagger read (only when a
+          // tag holds a C).
+          static thread_local OpenMS::MSSpectrum alkt_peaks;
+          alkt_peaks.clear(true);
+          for (const FASTag::Tag& t : st)
+            if (t.seq.find('C') != std::string::npos)
+            {
+              alkt_peaks = FASTag::preparedPeaks(spec, hy.mz, hy.charge, alkt_params[0]);
+              break;
+            }
+          const int alkt_z = hy.charge > 0 ? hy.charge : 2;
+          // Release-gate review n1: the immonium check reads the spectrum as
+          // read (the peak selection may drop the low m/z ions), m/z sorted.
+          const MSSpectrum* alkt_raw = &spec;
+          static thread_local MSSpectrum alkt_sorted;
+          if (!alkt_peaks.empty() && !spec.isSorted())
+          {
+            alkt_sorted = spec;
+            alkt_sorted.sortByPosition();
+            alkt_raw = &alkt_sorted;
+          }
+          const FASTag::AlkylationTags::SpectrumPeaks alkt_sp{
+              &alkt_peaks, (hy.mz - OpenMS::Constants::PROTON_MASS_U) * alkt_z, alkt_raw};
           FASTag::AlkylationTags::Vote v;
-          for (const FASTag::Tag& t : st) pt.acc.d.alkt.addTag(v, t, alkt_cands);
+          for (const FASTag::Tag& t : st) pt.acc.d.alkt.addTag(v, t, alkt_ctx, alkt_sp);
           pt.acc.d.alkt.addSpectrum(v);
           break;
         }
@@ -3661,6 +3932,17 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     // -census: the reported rows (scratch reused per thread) and placements.
     static thread_local std::vector<FASTag::Census::TagView> ctags;
     ctags.clear();
+    // census 2: max_len and the residues of the reported tags (res_cover).
+    static thread_local std::vector<std::pair<double, double>> cres;
+    cres.clear();
+    bool cres_exact = true;   // census 3: every orientation known and every residue placed (res_cover_exact)
+    bool cres_folded = false;  // census 3: some orientation unresolved, so every span is folded
+    // census 3: each tag's span block [first, last) in cres and its mirror
+    // axis (tags of different hypotheses have different axes), folded at
+    // the end when any orientation is unresolved.
+    static thread_local std::vector<std::tuple<std::size_t, std::size_t, double>> cres_blk;
+    cres_blk.clear();
+    size_t cmax_len = 0;
     size_t cplaced = 0;
     const auto census_view = [](const FASTag::Tag& t) {
       FASTag::Census::TagView v;
@@ -3728,23 +4010,45 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       loc_peaks.sortByPosition();
     }
 
-    // Tag merging: the written rows of the selected hypothesis with
-    // E <= -resolve_max_evalue, with the values as written (the GUI reads
-    // them off -out), indexed by their position among the spectrum's rows.
-    std::vector<FASTag::TagGraph::TagIn> graph_in;
-    size_t row_no = 0;
-    const auto as_written = [](double v, bool mass) {
-      std::string b;
-      if (g_full_precision) FASTag::appendShortest(b, v);
-      else if (mass) FASTag::appendNum(b, v, std::chars_format::fixed, 4);
-      else FASTag::appendNum(b, v, std::chars_format::general, 6);
-      return std::strtod(b.c_str(), nullptr);  // C locale: FASTag never calls setlocale
-    };
+    // -subsume_tags: the rows of -out that lie wholly in another written row
+    // of the spectrum (FASTag::subsumedTags), from the final list (after
+    // every merge and cap), among the rows the -fasta filter would write.
+    // They are dropped from -out and from what follows it row by row (q_db,
+    // the reported counts) only: the filter, digest, label, alkylation,
+    // census tag statistics, placements, -qc_out, the -species evidence and
+    // the -out_spectra target flag still see every row.
+    std::vector<char> drop;
+    if (subsume_on && tags.size() > 1)
+    {
+      std::vector<char> eligible;
+      if (filtering)
+      {
+        eligible.resize(tags.size());
+        for (size_t ti = 0; ti < tags.size(); ++ti)
+        {
+          // The row's hit class, attributed target-first as the row loop
+          // does: 1 target, 2 entrapment only, 0 dropped by the filter. A
+          // row is only subsumed by a row of its own class, so a target row
+          // never gives way to a known-false entrapment row.
+          const std::string base = FASTag::baseSequence(tags[ti].seq);
+          if (filt.match(base) != FASTag::FastaFilter::Hit::NONE) eligible[ti] = 1;
+          else if (entrap_on && entrap.match(base) != FASTag::FastaFilter::Hit::NONE) eligible[ti] = 2;
+        }
+      }
+      drop = FASTag::subsumedTags(tags, tag_hyp, eligible);
+    }
+    // -species counts every row: when rows are dropped, its pass reads them
+    // all from sbuf (the written ones copied, the dropped ones formatted).
+    const bool species_all = want_species && std::find(drop.begin(), drop.end(), 1) != drop.end();
+    res.sbuf.clear();
+    size_t census_dropped = 0;  // dropped rows among ctags (census n_reported counts written rows)
+
     for (size_t ti = 0; ti < tags.size(); ++ti)
     {
       const FASTag::Tag& t = tags[ti];
       const FASTag::Hyp::Hypothesis& hy = hyp_of(ti);
       const bool sel = hy.selected;  // always true at the defaults
+      const bool written = drop.empty() || !drop[ti];
       const char* hit = "-";
       bool row_entrap = false;
       if (filtering)
@@ -3773,39 +4077,101 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           if (entrap_on) pt.target_e.push_back(t.evalue);
         }
       }
-      if (!row_entrap) res.any_target = true;
-      if (entrap_on) res.meta.emplace_back(t.evalue, row_entrap);
       if (qc_on && sel && t.evalue < res.qc_best_e)  // -qc_out tag yield (1.16)
       {
         res.qc_best_e = t.evalue;
         res.qc_best_tag = t.seq;
       }
-      ++pt.reported;
-      if (res.census && sel) ctags.push_back(census_view(t));
-
-      appendTagRow_(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
-                   p.per_residue_conf, usi, hyp_on ? &hy : nullptr, ion_column);
-      if (graph_on)
+      if (res.census && sel)
       {
-        const double e = as_written(t.evalue, false);
-        if (sel && e <= resolve_max_e)
+        ctags.push_back(census_view(t));
+        if (!written) ++census_dropped;
+        cmax_len = std::max(cmax_len, t.n_res);
+        // census 3: a -fasta match in one orientation only tells the read's
+        // orientation (fwd: a y or z-dot read, rev: a b or c read; match()
+        // says FORWARD when both hit, so a forward hit is checked reversed
+        // too). Otherwise the tag is folded and res_cover is the lower bound
+        // (res_cover_exact 0). The mirror axis is the hypothesis' neutral
+        // mass less H2O plus the series' reversed-read offset, the tagger's
+        // precursor mass (charge <= 0 tagged as 2).
+        using Orient = FASTag::Census::Orientation;
+        const bool tfwd = std::strcmp(hit, "fwd") == 0, efwd = std::strcmp(hit, "efwd") == 0;
+        Orient orient = (tfwd || efwd) ? Orient::Forward
+                      : (std::strcmp(hit, "rev") == 0 || std::strcmp(hit, "erev") == 0) ? Orient::Reversed
+                                                                                        : Orient::Unresolved;
+        if (orient == Orient::Forward)
         {
-          FASTag::TagGraph::TagIn ti_in;
-          ti_in.seq = t.seq;
-          ti_in.charge = t.charge;
-          ti_in.nterm_mass = as_written(t.nterm_mass, true);
-          ti_in.cterm_mass = as_written(t.cterm_mass, true);
-          ti_in.gapped = t.gapped;
-          ti_in.cz = t.ion_series == FASTag::IonSeries::Series::CZ;
-          ti_in.evalue = e;
-          ti_in.index = row_no;
-          graph_in.push_back(std::move(ti_in));
+          std::string rs = FASTag::baseSequence(t.seq);
+          std::reverse(rs.begin(), rs.end());
+          if ((efwd ? entrap : filt).match(rs) == FASTag::FastaFilter::Hit::FORWARD) orient = Orient::Unresolved;
         }
-        ++row_no;
+        if (orient == Orient::Unresolved)
+        {
+          cres_exact = false;
+          cres_folded = true;
+        }
+        static const double WATER_MONO = EmpiricalFormula("H2O").getMonoWeight();
+        const int zc = hy.charge > 0 ? hy.charge : 2;
+        const double axis = hy.mz * zc - zc * Constants::PROTON_MASS_U - WATER_MONO
+                          + FASTag::IonSeries::ionPair(t.ion_series).reversedOffset();
+        const std::size_t cfirst = cres.size();
+        // Codex6 review n7: a gap's residues add no span; res_cover is a lower bound then.
+        if (!FASTag::Census::addResidueSpans(cres, t.nterm_mass, t.path_mz, t.step_res, t.charge, t.n_res, t.res_mass,
+                                             orient, axis))
+          cres_exact = false;
+        cres_blk.emplace_back(cfirst, cres.size(), axis);
       }
-      if (species_sel_on) res.row_species.push_back(sel ? 1 : 0);
-      // 1.13 item 10: a two-pass hybrid spectrum's rows differ in series.
-      if (read_hybrid) res.row_series.push_back(t.ion_series == FASTag::IonSeries::Series::CZ ? 1 : 0);
+      if (!row_entrap) res.any_target = true;
+      if (written)
+      {
+        if (entrap_on) res.meta.emplace_back(t.evalue, row_entrap);
+        ++pt.reported;
+        FASTag::Terminus::Call term;
+        if (terminus_on)
+        {
+          // The row's precursor (its hypothesis) and its series' tolerance.
+          const FASTag::Param& tp = params_of(t.ion_series, spec_itms).front();
+          FASTag::Terminus::Peaks tpk;
+          if (hy.mz > 0 && std::isfinite(hy.mz)) tpk.precursor = hy.mz;
+          tpk.charge = hy.charge > 0 ? hy.charge : 2;
+          tpk.tolerance = tp.frag_tol;
+          tpk.ppm = tp.tol_ppm;
+          tpk.isotope = hy.iso;
+          term = FASTag::Terminus::seriesCall(t, tpk, termini);
+        }
+        // -fasta_proteins: the proteins of the database that matched, in the
+        // orientation the filter reported (it tries forward first).
+        std::string db_cells;
+        if (db_index)
+        {
+          const bool rev = hit[0] == 'r' || (hit[0] == 'e' && hit[1] == 'r');
+          const FASTag::ProteomeIndex& ix = row_entrap ? db_entrap_index : *db_index;
+          std::vector<FASTag::ProteomeIndex::ProteinHit> ph;
+          ix.proteinHits(FASTag::baseSequence(t.seq), rev, row_entrap ? db_entrap_decoy : db_decoy, ph);
+          db_cells = FASTag::dbProteinCells(ix, row_entrap ? db_entrap_genes : db_genes, ph,
+                                            static_cast<size_t>(fasta_proteins));
+        }
+        const size_t row_start = buf.size();
+        appendTagRow_(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
+                     p.per_residue_conf, usi, hyp_on ? &hy : nullptr, ion_column, terminus_on ? &term : nullptr,
+                     db_index ? &db_cells : nullptr);
+        if (species_all) res.sbuf.append(buf, row_start, std::string::npos);
+      }
+      else
+      {
+        ++pt.subsumed;
+        // Only the species pass reads this copy (readSpeciesFields_: the
+        // leading columns), so the -terminus columns are left off.
+        if (species_all)
+          appendTagRow_(res.sbuf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
+                        p.per_residue_conf, usi, hyp_on ? &hy : nullptr, ion_column, nullptr);
+      }
+      if (written || species_all)
+      {
+        if (species_sel_on) res.row_species.push_back(sel ? 1 : 0);
+        // 1.13 item 10: a two-pass hybrid spectrum's rows differ in series.
+        if (read_hybrid) res.row_series.push_back(t.ion_series == FASTag::IonSeries::Series::CZ ? 1 : 0);
+      }
       // The tags the digest and label reports count: every written row that
       // is ungapped with E <= 1 (of the selected hypothesis, #6). A c/z tag
       // (#15 phase B) with its series' reversed-read offset.
@@ -3820,7 +4186,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       // tag (#15 phase B) is not placed for the call: the Cys form rules
       // are b/y-only, so it is counted in Tally::excludeNonBy() instead
       // (PLAN-INTEGRATION 2.3 contract 2; doc/ALKYLATION-REPORT.md).
-      const bool alk_counted = alkylation_on && sel && FASTag::Alkylation::countsTag(t.gapped, t.evalue);
+      const bool alk_counted = alk_place && sel && FASTag::Alkylation::countsTag(t.gapped, t.evalue);
       const bool alk_tag = alk_counted && !tag_cz;
       if (alk_counted && tag_cz) pt.acc.d.alk.excludeNonBy();
       if (place_on && !row_entrap && (place_every || alk_tag))  // known-false rows must not place or bin
@@ -3948,42 +4314,6 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           if (better) delta_e = t.evalue;
           delta_have = true;
         }
-      }
-    }
-    if (graph_on && !graph_in.empty())
-    {
-      // The peaks of the selected hypothesis, prepared as for its tags
-      // (-dump_spectrum's list at the defaults). A two-pass hybrid spectrum
-      // was tagged on two preparations: the c/z one drops the unreacted and
-      // charge-reduced precursor peaks before the peak budget, the b/y one
-      // keeps them. The graph takes the union of both (preparedPeaksHybrid,
-      // the list -dump_spectrum prints for it), so every row's ladder is on it.
-      const FASTag::Hyp::Hypothesis* hs = &hyps[0];
-      for (const auto& hy : hyps) if (hy.selected) { hs = &hy; break; }
-      const FASTag::Param& gp = params_of(read_series, spec_itms).front();
-      const OpenMS::MSSpectrum gprep =
-          read_hybrid ? FASTag::preparedPeaksHybrid(spec, hs->mz, hs->charge, gp,
-                                                    params_of(FASTag::IonSeries::Series::CZ, spec_itms).front())
-                      : FASTag::preparedPeaks(spec, hs->mz, hs->charge, gp);
-      FASTag::TagGraph::Peaks gpk = FASTag::TagGraph::peaksFrom(gprep, hs->mz, hs->charge, gp);
-      gpk.isotope = hs->iso;
-      const FASTag::TagGraph::Graph g = FASTag::TagGraph::buildGraph(graph_in, gpk, graph_res, graph_opt);
-      // A block holds its spectra's rows until it is written. The rows are
-      // built in a per-thread scratch and copied at their size, so the slack
-      // of a string grown by appends is not held along with them.
-      static thread_local std::string gscratch;
-      if (resolved_on)
-      {
-        gscratch.clear();
-        FASTag::TagGraph::appendResolvedRows(gscratch, g, gpk, spec.getNativeID(), g_full_precision, graph_opt,
-                                               graph_termini);
-        res.vbuf = std::string(gscratch.data(), gscratch.size());
-      }
-      if (tag_graph_on)
-      {
-        gscratch.clear();
-        FASTag::TagGraph::appendGraphRows(gscratch, g, gpk, spec.getNativeID(), g_full_precision);
-        res.gbuf = std::string(gscratch.data(), gscratch.size());
       }
     }
     if (delta_tagged) ++pt.delta_tagged;
@@ -4201,7 +4531,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         if (h.selected) crow.charge_used = h.charge > 0 ? h.charge : 2;
       cfacts.enough_peaks = cdiag.enough_peaks;
       cfacts.n_found = sel_found;
-      cfacts.n_reported = ctags.size();
+      cfacts.n_reported = ctags.size() - census_dropped;
       cfacts.n_placed = cplaced;
       cfacts.count_placements = recon_on;
       crow.status = FASTag::Census::classify(cfacts);
@@ -4210,13 +4540,23 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       crow.n_edges = cdiag.n_edges;
       crow.n_compl = cdiag.n_compl;
       crow.n_found = sel_found;
-      crow.n_reported = ctags.size();
+      crow.n_reported = ctags.size() - census_dropped;
       const size_t best = FASTag::Census::bestTag(ctags);
       if (best != FASTag::Census::NO_INDEX)
       {
         crow.has_best = true;
         crow.best = ctags[best];
         crow.tag_cover = FASTag::Census::tagCoverOf(ctags);
+        crow.max_len = cmax_len;
+        // While any orientation is unresolved every residue is folded (known
+        // tags after their exact placement), each on its own, so a known and
+        // an unresolved read of one stretch, and overlapping tags, count each
+        // residue once; folding a folded span changes nothing. The longest
+        // tag is the other lower bound.
+        if (cres_folded)
+          for (const auto& [a, b, ax] : cres_blk) FASTag::Census::foldResidueSpans(cres, a, b, ax);
+        crow.res_cover = FASTag::Census::resCoverLowerBound(cres, cmax_len);
+        crow.res_cover_exact = cres_exact;
       }
       const size_t pre = FASTag::Census::bestTag(cpre);
       if (census_score_on && pre != FASTag::Census::NO_INDEX)
@@ -4279,12 +4619,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     if (r.buf.empty()) return;  // rbuf is only ever non-empty alongside buf
     b.rows[idx].swap(r.buf);
     if (recon_on) b.recon_rows[idx].swap(r.rbuf);
-    if (resolved_on) b.resolved_rows[idx].swap(r.vbuf);
-    if (tag_graph_on) b.graph_rows[idx].swap(r.gbuf);
     if (recon_ids_on) b.recon_id_lists[idx].swap(r.ids);
     if (entrap_on) b.row_meta[idx].swap(r.meta);
     if (species_sel_on) b.row_species[idx].swap(r.row_species);
     if (hybrid_both) b.row_series[idx].swap(r.row_series);
+    if (want_species) b.species_rows[idx].swap(r.sbuf);
     b.row_cz[idx] = r.cz ? 1 : 0;
     b.keep[idx] = 1;
     // A spectrum whose only reported tags are entrapment matches is
@@ -4302,13 +4641,12 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     {
       b.rows.resize(n_used);
       if (recon_on) b.recon_rows.resize(n_used);
-      if (resolved_on) b.resolved_rows.resize(n_used);
-      if (tag_graph_on) b.graph_rows.resize(n_used);
       if (recon_ids_on) b.recon_id_lists.resize(n_used);
       if (glyco_on) b.glyco_rows.resize(n_used);
       if (entrap_on) b.row_meta.resize(n_used);
       if (species_sel_on) b.row_species.resize(n_used);
       if (hybrid_both) b.row_series.resize(n_used);
+      if (want_species) b.species_rows.resize(n_used);
     }
     b.keep.assign(n_used, 0);
     b.row_cz.assign(n_used, 0);
@@ -4341,7 +4679,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // thread counts. 4 MB, emptied at the end of every block; larger only
   // holds more memory.
   constexpr size_t WRITE_CHUNK = size_t(4) << 20;
-  std::string tsv_pending, rtsv_pending, ctsv_pending, vtsv_pending, ttsv_pending;
+  std::string tsv_pending, rtsv_pending, ctsv_pending;
   auto drain = [](std::ofstream& os, std::string& pending)
   {
     if (pending.empty()) return;
@@ -4376,10 +4714,6 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       if (!b.keep[i]) continue;
       put_rows(tsv, tsv_pending, b.rows[i]);
       if (recon_on && !b.recon_rows[i].empty()) { put_rows(rtsv, rtsv_pending, b.recon_rows[i]); b.recon_rows[i].clear(); }
-      // Freed, not cleared: these rows are copied at their size, so a kept
-      // capacity would only be held until the slot's next swap.
-      if (resolved_on && !b.resolved_rows[i].empty()) { put_rows(vtsv, vtsv_pending, b.resolved_rows[i]); std::string().swap(b.resolved_rows[i]); }
-      if (tag_graph_on && !b.graph_rows[i].empty()) { put_rows(ttsv, ttsv_pending, b.graph_rows[i]); std::string().swap(b.graph_rows[i]); }
       if (recon_ids_on)
       {
         for (PeptideIdentification& id : b.recon_id_lists[i]) recon_ids.push_back(std::move(id));
@@ -4392,7 +4726,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       }
       if (want_species)
       {
-        const std::string& r = b.rows[i];
+        // Every row of the spectrum: the written ones, or all of them when
+        // -subsume_tags left some out of -out (Block::species_rows).
+        const std::string& r = b.species_rows[i].empty() ? b.rows[i] : b.species_rows[i];
         size_t start = 0, row = 0, rix = 0;
         // 1.13 item 10: per-row series of a two-pass hybrid spectrum.
         const std::vector<char>* rser =
@@ -4427,12 +4763,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         }
       }
       b.rows[i].clear();
+      if (want_species) b.species_rows[i].clear();
       if (want_out && b.keep_target[i]) kept_idx.push_back(static_cast<Size>(b.base + i));
     }
     drain(tsv, tsv_pending);
     if (recon_on) drain(rtsv, rtsv_pending);
-    if (resolved_on) drain(vtsv, vtsv_pending);
-    if (tag_graph_on) drain(ttsv, ttsv_pending);
     if (census_on) drain(ctsv, ctsv_pending);
   };
 
@@ -4768,8 +5103,6 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     };
     drop(tsv, out);
     if (recon_on) drop(rtsv, recon_out);
-    if (resolved_on) drop(vtsv, resolved_out);
-    if (tag_graph_on) drop(ttsv, tag_graph_out);
     if (glyco_on) drop(gtsv, glyco_out);
     if (census_on)
     {
@@ -4908,6 +5241,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     n_untaggable_msn += pt.untaggable_msn;
     n_tags += pt.tags;
     n_reported += pt.reported;
+    n_subsumed += pt.subsumed;
     for (const auto& kv : pt.len)
     {
       by_len[kv.first].first += kv.second.first;
@@ -4964,7 +5298,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // Before the hand-off exports, so a reader of the call there sees the
   // same Call that -alkylation_out writes after phase 9.
   FASTag::Alkylation::Call alk_call;
-  if (alkylation_on)
+  if (alk_place)
   {
     alk_call = FASTag::Alkylation::callAlkylation(run_acc.d.alk, alk_settings);
     // 1.13 (#24): on a shipped proteome, say when the tags were too short to place.
@@ -5206,6 +5540,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     }
     const FASTag::Census::Tally& tally = run_acc.f.census;
     std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::VERSIONED);
+    rows.push_back(FASTag::Census::maxTagsRow(p.max_tag_count, lengths.size()));  // census 2
     for (FD::Row& r : FASTag::Census::summaryRows(tally, static_cast<std::uint64_t>(n_total), subsampling))
       rows.push_back(std::move(r));
     if (census_ids_on)
@@ -5298,6 +5633,13 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         }
       }
     }
+    // The label mass of the tag ends (the -label_out call) decides the kit family.
+    if (count_on)
+    {
+      FD::TerminusCounter qc_tc(digest_settings.window);
+      for (const PerThread& pt : per_thread) qc_tc.merge(pt.digest);
+      qc->setLabelEvidence(FASTag::RunQC::labelEvidence(qc_tc, digest_settings));
+    }
     std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::VERSIONED);
     for (FD::Row& r : qc->rows(subsampling)) rows.push_back(std::move(r));
     FASTag::PartFile qc_part(qc_out);
@@ -5322,17 +5664,6 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     if (rtsv.fail())
     {
       OPENMS_LOG_ERROR << "Failed writing " << recon_out << " (disk full?)." << std::endl;
-      return CANNOT_WRITE_OUTPUT_FILE;
-    }
-  }
-  for (auto [os, on, path] : {std::make_tuple(&vtsv, resolved_on, &resolved_out),
-                              std::make_tuple(&ttsv, tag_graph_on, &tag_graph_out)})
-  {
-    if (!on) continue;
-    os->close();
-    if (os->fail())
-    {
-      OPENMS_LOG_ERROR << "Failed writing " << *path << " (disk full?)." << std::endl;
       return CANNOT_WRITE_OUTPUT_FILE;
     }
   }
@@ -6134,24 +6465,50 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     }
   }
 
-  // ---- 1.12 D: -alkylation_out (#3g) ----
+  // ---- 1.12 D: -alkylation_out (#3g); format 2 (feedback 202dbcf4): the
+  // tag-only call, refined by the placements when there is a database ----
+  const double alkt_tol_da = alkylation_shadow_on ? FASTag::AlkylationTags::edgeToleranceDa(len_params.front()) : 0.0;
+  FASTag::AlkylationTags::ReportInfo alkt_info;
+  if (alkylation_shadow_on)
+  {
+    alkt_info.tol_da = alkt_tol_da;
+    alkt_info.tol_ppm = len_params.front().tol_ppm;
+    alkt_info.resolved_below_mz = alkt_ctx.resolved_below_mz;
+    alkt_info.dropped = alkt_dropped;
+    alkt_info.alpha = alkt_alpha;
+    for (int L : lengths) alkt_info.lengths += (alkt_info.lengths.empty() ? "" : ",") + std::to_string(L);
+  }
   if (alkylation_on)
   {
-    const FASTag::Alkylation::Tally& at = run_acc.d.alk;
-    const FASTag::Alkylation::Call& call = alk_call;
-    FASTag::Alkylation::ReportInfo info;
-    info.database = recon_db;
-    info.database_source = alk_db_source;
-    if (alk_shipped.entries > 0)
-    {
-      info.database_release = FASTag::Alkylation::shippedRelease(alk_shipped);
-      info.min_tag_length = recon_min_len;
-      info.longest_tag = max_len;
-    }
-    for (const auto& m : p.mods)
-      if (!m.variable && m.residue == 'C') info.reagent_note += (info.reagent_note.empty() ? "" : "+") + m.name;
+    const FASTag::AlkylationTags::Tally& tt = run_acc.d.alkt;
+    // Codex7 review n1: the tag call never names a form with an exact alias
+    // (aliasGuard); the placements on a database can confirm it.
+    const FASTag::Alkylation::Call tag_call =
+        FASTag::AlkylationTags::aliasGuard(FASTag::AlkylationTags::callTags(tt, alk_settings, alkt_ctx), alkt_ctx);
+    const FASTag::Alkylation::Call call = FASTag::Alkylation::combineCalls(tag_call, alk_place ? &alk_call : nullptr);
     std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::VERSIONED);
-    for (FD::Row& r : FASTag::Alkylation::alkylationRows(at, call, alk_settings, alk_forms, info)) rows.push_back(std::move(r));
+    if (alk_place)
+    {
+      FASTag::Alkylation::ReportInfo info;
+      info.database = recon_db;
+      info.database_source = alk_db_source;
+      if (alk_shipped.entries > 0)
+      {
+        info.database_release = FASTag::Alkylation::shippedRelease(alk_shipped);
+        info.min_tag_length = recon_min_len;
+        info.longest_tag = max_len;
+      }
+      for (const auto& m : p.mods)
+        if (!m.variable && m.residue == 'C') info.reagent_note += (info.reagent_note.empty() ? "" : "+") + m.name;
+      for (FD::Row& r : FASTag::Alkylation::alkylationRows(run_acc.d.alk, alk_call, alk_settings, alk_forms, info))
+        rows.push_back(std::move(r));
+    }
+    else
+      for (FD::Row& r : FASTag::Alkylation::tagOnlyRunRows(alk_settings)) rows.push_back(std::move(r));
+    for (FD::Row& r : FASTag::AlkylationTags::rows(tt, tag_call, alk_settings, alkt_cands, alkt_info)) rows.push_back(std::move(r));
+    for (FD::Row& r : FASTag::Alkylation::callRows("alkylation_call", call, alk_settings, alk_forms,
+                                                   call.source == "placement" ? "binned spectra" : "votes", true))
+      rows.push_back(std::move(r));
     FASTag::PartFile alk_part(alkylation_out);
     if (!alk_part.begin() || !FD::writeReport(alk_part.writePath(), rows) || !alk_part.commit())
     {
@@ -6159,10 +6516,15 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                        << (alk_part.error().empty() ? std::string() : ": " + alk_part.error()) << std::endl;
       return CANNOT_WRITE_OUTPUT_FILE;
     }
-    OPENMS_LOG_INFO << "Alkylation: " << at.spectra << " spectra with a single-Cys placement, "
-                    << (call.called ? std::string("call ") + FASTag::Alkylation::className(call.cls)
-                                    : "no_call " + call.reason)
-                    << " -> " << alkylation_out << std::endl;
+    OPENMS_LOG_INFO << "Alkylation: " << tt.spectra << " of " << tt.spectra_tagged << " spectra vote from their tags"
+                    << (alk_place ? ", " + std::to_string(run_acc.d.alk.spectra) + " have a single-Cys placement" : std::string())
+                    << ", " << (call.called ? std::string("call ") + FASTag::Alkylation::className(call.cls)
+                                            : "no_call " + call.reason +
+                                                  (call.reason == FASTag::Alkylation::ALIAS_NEEDS_DATABASE
+                                                       ? std::string(" (candidate ") + FASTag::Alkylation::className(call.cls) +
+                                                             ", needs a protein database to confirm)"
+                                                       : std::string()))
+                    << " (" << call.source << ") -> " << alkylation_out << std::endl;
   }
 
   // ---- 1.13 #22: -alkylation_tags_out ----
@@ -6172,14 +6534,10 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     FASTag::Alkylation::Settings as;
     as.min_spectra = static_cast<std::uint64_t>(getIntOption_("alkylation_min_spectra"));
     as.min_share = getDoubleOption_("alkylation_min_share");
-    const double tol_da = FASTag::AlkylationTags::edgeToleranceDa(len_params.front());
-    const FASTag::Alkylation::Call call = FASTag::AlkylationTags::callTags(at, as, alkt_cands, tol_da);
-    FASTag::AlkylationTags::ReportInfo info;
-    info.tol_da = tol_da;
-    info.dropped = alkt_dropped;
-    for (int L : lengths) info.lengths += (info.lengths.empty() ? "" : ",") + std::to_string(L);
+    const FASTag::Alkylation::Call call =
+        FASTag::AlkylationTags::aliasGuard(FASTag::AlkylationTags::callTags(at, as, alkt_ctx), alkt_ctx);
     std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::VERSIONED);
-    for (FD::Row& r : FASTag::AlkylationTags::rows(at, call, as, alkt_cands, info)) rows.push_back(std::move(r));
+    for (FD::Row& r : FASTag::AlkylationTags::rows(at, call, as, alkt_cands, alkt_info)) rows.push_back(std::move(r));
     FASTag::PartFile part(alkylation_tags_out);
     if (!part.begin() || !FD::writeReport(part.writePath(), rows) || !part.commit())
     {
@@ -6190,7 +6548,10 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     OPENMS_LOG_INFO << "Alkylation (tags, no database): " << at.spectra << " of " << at.spectra_tagged
                     << " spectra vote, "
                     << (call.called ? std::string("call ") + FASTag::Alkylation::className(call.cls)
-                                    : "no_call " + call.reason)
+                                    : "no_call " + call.reason +
+                                          (call.reason == FASTag::Alkylation::ALIAS_NEEDS_DATABASE
+                                               ? std::string(" (candidate ") + FASTag::Alkylation::className(call.cls) + ")"
+                                               : std::string()))
                     << " -> " << alkylation_tags_out << std::endl;
   }
 
@@ -6203,6 +6564,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   OPENMS_LOG_INFO << n_ms2 << " MS2 spectra, " << n_tags << " tags";
   if (filtering) OPENMS_LOG_INFO << " -> " << n_reported << " after filtering";
   OPENMS_LOG_INFO << std::endl;
+  if (subsume_on) OPENMS_LOG_INFO << "Subsumed tags dropped: " << n_subsumed << std::endl;
   // 1.15.5 change B: stderr only (stdout's summary line is read by gates).
   if (itms_on_)
     std::cerr << "Tolerance by analyzer: " << n_ms2_itms.load() << " ion-trap MS2 tagged at " << itms_tol

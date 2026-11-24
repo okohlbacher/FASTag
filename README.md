@@ -326,9 +326,9 @@ Linux x64 (from 1.15.0 also Linux arm64; glibc ≥ 2.35, WebKitGTK 4.1: Ubuntu 2
 For a first run, keep **Generate tags**, choose spectra, confirm the
 MS2 analyser's tolerance, then run and inspect **Results → Tags**. For a
 separate survey, choose **Characterize a run** and read **Results → Overview**;
-that task samples a tenth of the spectra and enables species, digest, label
-and glyco reports. To survey the whole input, set **Subsample fraction** to `1`
-and **Subsample spectra** to `0`. The
+that task reads all spectra and enables species, digest, label, alkylation
+and glyco reports. For a quicker look at a large run, set **Spectra to read**
+to a share. The
 [desktop first-run guide](gui/README.md#first-run) explains the tasks,
 outputs, checks and result views.
 
@@ -783,14 +783,11 @@ vendored.
 | `-res_conf` | off | Append per-residue confidences 0..100, N→C, space-separated (see Assembly export) |
 | `-usi_collection <id>` | none | Append a `usi` column naming each tag's spectrum as a Universal Spectrum Identifier in this collection (`PXDnnnnnn`, …, or `USI000000`; see Output) |
 | `-diversity` | off | Under `-max_tags`, demote near-duplicate re-reads of an already-kept tag's peak set behind non-duplicates, then backfill. Reorders which tags occupy the capped slots; never changes output size or rank 1 (see Tag diversity) |
-| `-resolved_out <file>` | none | Merge each spectrum's tags (E-value <= `-resolve_max_evalue`) on its peaks into resolved tags, best first, one row each (see Tag merging). Not under `-stream` |
-| `-tag_graph_out <file>` | none | Advanced: the merge graph, one row per placement of a spectrum's tags on its peaks (see Tag merging). Not under `-stream` |
-| `-resolve_score <scheme>` | cstar | Advanced: how resolved tags are ranked: `cstar` (each step a chain adds is worth its C* log-odds of being right less `-resolve_threshold`; rank 1 is the first resolved tag that holds no peak together with its own complement), `steplogodds` (the 1.15 step model, no complement rule), `evidence` (summed E-value evidence of its tags) or `anchor` (the best single tag first, then `steplogodds`) |
-| `-resolve_threshold <t>` | 3 | Advanced: the log-odds a step must exceed to lengthen a resolved tag |
-| `-resolve_max_evalue <E>` | 1 | Advanced: largest E-value of the tags merged |
-| `-resolve_join` | off | Advanced: also join tags that only touch at a peak |
-| `-recon_out <file>` | none | Reconcile reported tags against a protein database: one row per placement with protein, peptide, position, flank agreement, localized mass gap and its interpretation (see Reconciliation). Requires `-recon_fasta` or `-fasta` |
+| `-subsume_tags <on\|off>` | on | Leave out of `-out` a tag whose peaks are a run of another tag's that reads the same residues on them, in the same spectrum (same fragment charge, ion series and precursor hypothesis), when that tag is at least as significant, E-value <= its own (a longer tag with a worse E-value keeps the shorter one; of two identical tags the lower E-value stays). At `-tag_lengths 3 4 5` on PXD003531 it drops 41% of the rows and 1.3% of the PSM spectra lose their only correct tag; held out on PXD020401, 45% and 0.85%. Only the `-out` rows change; the digest, label, alkylation, census tag statistics, `-species` evidence, placements and `-qc_out` count every tag; with `-entrapment_fasta` a target tag is never left out for an entrapment-only one. At one seed length without `-extension` no tag lies in another; `off` writes every tag (see Subsumed tags) |
+| `-terminus` | off | Append `series` and `terminus` columns: which series (b or y) a tag was read off, from a terminal anchor of one of its two readings of a kind that was measured to hold, and every anchor token found (see Terminal anchors). `series` is `-` above 25 ppm or 0.02 Da and on c/z rows (not measured; `terminus` still lists their tokens). Not with `-stream` |
+| `-recon_out <file>` | none | Reconcile reported tags against a protein database: one row per placement with protein, peptide, position, flank agreement, localized mass gap and its interpretation (see Reconciliation). Requires `-recon_fasta`, `-recon_proteome` or `-fasta` |
 | `-recon_fasta <file>` | `-fasta` | Database for `-recon_out`; independent of the membership filter, so a proteome-scale reconciliation never forces the filter's per-length index build |
+| `-recon_proteome <name>` | none | A shipped proteome as the database of `-recon_out` (and `-delta_out`, `-massgap_out`, `-recon_id_out`) when `-recon_fasta` is not given: `human`, `mouse`, `yeast` or `ecoli`, the UniProt reference proteomes of `-alkylation_proteome` (`share/FASTag/alkylation`, checked against their sha256). Used before `-fasta`. Tags place on them from 8 residues (human, mouse) or 7 (yeast, ecoli): at `-tag_length 3`, give `-extension 3` or 2. Ignored, with a warning, with `-recon_fasta`, without `-recon_out`, and with `-shortlist_out`, `-fasta_out` or `-search_config_out` (they need a FASTA file) |
 | `-recon_missed_cleavages <n>` | 1 | Missed tryptic cleavages in reconciliation windows; 2 by the shortlist recipe default (with `-shortlist_out`, `-fasta_out` or `-search_config_out` and a tryptic shortlist, unless given; 1.15.4) |
 | `-recon_min_length <n>` | 0 | Shortest tag worth reconciling; 0 derives the chance-match floor from database size; 6 by the shortlist recipe default (with `-shortlist_out`, `-fasta_out` or `-search_config_out` and a tryptic shortlist, unless given; 1.15.4) |
 | `-recon_sub_tolerance <tol>` | 5 | Advanced: tolerance of a `sub:X->Y` reading in `delta_interp` (and so in `-delta_out`'s `top_interps`), never looser than `-fragment_tolerance`. Residue mass differences lie a few mDa apart, so at a 20 ppm fragment tolerance most unexplained gaps fitted some substitution (+2.004 read as `sub:P->V`, 11.7 mDa off). `0` = `-fragment_tolerance` (1.15) |
@@ -828,9 +825,9 @@ vendored.
 | `-digest_flank2 <off\|auto>` | off | Experimental: where y1 is cut off or the P1 counts are too few, score the two-residue flank sums m(P2) + m(P1) instead |
 | `-digest_min_confidence <f>` / `-digest_calibration <file>` | 0 / shipped | Experimental: write the calibrated `p_correct` of a call and withhold one below the threshold (`low_confidence`); the shipped calibration is unfitted (p_correct 0.5) |
 | `-digest_quality <enzyme\|auto>` | none | Experimental (1.13): append missed-cleavage and non-specific-end measurements (section `quality`) to `-digest_out` for a model of the protease table (e.g. `Trypsin`) or for the report's own call (`auto`); see doc/DESIGN-digest.md, "Digestion quality" |
-| `-alkylation_out <file>` | none | Experimental (1.12), not validated on held-out data: which reagent alkylated the cysteines, or none, from the placements of single-Cys peptides (see Digest, label and mass-gap reports; format in doc/ALKYLATION-REPORT.md) |
-| `-alkylation_proteome <name\|file>` | auto | Database of `-alkylation_out` when nothing else places: `auto` (= human), `human`, `mouse`, `yeast`, `ecoli` name the shipped UniProt reference proteomes (release 2026_04, reviewed entries, `share/FASTag/alkylation/<name>.fasta.gz`, CC BY 4.0; since 1.13, in 1.12 they stopped with exit code 6), or a FASTA file (`.gz` allowed); ignored with `-recon_fasta`. **The shipped proteomes need `-tag_length 8` (human, mouse) or `-tag_length 7` (yeast, ecoli):** shorter tags do not place on them, and at the default `-tag_length 3` the call is `no_call` with reason `tags_too_short`. The report's `database_release` row names the release and the FASTA's sha256, which FASTag checks the file against (doc/ALKYLATION-REPORT.md, Shipped proteomes) |
-| `-alkylation_min_spectra <n>` / `-alkylation_min_share <f>` / `-alkylation_window <Da>` | 10 / 0.6 / 0 | Advanced: spectra and share the call needs; bin window (0 = 0.02 Da on ppm runs, 0.5 Da on Da runs) |
+| `-alkylation_out <file>` | none | Experimental: which reagent alkylated the cysteines, or none. **Needs no database**: the call is read off the C residues in the tags (the method of `-alkylation_tags_out`), with the counts per C form, and `no_call` with the reason when too few spectra vote. A reagent whose C has the mass of two residues (Carbamidomethyl = C + G, Propionamide = A + C) is only a candidate from the tags (`no_call` `alias_needs_database`, row `candidate`) and is called when the placements on a database agree. Give `-extension` for more votes (tested with `-tag_length 4 -extension 6`). With `-recon_fasta`, `-fasta` or an explicit `-alkylation_proteome` it also places single-Cys peptides on that database as a check (see Digest, label and mass-gap reports; format 2 in doc/ALKYLATION-REPORT.md) |
+| `-alkylation_proteome <name\|file>` | auto | Database `-alkylation_out` checks its tag call on, when nothing else places. `auto`: `-recon_fasta` or `-fasta` when given, else **no database** (before, `auto` meant the shipped human proteome). `human`, `mouse`, `yeast`, `ecoli` name the shipped UniProt reference proteomes (release 2026_04, reviewed entries, `share/FASTag/alkylation/<name>.fasta.gz`, CC BY 4.0), or give a FASTA file (`.gz` allowed); ignored with `-recon_fasta`. The shipped proteomes need `-tag_length 8` (human, mouse) or `-tag_length 7` (yeast, ecoli): shorter tags do not place on them, and the placement call is then `no_call` with reason `tags_too_short` (the tag call is unaffected). The report's `database_release` row names the release and the FASTA's sha256, which FASTag checks the file against (doc/ALKYLATION-REPORT.md, Shipped proteomes) |
+| `-alkylation_min_spectra <n>` / `-alkylation_min_share <f>` / `-alkylation_window <Da>` | 10 / 0.6 / 0 | Advanced: votes (or placed spectra) and share a call needs; placement bin window, read only with a database (0 = 0.02 Da on ppm runs, 0.5 Da on Da runs) |
 | `-alkylation_tags_out <file>` | none | Experimental (1.13), advanced; its held-out test passed at the margin (40 of 57 runs called, 37 right; see Validation), and unalkylated runs are rarely called: the database-free alkylation call. Every MS2 spectrum is tagged a second time with unmodified C and one alternative C edge per reagent; a spectrum votes when its best such tag (E <= 1e-4) holds a C inside the tag (use with `-extension`; measured with `-tag_length 4 -extension 6`; without extension few spectra vote), and the call uses `-alkylation_min_spectra` / `-alkylation_min_share`. Every other output is unchanged (format in doc/ALKYLATION-REPORT.md, section `-alkylation_tags_out`) |
 | `-shortlist_out <file>` | none | Experimental (1.12): ranked protein shortlist from the tag placements on `-recon_fasta` (or `-fasta`), one row per protein with evidence (see Protein shortlist and search hand-off). A search-space reduction, NOT FDR-controlled |
 | `-fasta_out <file>` | none | Experimental: reduced FASTA of the kept proteins (never decoys), then `-shortlist_background`. When it would hold no protein, neither it nor `-search_config_out` is written and FASTag exits with code 13 (1.14; before, an empty file and exit code 0) |
@@ -855,6 +852,7 @@ vendored.
 | `-search_decoy_prefix <s>` | `rev_` (Sage, MSFragger) / `DECOY_` (Comet) | Prefix of the decoys the engine generates (MSFragger: the decoys FASTag appends to `-fasta_out`, or the ones the input database holds) |
 | `-search_shifts <mode>`, `-search_shifts_out <file>`, `-shift_max_variable`, `-shift_max_offsets`, `-shift_expand_sites`, `-shift_site_min_share`, `-shift_site_min_count`, `-shift_site_min_ions` | none | Removed in 1.14 (failed both held-out tests, see Mass shifts as search configuration): accepted with a warning, no effect; `-search_config_out` is unchanged |
 | `-entrapment_fasta <file>` | none | Entrapment database (foreign species) calibrating a `q_db` column: the estimated false-match rate of the `-fasta` filter at each E-value (see q_db). Requires `-fasta` |
+| `-fasta_proteins <n>` | 0 | Name up to n of the `-fasta` proteins each written tag occurs in: appends `db_proteins` (`identifier@start-end`, 1-based, `;`-separated), `db_genes` (the `GN=` of each, `-` without one) and `db_protein_count` (all proteins), in the orientation of `fasta_hit`, targets before decoys; `efwd`/`erev` rows name `-entrapment_fasta` proteins. 0 writes none. Requires `-fasta` |
 | `-glyco` | off | Flag oxonium-bearing MS2 spectra to `<out>` with its extension replaced by `.glyco.tsv` (see Glyco flag) |
 | `-glyco_out <file>` | `<out>` with its extension replaced by `.glyco.tsv` | With `-glyco`: per-spectrum oxonium report |
 | `-glyco_min_fraction <f>` | 0.10 | With `-glyco`: summed oxonium intensity over base peak, the literature threshold |
@@ -896,7 +894,7 @@ vendored.
 | `-pick_profile <legacy\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `off` never. Centroided MS2 are never re-picked. `-out_spectra` writes the spectra as they were tagged. Not with `-stream`. `auto` was removed in 1.14 (failed its held-out test, see Held-out acceptance): accepted with a warning, read as `legacy` |
 | `-pick_unknown_type` | off | Removed in 1.14 (read only by `-pick_profile auto`, which failed its held-out test): accepted with a warning, no effect |
 | `-ion_series <by\|cz\|auto>` | by | Ion series the MS2 spectra are read as: `by` (b/y ions, as 1.11), `cz` (c/z• ions of ETD/ECD, every spectrum), `auto` (c/z• for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included, with a warning). `ax` (1.13, a/x ions) was removed in 1.14 (failed its held-out test, see Held-out acceptance): accepted with a warning, read as `by`. Under `cz`, and under `auto` when the run has electron-activated spectra, the tag TSV gains a last `ion_series` column and the census a `best_ion_series` column (see Ion series). Not with `-stream`. Opt-in: on held-out Orbitrap ETD spectra `auto` gave 82.2% correct rank-1 tags against 0.9% under `by` (verdict inconclusive, see Validation) |
-| `-ion_series_hybrid <by\|both>` | by | 1.13, under `-ion_series auto` only: how hybrid EThcD/ETciD spectra are read. `by` is `auto` as in 1.12 (b/y ions, with the `Hybrid activation:` warning); `both` tags each hybrid mzML spectrum twice, as b/y and as c/z• ions, multiplies every E-value by 2 and merges the two passes' rows by E-value under one `-max_tags` cap; each row keeps its `ion_series` and every per-row consumer reads its offsets from it; `-species` and `-alkylation_out` count b/y rows only. The precursor hypotheses, `-check_header_charge`, the `-complement_tolerance_unit auto` probe and the census diagnostics (`n_kept`, `n_edges`, `n_compl`) still read a hybrid spectrum as b/y; `-dump_spectrum` and tag merging take the union of its b/y and c/z• preparations (doc/HYBRID-IONS.md). Ignored with a warning under other modes; not with `-stream`. Experimental; **passed** its held-out test (see Held-out acceptance) |
+| `-ion_series_hybrid <by\|both>` | by | 1.13, under `-ion_series auto` only: how hybrid EThcD/ETciD spectra are read. `by` is `auto` as in 1.12 (b/y ions, with the `Hybrid activation:` warning); `both` tags each hybrid mzML spectrum twice, as b/y and as c/z• ions, multiplies every E-value by 2 and merges the two passes' rows by E-value under one `-max_tags` cap; each row keeps its `ion_series` and every per-row consumer reads its offsets from it; `-species` and `-alkylation_out` count b/y rows only. The precursor hypotheses, `-check_header_charge`, the `-complement_tolerance_unit auto` probe and the census diagnostics (`n_kept`, `n_edges`, `n_compl`) still read a hybrid spectrum as b/y; `-dump_spectrum` takes the union of its b/y and c/z• preparations (doc/HYBRID-IONS.md). Ignored with a warning under other modes; not with `-stream`. Experimental; **passed** its held-out test (see Held-out acceptance) |
 | `-ion_series_photo <series>` | by | Removed in 1.14 (the a/x reading failed its held-out test, see Held-out acceptance): accepted with a warning, no effect |
 | `-complement_tolerance_unit <Da\|fragment\|auto>` | Da | How the complement window is set: `Da` is `-complement_tolerance` (0.02 Da, as 1.11); `fragment` is `-complement_tol_factor` x (the fragment tolerance at the peak + at its partner); `auto` measures it on the run from the complement pairs of high-confidence tags (see doc/COMPLEMENT-TOLERANCE.md) and never sets a window narrower than `-complement_tolerance`, which is also the fallback when the probe finds too few pairs. The window in force is logged and recorded in `-out_spectra` (mzML) and the `-census`/`-alkylation_out` run rows. `auto` is **validated**: its third held-out test passed (+3.31 points of correct rank-1 tags on ion trap, timsTOF not worse; see Validation); the first, with an earlier estimator, failed and the second was inconclusive. The default stays `Da`. Not with `-stream` or mzPeak input. Since 1.15.5 `auto` is the default when `-fragment_tolerance_unit Da` and no complement option is given (not under `-stream` or with mzPeak input) |
 | `-complement_rule <same_charge\|precursor\|both>` | same_charge | Experimental (1.12; held-out test of `both` inconclusive, see Validation): which fragment pairs count as complements in the complement subscore: `same_charge` (both at the fragment charge z), `precursor` (the partner carries the precursor's remaining c - z charges) or `both` (advanced) |
@@ -913,6 +911,7 @@ vendored.
 | `-check_header_out <file>` | (none) | With `-check_header_charge`: one row per header-charged MS2 spectrum (header charge, call, evidence, verdict, the charge tagged) |
 | `-probe_input <file>` | (none) | Print the metadata of a spectra file (or a FASTA alone) as JSON lines and exit; writes no file, needs no `-in`/`-out` (advanced; see Probe and spectrum dump) |
 | `-dump_spectrum <nativeId>` | (none) | Print the peaks FASTag tags of one spectrum of `-in` as JSON lines and exit; writes no file (advanced; see Probe and spectrum dump) |
+| `-data_paths` | off | Print the folders this FASTag reads its shipped data from, the shipped proteomes present and what `-alkylation_proteome auto` reads without a database, as one JSON line, and exit; needs no `-in`/`-out` (advanced; the desktop app's capability check; see Probe and spectrum dump) |
 
 The `-glyco_*` options are read only with `-glyco`, the `-census_*` options only
 with `-census`, and the `-taxdb`,
@@ -1039,6 +1038,26 @@ entrapment-only matches under `-entrapment_fasta`. The `evalue` of a gapped row
 is the ranking value, E × `-gap_penalty`, so it can exceed `-max_evalue`; divide
 by the penalty for the raw E-value.
 
+**Database proteins** (`-fasta_proteins <n>`, 1.16). Three columns after the
+other optional ones (`q_db` stays last) say where each written tag lies in the
+`-fasta` database: `db_proteins`, the first n proteins as
+`identifier@start-end` (1-based residue positions of the database match,
+`;`-separated; a match through an isobaric respelling such as N for GG spans
+one residue more), `db_genes`, the `GN=` value of each (`-` where the header has
+none), and `db_protein_count`, the number of distinct proteins in all. Only
+occurrences in the orientation `fasta_hit` names count: a `fwd` row lists
+proteins holding the tag as written, a `rev` row proteins holding it reversed.
+Each protein is listed once, at its first occurrence; target proteins come
+before decoys (`rev_`, `DECOY_` and the other `-shortlist_decoy_affix`
+defaults), each in database order. `efwd`/`erev` rows name proteins of the
+`-entrapment_fasta`. The positions come from a suffix-array index over the
+database (about 6.5 bytes per residue, shared with `-recon_out` when it reads the
+same `-fasta`). Without the option `-out` is unchanged; the FASTag GUI sets it to
+3 whenever a FASTA is given. A protein is named by its identifier only: when
+entries of the database repeat an identifier, the run warns once (the count and
+the first one), and a position in such an identifier may be in any of its
+entries (the GUI does not align it).
+
 With a non-default `-unknown_charge` or `-isotope_error` (1.12), or `-check_header_charge both` (1.13), four columns
 follow the optional ones: `prec_charge` (the precursor charge the row was
 tagged at), `charge_src` (`header`, `possible`, `inferred`, `ambiguous`,
@@ -1070,7 +1089,7 @@ left out. Hybrid EThcD/ETciD spectra are read as b/y under `auto`; with
 `-ion_series_hybrid both` (1.13, experimental; passed its held-out test, see Held-out acceptance) they are tagged twice, as b/y
 and as c/z•, and the rows of both passes are merged by E-value, each with its
 own `ion_series`; the precursor hypotheses, `-check_header_charge`, the complement-tolerance probe
-and the census diagnostics still read them as b/y, `-dump_spectrum` and tag merging take the union of
+and the census diagnostics still read them as b/y, `-dump_spectrum` takes the union of
 both preparations (doc/HYBRID-IONS.md). The a/x reading
 (1.13, `-ion_series ax` and `-ion_series_photo`) was removed in 1.14: it failed its held-out test (see
 Held-out acceptance).
@@ -1167,10 +1186,10 @@ FDR-controlled. See Mass-shift survey.
 | Column | Meaning |
 |---|---|
 | `spectrum` | native ID |
-| `n_oxonium` | distinct oxonium ions matched |
+| `n_oxonium` | distinct oxonium ions matched; a HexNAc fragment (126.055 to 186.076) only with HexNAc 204.087 |
 | `oxonium_frac` | their summed intensity over the base peak, 3 decimals |
 | `glyco` | 1 when `n_oxonium` >= 2 and `oxonium_frac` >= `-glyco_min_fraction`, else 0 |
-| `ions` | names of the matched ions, separated by `;` (e.g. `HexNAc;NeuAc-H2O`) |
+| `ions` | names of the counted ions, separated by `;` (e.g. `HexNAc;NeuAc-H2O`) |
 
 **`-check_header_out`**: one row per MS2 spectrum with a header charge, in input
 order; the 18 columns are described in
@@ -1451,19 +1470,39 @@ options and their values.
   Cys alkylation): spectra near each Cys alkylation mass, and gap peaks
   explained as the smallest combination of up to three of 38 Unimod
   modifications.
-- **`-alkylation_out`** (1.12, experimental, not validated on held-out data)
-  calls the Cys alkylation reagent (Carbamidomethyl, Propionamide,
-  Nethylmaleimide, Methylthio, Carboxymethyl) or `none` (unmodified, oxidised,
-  cysteinylated or dehydroalanine Cys) from the placements of the run's own
-  reconciler: each MS2 spectrum votes once with its best tag placed on a
-  peptide with exactly one C on the gap side, and the reagent mass is the gap
-  plus the fixed C modification. On a labelled run (a fixed N- or C-terminal
-  TMT or iTRAQ modification) the label is first taken off a gap on its side,
-  as the reconciler's flanks carry it. Without `-recon_out` the placements are made
-  on `-recon_fasta` or `-alkylation_proteome` and not written; every other
-  output is the same with and without it. Sections `alk_run`, `alk_cys` and
-  `alkylation_call`; the format is documented and versioned in
-  doc/ALKYLATION-REPORT.md.
+- **`-alkylation_out`** (experimental) calls the Cys alkylation reagent
+  (Carbamidomethyl, Propionamide, Nethylmaleimide, Methylthio, Carboxymethyl)
+  or `none`. It needs no protein database: the call is that of
+  `-alkylation_tags_out` (below), the C residues the tags read in each form.
+  A C form whose mass one other step reads (another C form or a residue of
+  the run, fixed and variable modifications included) is a twin, and the run
+  then gets no call (`unresolved_forms`; in ppm the guard is per vote, at
+  the C edge's own m/z). Two-step readings (C + G for Carbamidomethyl, an
+  edge over a missing peak) and 13C-shifted ones are checked against the
+  spectrum: a vote whose edge the spectrum explains so is a conflict, and
+  conflicts count against the share. A reagent whose C has the mass of two
+  residues to within the tolerance at its immonium ion (Carbamidomethyl =
+  C + G and Propionamide = A + C at any tolerance; also Nethylmaleimide and
+  Carboxymethyl at 0.02 Da, not at 20 ppm; `alkt_form needs_database.<form>`)
+  is never called from the tags alone, since no ion tells the readings apart:
+  the call is `no_call` `alias_needs_database` with the row `candidate`
+  naming it, and the placements on a database confirm it. Methylthio has no
+  such reading. The counts are in the report whether or not it calls. With a
+  database (`-recon_fasta`, `-fasta`, an
+  explicit `-alkylation_proteome`, or another report that places tags) it
+  also makes the 1.12 placement call: each MS2 spectrum votes once with its
+  best tag placed on a peptide with exactly one C on the gap side, and the
+  reagent mass is the gap plus the fixed C modification (on a labelled run
+  the fixed terminal label is first taken off a gap on its side). The report's
+  call combines the two: one call alone is taken, two that agree are taken
+  (also a tag candidate the placements call), two that differ are `no_call`
+  `disagree`. Every other output is the same
+  with and without it. Format 4: sections `alk_run`, `alk_cys` and
+  `alkylation_placement_call` (with a database), `alkt_run`, `alkt_form`,
+  `alkylation_tags_call` and `alkylation_call`; documented and versioned in
+  doc/ALKYLATION-REPORT.md. Until this version the default `auto` placed on the
+  shipped human proteome and the call needed tags of 8 residues; it now reads
+  no proteome.
 - **`-alkylation_tags_out`** (1.13, experimental; held-out test passed at the
   margin) makes the same call without a database. A second tagging pass, whose
   tags are not written, drops the run's C modifications. It spells C as
@@ -1471,10 +1510,20 @@ options and their values.
   votes once with its best ungapped 1+ tag (E <= 1) that holds a C; tied
   tags of two forms are a conflict. A tolerance that cannot separate
   Carbamidomethyl from Carboxymethyl (0.984 Da apart, so 0.5 Da) gives no
-  call (`unresolved_forms`). There are known confounds:
+  call (`unresolved_forms`); in ppm a vote is set aside only where the edge
+  windows at its own m/z overlap. There are known confounds:
   C[Carbamidomethyl] = G + C and C[Propionamide] = A + C when the peak
-  between them is missing. The report lists the twins within the run's
-  tolerance. The pass costs about one more tagging run. On 57 held-out runs
+  between them is missing, and an edge ending on a 13C peak reads as another
+  form. Since format 3 each voting C edge is checked against the spectrum for
+  them (the middle peak in either series, the monoisotopic peak); only a pair
+  that lost its middle peak in both series still votes, and since format 4
+  only when the spectrum holds the C immonium ion of its form and none of the
+  immonium ions of the pair's residues where it could hold them (the pair's
+  internal a-type ion has the form's immonium m/z: 133.043 for GC and CAM);
+  otherwise it abstains (`alias_unconfirmed`), and the abstentions count in
+  the share's denominator. The pass costs about
+  one more tagging run. The held-out result below was measured before these
+  checks. On 57 held-out runs
   from 57 PRIDE projects it called 40, 37 of them right (0.925, Wilson 95%
   interval 0.801-0.974). It abstains on samples that are not alkylated (2 of
   12 called) and does not confirm the absence of alkylation
@@ -1508,8 +1557,20 @@ distribution before mixing, from which the Desktop GUI draws its logos. The
 counting reproduces prose-auto 0.1.3's detectors. `FASTAG_FULL_PRECISION=1`
 in the environment writes the tag TSV's masses and E-values in full precision,
 for comparing against a reader of that file. The shipped tables are read from
-`share/FASTag/digest` next to the binary; a binary run outside its install
-tree needs `FASTAG_DIGEST_DIR` set to that directory.
+`share/FASTag/digest` next to the binary (`share-FASTag-digest` in the flat
+release folder and in a build tree, which links `data/digest` there). A copy of
+the binary on its own needs `FASTAG_DIGEST_DIR` set to a folder that holds them
+(`data/digest` in the sources); a `FASTAG_DIGEST_DIR` that names no folder finds
+nothing. When a table is missing, FASTag stops with exit 6 before any output and
+says which option needs which file, where it looked and what to do:
+`-massgap_out` needs `massgap_mods.tsv`; `-digest_out` needs `digest_models.tsv`
+(`digest_models_v2.tsv` under `-digest_models_version v2`, or none with
+`-digest_models`) and, under v2 or `-digest_min_confidence`, `digest_calibration.tsv`
+(or `-digest_calibration`); `-shortlist_out`, `-fasta_out` and `-search_config_out`
+need `digest_models.tsv` for their protease check (unless `-digest_out` has
+`-digest_models`); `-alkylation_out` needs no data file, except with
+`-alkylation_proteome human|mouse|yeast|ecoli`, which needs
+`<name>.fasta.gz` from `share/FASTag/alkylation` (or `FASTAG_ALKYLATION_DIR`).
 
 ## q_db: entrapment-calibrated filter confidence
 
@@ -1584,6 +1645,17 @@ listed in `--helphelp`, which is how the GUI detects them.
   (or 2+) only; with `-unknown_charge` or `-isotope_error` away from their
   defaults it exits 6 rather than print peaks that were not tagged.
 
+A third, `-data_paths` (1.16), prints one JSON object on one line and exits 0:
+`digest_dir` and `alkylation_dir`, the folders a run reads its shipped digest
+data and alkylation proteomes from with the same environment (`null` when there
+is none; `FASTAG_DIGEST_DIR` and `FASTAG_ALKYLATION_DIR` first, a value that
+names no folder finds nothing), `digest_from_env`, `digest_searched` (that
+variable as given, or the three folders beside the executable), `proteomes`
+(the shipped ones whose file is there) and `alkylation_auto` (`none`: auto
+without `-recon_fasta` or `-fasta` reads no database; before 1.16 it read the
+human proteome). The desktop app's check before a run reads it, and a FASTag
+whose `--helphelp` does not list it is taken to read auto as the human proteome.
+
 ## Glyco flag
 
 `-glyco` writes `<out>` with its extension replaced by `.glyco.tsv`
@@ -1591,7 +1663,10 @@ listed in `--helphelp`, which is how the GUI detects them.
 count of matched oxonium ions, their summed intensity over the base peak, a
 0/1 flag (>= 2 distinct ions AND fraction >= `-glyco_min_fraction`, the
 GPQuest / MSFragger-Glyco heuristics with their literature thresholds), and
-the ion names. The flag means "a glycan fragmented here" — glycopeptide, free
+the ion names. The HexNAc fragments (126.055, 138.055, 144.066, 168.066,
+186.076) count only with HexNAc 204.087 itself: they are evidence of that one
+HexNAc, not of a second species (before 1.16, 126.055 + 144.066 without 204.087
+flagged a spectrum). The flag means "a glycan fragmented here" — glycopeptide, free
 glycan, or O-GlcNAc — never an identification. It lives in its own file
 because glyco spectra are precisely the tag-poor ones a tag-TSV column would
 miss; expect more rows than "MS2 tagged". Matching runs on the raw peak list
@@ -1599,6 +1674,15 @@ at the run's fragment tolerance. At 0.3 Da the TMT reporter 126.128 collides
 with the HexNAc fragment 126.055, so glyco flags on labeled ion-trap data are
 unreliable; on high-resolution MS2 use a ppm tolerance.
 Measured specificity on non-enriched runs: 0.6% (Astral, ppm) flagged.
+A high count is not by itself a false flag: on PXD003531 (TiO2
+phospho-enriched, which co-enriches sialylated glycopeptides) 12,533 of 27,345
+MS2 are flagged and on PXD020401 (mouse phagosomes, rich in lysosomal
+glycoproteins) 12,707 of 49,964; there the matched ions sit within 1-3 ppm of
+their masses (decoy masses 0.25 Th off match HexNAc over 1,000 times less often),
+HexNAc 204.087 is the base peak of 289 and 4,098 spectra, and Sage identifies
+6% and 1% of those, against 34% and 48% of the spectra without 204.087. Co-isolated glycopeptides flag spectra
+of other peptides too: the flag says a glycan fragmented in the isolation
+window.
 
 ## Census
 
@@ -1615,8 +1699,40 @@ all fragment charges), `n_compl` (kept peaks with a 1+ complement), `int_gini`
 the reported tag with the lowest E-value (not necessarily the first row with
 `-tag_lengths`): `best_evalue`, `best_len`, `best_min_conf`,
 `best_mean_conf`, `best_tic` (summed intensity of its peaks), plus
-`tag_cover` (m/z covered by the union of the reported tags). Fields that were
-not computed for a spectrum are empty.
+`tag_cover` (m/z covered by the union of the reported tags), `max_len`,
+`res_cover` and `res_cover_exact` (census formats 2 and 3, see below). Fields that were not computed for a
+spectrum are empty.
+
+`max_len` is the length of the longest reported tag, which differs from
+`best_len` under `-tag_lengths` or `-extension`. `res_cover` counts the
+residues of the peptide that the reported tags cover together. Each tag is
+first placed on the peptide as the tag TSV writes it (its low peak a y ion, or
+a z• ion under c/z): it starts `nterm_mass` from the N-terminus, so the
+precursor mass of the selected hypothesis maps the y ladder onto b positions,
+and each path step of one residue gives that residue (a gap does not say where
+its residues meet, so they are left out; below). A
+tag read on the b (or c) ions lands so at its mirror image about
+S = M − H2O + (offC − offN) (M for b/y), and census format 3 corrects for it:
+a tag that matches `-fasta` (or `-entrapment_fasta`) in one orientation only is
+placed by it (a reverse-only match is a b or c read and is mirrored back to its
+true residues); any other tag, without `-fasta` or matching both ways, is
+folded onto the lower half residue by residue (a residue is mirrored when its
+midpoint is above S/2), so a stretch read on both series lands on one
+interval and a residue has one image in every tag that holds it, also in
+overlapping tags on either side of the centre. When any tag of a spectrum is
+folded, its tags placed by their orientation are folded too, after that
+placement, so a placed read and a folded read of the same residues also
+count once.
+`res_cover_exact` is 1 when every reported tag was placed by its orientation
+and every residue on its own, and 0 when one was folded or a tag has a gap:
+`res_cover` is then a lower bound (residues that mirror each other about the
+centre count once; a gap's residues are not counted, since splitting its mass
+evenly would make up a boundary that other tags' residues straddle), and never
+below `max_len`. Residues of different tags are
+one residue when the midpoint of one lies inside the other; a residue counts
+once. Unlike `tag_cover`, which adds m/z over fragment charges and series,
+`res_cover` is in residues and can be compared with the peptide length.
+`res_cover` is at least `max_len`, and `max_len` is at least `best_len`.
 
 `status` is the first that applies: `empty` (no peaks), `no_precursor`,
 `no_signal` (no positive intensity), `bad_precursor` (m/z not finite or <= 0),
@@ -1627,7 +1743,11 @@ A status is not a quality call: `tagged` says a tag passed `-max_evalue`, not
 that it is right, and acquisition (DIA or DDA) is never a census status.
 
 The summary (`.census_summary.tsv`, the long form of the digest reports)
-starts with the `run` rows and adds section `census`: `census_version`,
+starts with the `run` rows, then the run row `max_tags` (the `-max_tags`
+cap that `n_found` and `n_reported` stop at, per seed length; 0 = no cap),
+and adds section `census`: `census_version` (3 after 1.15.7; 2 had no
+`res_cover_exact` and placed every tag as a y read; 1 had no `max_len`,
+`res_cover` or `max_tags`),
 `input_spectra` (all MS levels), `ms2_seen`, `ms2_processed`, `ms2_total`
 (empty when subsampling, because masked spectra are never read),
 `subsampled`, `subsample_basis`, `count_` and `share_` per status,
@@ -1716,7 +1836,7 @@ It reads the spectra the tagging pass reads anyway, plus at most 32 profile
 spectra per analyser class and MS level for the measured resolution, so it
 adds little to a run. With `-subsample_*` every count covers the spectra read
 (`spectra_read`, `subsampled`). It cannot be combined with `-stream`.
-`qc_version` (now 2) changes when a key, its meaning or its order changes.
+`qc_version` (now 3) changes when a key, its meaning or its order changes.
 
 - **Instrument and acquisition**, from the input's run metadata, for
   large-scale QC across runs. `instrument_model`: the PSI-MS model name
@@ -1771,13 +1891,54 @@ adds little to a run. With `-subsample_*` every count covers the spectra read
   family's lowest channel (`low_mass_cutoff`, e.g. ion-trap CID), when it was
   read out in an ion trap (`ion_trap_ms2`), or when it is empty. A family
   with 3 or more observed channels is present; then each kit is `present`
-  when every observed channel is one of its channels and `absent` otherwise,
-  and `reporter_compatible_kits` lists the present kits, smallest first (TMT6
+  when every observed channel is one of its channels and `absent` otherwise.
+  TMT 6-plex has two reagent generations and both count as `tmt6plex`: the
+  current 126/127N/128C/129N/130C/131 (OpenMS's table, MSnbase TMT6b) and
+  the original 126/127C/128C/129C/130C/131 (Dayon et al. 2008, MSnbase TMT6;
+  127C/129C at OpenMS's TMT10 m/z), which PXD000001 shows.
+  `reporter_compatible_kits` lists the present kits, smallest first (TMT6
   channels alone fit all five TMT kits; TMTpro shares TMT's masses). With
   fewer than 20 assessable MS2 a kit is `not_assessable` with the most
   frequent reason, and when the run has MS3 scans and no reporters in MS2 it
   is `not_assessable` (`sps_ms3_not_read`: an SPS-MS3 design puts the
   reporters in MS3, which FASTag does not read).
+- **Isobaric kit call.** `reporter_kit` names one kit: what was seen, not
+  what it could be. The label mass on the tag ends decides the family: TMT
+  (229.162932 Da, TMT 6/10/11) or TMTpro (304.207146 Da, TMTpro 16/18; for
+  iTRAQ reporters the same mass is iTRAQ8, 144.102063 Da iTRAQ4), by the
+  `-label_out` label call over the tags of the run (the tag ends are counted
+  for `-qc_out` too; the call needs a ppm fragment tolerance and 175
+  C-terminal tag ends). The kit is then the smallest kit of that label that
+  holds every observed channel: TMT channels without 131C are `tmt10plex`
+  (with both channels of an N/C pair, such as 127N and 127C; `tmt6plex`
+  when they are one 6-plex generation's), with 131C
+  `tmt11plex`; TMTpro without 134C/135N is `tmt16plex`. A larger kit whose
+  extra channels were not seen is never named, nor a kit of the other label.
+  `reporter_family_evidence` is `label_mass` (n = tag ends with the label;
+  `reporter_label_delta` gives the mass, n = filtered tags) or
+  `reporters_only` when the label does not decide (Da tolerance, too few
+  tags, no or two labels):
+  `reporter_kit_candidates` then lists the smallest kit per label the
+  channels allow (e.g. `tmt10plex,tmt16plex`) and `reporter_kit` is that kit
+  when only one is left, else `ambiguous`. When exactly one label passed but
+  none of its kits holds the observed channels (the TMT label with 134N
+  seen, say), the label mass and the channels disagree and no kit is called:
+  `reporter_kit` is `conflict`, `reporter_family_evidence` is
+  `label_conflict` (n = tag ends with the label; the description states both
+  pieces of evidence), `reporter_label_delta` gives the label's mass and
+  `reporter_kit_candidates` the kits the channels allow (e.g. `tmt18plex`).
+  The GUI shows "Conflict: TMT label, reporters fit TMTpro 18-plex" and
+  leaves the run out of the batch majority. Without a present family it is
+  `none`, or `not_assessable` when no family could be assessed.
+  `reporter_compatible_kits` is kept as before.
+- **Reporter channel counts.** `reporter_channel_<label>` (e.g.
+  `reporter_channel_127N`) counts the assessable MS2 of the family in which
+  the reporter is seen (within 20 ppm, at 3x the spectrum's median peak
+  intensity or more), n = the assessable MS2; `_share` is that count over
+  n, and the description gives the channel m/z. Every channel of the
+  decided label's kits is listed (TMT: the 11 of TMT 6/10/11, so unused
+  channels show 0); without a label decision every channel of each present
+  family (TMT and TMTpro: 18). No rows when no family is present.
 - **Tag yield.** `tag_yield`: the share of the MS2 spectra read whose best
   reported tag has E <= 0.01 (the census's best tag: after `-fasta` when it is
   given). It is the yield of the run as tagged: profile MS2 in an mzML are
@@ -1817,85 +1978,103 @@ spectra with at least one database hit **rose** from 8,547 to 8,695 under a
 far below the cap — deferral reorders families near the head; it is not
 per-peptide clustering. Off by default.
 
-## Tag merging
+## Subsumed tags
 
-`-resolved_out` merges the tags of each spectrum into resolved tags, as the
-desktop app's Spectrum tab does (All tags, resolved): every written tag of the
-spectrum with E-value <= `-resolve_max_evalue` (1) is walked onto the peaks it
-was tagged on (the list `-dump_spectrum` prints; for a two-pass hybrid spectrum
-under `-ion_series_hybrid both`, the union of its b/y and c/z preparations) from
-both flanks; rows on the
-same chain of peaks of one layer (b and y of one fragment charge, c and z apart)
-are one placement, a step's isobaric readings kept apart (`{Q|[AG]}`). A
-resolved tag is a chain of whole placements, each overlapping the one before by
-at least one step and agreeing with it on every shared step (with
-`-resolve_join`, touching at a peak); placements wholly inside it are
-subsumed. Chains are taken best first by `-resolve_score`. By default
-(`cstar`) each new step is worth its C* log-odds of being right less
-`-resolve_threshold` (3): a logistic model fitted on PXD003531, PXD000001 and
-PXD076528 against Sage, of the step's E-value, mass error (at a Da tolerance or
-above 25 ppm in tolerance units, 20·Δm/z/tol), peak intensity ranks (global and
-within ±50 Th), complement ions at any charge, gap, ambiguity, rival steps and
-the support of the tags. Rank 1 is then the first resolved tag that holds no
-peak together with its own complement; the others follow in their order (the
-`score` of rank 1 can be lower than that of rank 2). The scheme (X1) won a
-preregistered held-out test: on PXD020401 (Orbitrap HCD, 20 ppm) the first
-resolved tag was right in 84.9% of scans against 81.5% for `steplogodds` and
-81.7% for the best single tag, and on PXD031975 (ion trap, 0.5 Da) in 59.8%
-against 48.0% and 56.1%. `steplogodds`, the 1.15 default, uses a simpler step
-model (E-value, mass error, intensity ranks, complements, gap and ambiguity;
-without the mass error at a Da tolerance or above 25 ppm). Residue masses are
-the tagger's (OpenMS, with the run's modifications). Under several precursor
-hypotheses the selected one's rows are merged.
+Under `-tag_lengths` with several lengths, or with `-extension`, a spectrum's
+rows include shorter tags read off part of a longer tag's ladder. By default
+(`-subsume_tags on`) FASTag leaves such a tag out of `-out`: a row is
+subsumed by another row of the same spectrum when both have the same
+fragment charge, ion series and precursor hypothesis, its path peaks are a
+contiguous run of the other's (m/z compared exactly) and on those peaks the
+other row reads exactly its residues, step by step (a gap step carries two;
+inline modifications as written; the same residues elsewhere in the other
+row do not count), and the other row is at least as significant: its E-value is at most the row's
+own. A longer tag with a worse E-value therefore keeps the shorter one. Of
+two rows on the same peaks with the same sequence the one with the lower
+E-value is kept (ties: the earlier row). An unscored E-value (NaN) counts as
++infinity: such a row gives way to any row it lies in and makes only other
+unscored rows give way. The rule is transitive (A in B in C with E(C) <=
+E(B) <= E(A)), so every row left out lies in a written row whose E-value is
+at most its own. Measured on PXD003531 (Sage PSMs at 1% q, `-tag_lengths 3 4
+5`): the rule drops 41.3% of the rows and 1.30% of the PSM spectra lose their
+only correct tag; leaving out every contained tag regardless of E-value would
+drop 47.6% and lose 3.2%, because a correct short tag often lies in a longer
+one extended past its correct part. Held out on PXD020401 (same settings) it
+drops 45.1% of the rows and 0.85% of the PSM spectra lose their only correct
+tag. A gapped tag lies only in a tag with
+the same gap; the same peaks read as b/y and as c/z• are two readings, not one.
+The test runs on the final rows of the spectrum, after every merge and cap, so
+a dropped row frees no slot; the remaining rows keep their order. Only `-out`
+and what follows its rows (`q_db`, the reported counts and the census
+`n_reported`) lose them; the digest, label and alkylation reports, the census
+tag statistics, the `-species` evidence, `-recon_out`, `-recon_id_out`,
+`-delta_out`, `-qc_out` and the `-out_spectra` choice of spectra with a target
+tag count every row, so they do not depend on the option. With `-fasta`, rows
+the filter drops neither subsume nor are subsumed, and a row is only subsumed
+by a row of its own hit class: a target row never gives way to an
+entrapment-only (`efwd`/`erev`) row, nor the other way round. The run summary prints `Subsumed tags dropped: n`. At a single seed
+length without extension every row has the same length and none lies in
+another, so the defaults write what `off` writes. `-subsume_tags off` keeps
+every row. For tests, `FASTAG_PATH_PEAKS=1` adds a last column `path_mz` with
+each row's path peaks (`;`-separated, the two peaks of a gap step joined by
+`:`), the peaks and steps the rule compares.
 
-`-resolved_out` columns, one row per resolved tag in rank order: `spectrum`,
-`rank` (1-based), `sequence` (N→C in the called series; a step with several
-readings `{Q|[AG]}`, a gap `[AG]`), `length` (residues, a gap 2), `series`
-(b, y, c, z) and `call` (`sure`, `likely`, `open`: not told apart, shown as its
-best tag was walked), `charge` (fragment), `nterm_mass` and `cterm_mass` (the
-flanks of the called reading, from the observed peaks, so that `sequence` and
-the flanks form a tag row: the low peak is the first ion of the b/c ladder
-walked from `nterm_mass` over the sequence, or of the y/z ladder walked from
-`cterm_mass` over it reversed; nterm + residues + cterm + H2O = M), `score`
-(the chain weight),
-`best_e` and `weakest_e` (the best step and the weakest step or junction; empty
-when a step has no evidence), `n_tags`, `peaks` (m/z ascending, `;`, 6
-decimals), `steps` (`label:E` readings `|`-separated per step, steps `;`, in
-ascending m/z order like `peaks`: step *i* lies between peaks *i* and *i*+1, so
-for y and z rows the steps run C→N, the reverse of `sequence`; match a step to
-its residue by position from the right, or by its label),
-`members` and `inside` (0-based row indices of the spectrum's rows in `-out`,
-of the tags that build it and of those subsumed), `joined` (m/z of junctions
-joined under `-resolve_join`), `relations` (`rank:fork|touch:shared steps`),
-`scheme` and `threshold` (the ranking, `-resolve_score` and `-resolve_threshold`,
-the same on every row; `threshold` is empty under `evidence`), so a reader of the
-table knows how it was ranked without the run's parameters, and `terminus`
-(the last column: whether the resolved tag lies at a peptide terminus, from its
-flanks). Each flank is tested on its own: the one read from the peaks
-(`nterm_mass` for b/c, `cterm_mass` for y/z) within the fragment tolerance at
-the low peak times the fragment charge, the one from the precursor within that
-plus the fragment tolerance at the precursor m/z times the precursor charge,
-also at the `-isotope_error` offsets (k × 1.00336 Da). A flank within its
-tolerance of 0 or of a terminal modification of the run (N-term or protein
-N-term, C-term or protein C-term, fixed or variable) is `N` or `C`; else one
-within it of that plus one residue (the tagger's residues, with the run's
-modifications) is `N+K`, several `N+[KQ]` (sorted as gap labels; I and L give
-`[IL]`). Tokens N side first, comma-separated (`N,C+K`); empty if neither.
-The flank is tested before FASTag clamps it at 0 for `nterm_mass`/`cterm_mass`
-(never negative), so a tag longer than the precursor allows (a negative flank,
-e.g. under a wrong or assumed charge) is at no terminus.
+## Terminal anchors
 
-`-tag_graph_out` columns, one row per placement in canonical order (layer,
-first peak): `spectrum`, `node` (0-based), `layer` (`by2`, `cz1`), `charge`,
-`series` (the series judged on the placement's own peaks, before complement
-pairing; the resolved tag's `series` in `-resolved_out` is authoritative, and
-for about 2% of chain nodes it is the other series of the pair, reading the
-same steps the other way round), `peaks` and `steps` (both in ascending m/z
-order, as in `-resolved_out`), `evalue`, `rows` (in `-out`), `path` (the rank of
-the resolved tag using it, empty if none), `role` (`chain`, `inside`, `none`)
-and `next` (nodes continuing it; `~` an arc that only touches, `*` an arc on a
-resolved tag). Both tables are written in input order and are computed only
-when asked for.
+A tag's flanks assume its low peak is a C-terminal ion (y, or z• under c/z);
+read reversed, the low peak is an N-terminal ion (b, or c) and the flanks
+carry the series' reversed offset (+H2O for b/y, −15.0347 Da for c/z•).
+`-terminus` tests both readings for a peptide terminus and appends two
+columns after all other optional ones (`q_db` aside): `series` and
+`terminus`. For each reading the unclamped flanks are taken from the low
+peak, the tag's residue masses and the precursor of the row's hypothesis, as
+`nterm_mass` and `cterm_mass` are (reading y/z: N = M − (low + residues) −
+(H2O − offC), C = low − offC; reading b/c: N = C(y/z) + reversed offset,
+C = N(y/z) − reversed offset, with low as a neutral mass at the tag's
+charge). Each side is tested on its own: the
+one read from the peaks (C for y/z, N for b/c) within the fragment tolerance
+at the low peak times the fragment charge, the one from the precursor within
+that plus the fragment tolerance at the precursor m/z times the precursor
+charge, also at the `-isotope_error` offsets relative to the row's (k ×
+1.00336 Da); without a precursor only the peak side is tested. A side within
+its tolerance of 0 or of a terminal modification of the run (N-term or
+protein N-term, C-term or protein C-term, fixed or variable) is `N` or `C`;
+one residue away (the tagger's residues with the run's modifications) is
+`N+K`, several `N+[KQ]` (I and L give `[IL]`); never two residues. Tokens N
+side first, comma-separated. A reading is anchored when it has a token.
+
+`terminus` lists every token found: the anchored reading's tokens (`C+K`:
+the low peak is y1 of a C-terminal K; `N`; `N+M[Oxidation],C`), both lists as
+`y:<tokens>;b:<tokens>` (`z:`/`c:` under c/z) when both readings are
+anchored, `-` when neither is. Only some kinds of token decide `series`, the
+ones that held when measured at 20 ppm on PXD003531 (development) and
+PXD020401 (held out), the decision rule fixed before the held-out set was
+read:
+
+- used: any N-side token (`N`, b1 = `N+X` from the peaks, y(n−1) = `N+X`
+  from the precursor); the C terminus itself (`C`); y1 of a C-terminal K or
+  R (`C+K`, `C+R` on the peak side of a y/z reading; the run's K and R with
+  their fixed modifications, not a variably modified `K[…]`); a C-terminal
+  set holding a bare K or R, such as `C+[KQ]`, on either side;
+- not used: a C-terminal K or R alone on the precursor side (b(n−1), 87% /
+  94% right), and any other C-terminal residue on either side (86% / 23%:
+  W read off the isobaric dipeptides GE, AD, SV, or b2 of FG; E after an
+  N-terminal Met oxidation).
+
+Tokens with one used side are used. `series` is the one reading anchored
+through a used token (`b` or `y`), and `-` when none or both are;
+called that way it was right for 99.8% of the correct tags it called on
+PXD003531 and 99.9% on PXD020401 (6,532 of 6,547 and 4,612 of 4,615, about
+12% and 16% of the correct tags; taking every token, 99.5% and 99.3%). The
+c/z kinds were not measured, so a c/z row's `series` is always `-`; its
+`terminus` still lists the tokens (`z:`/`c:` when both readings have some;
+the GUI shows a c/z anchor as likely at most). Above 25 ppm or 0.02 Da fragment tolerance (an
+ion trap, a Da run; under `-tolerance_by_analyzer` the spectrum's own
+tolerance) `series` is `-`: the precursor-side window then meets a residue
+by chance; `terminus` is still filled. A fixed modification on K or R (TMT)
+is in the residue mass, and a fixed N-terminal label is a terminal target, so
+b1 of a labelled peptide reads `N+A`. The desktop GUI uses the same kinds and
+the same tolerance gate for its terminal anchor. Not with `-stream`.
 
 ## Assembly export
 
@@ -2018,6 +2197,12 @@ For a source build, an upgrade of an older install or a
 ```bash
 tar xzf FASTag-<version>-taxonomy-k7.tar.gz -C /path/to/FASTag/   # -> share-FASTag-taxonomy/
 ```
+
+For a FASTag run from its build tree, run `python3 tools/fetch_taxonomy_index.py`
+once instead (it downloads the pinned asset into `~/.cache/fastag` and checks
+its sha256): every later `cmake --build` puts the index beside the binary with
+the rest of `data/taxonomy`. `-DFASTAG_TAXONOMY_INDEX_DIR=<folder or
+tax_k7.taxdb>` names a copy you already have ([BUILDING.md](BUILDING.md)).
 
 `MANIFEST.json` names what the index was built from: the UniProt reference
 proteomes, the NCBI taxdump, the build commands and the sha256 of every file.

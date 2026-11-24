@@ -68,10 +68,9 @@ pub struct SpectrumDump {
 
 /// Option families of the run that do not change the peaks of a spectrum or
 /// its tags: the species, glyco, reconciliation, mass-gap and digest/label
-/// reports and their settings, the tag graph tables and their settings
-/// (resolve_*), and subsampling (which could skip the very spectrum asked
-/// for). A dump drops them, beside every file-typed option.
-const NOT_FOR_A_DUMP: &[&str] = &["species", "glyco", "recon_", "massgap_", "digest_", "label_", "delta_", "subsample_", "resolve", "tag_graph_"];
+/// reports and their settings, and subsampling (which could skip the very
+/// spectrum asked for). A dump drops them, beside every file-typed option.
+const NOT_FOR_A_DUMP: &[&str] = &["species", "glyco", "recon_", "massgap_", "digest_", "label_", "delta_", "subsample_"];
 const NOT_FOR_A_DUMP_EXACT: &[&str] = &["stream", "log", "test", "progress", "no_progress", "dump_spectrum", "probe_input"];
 
 /// Whether a dump keeps the run's option @p name: not a file (TOPPBase
@@ -155,12 +154,7 @@ impl<V: Clone> Lru<V> {
 fn command(r: &Resolved) -> Command {
     let mut cmd = Command::new(&r.bin);
     no_console_window(&mut cmd);
-    if let Some(d) = &r.data {
-        cmd.env("OPENMS_DATA_PATH", d);
-    }
-    if let Some(t) = taxonomy_dir(r) {
-        cmd.env("FASTAG_TAXONOMY_DIR", t);
-    }
+    crate::data::data_env(&mut cmd, r);
     cli_env(&mut cmd);
     lifetime::die_with_parent(&mut cmd);
     cmd
@@ -412,8 +406,7 @@ mod tests {
                 "taxdb": "/moved/custom.taxdb", "species": true, "species_out": "/ro/run.species.tsv",
                 "species_rank": "genus", "taxonomy_nodes": "/moved/nodes.dmp", "fasta": "/db/ecoli.fasta",
                 "glyco": true, "glyco_out": "/ro/g.tsv", "recon_out": "/ro/r.tsv", "subsample_spectra": 10,
-                "max_peaks": 300, "tag_length": 4, "threads": 2, "no_deisotope": true,
-                "resolved_out": "/ro/a.resolved.tsv", "tag_graph_out": "/ro/a.taggraph.tsv", "resolve_join": true}"#,
+                "max_peaks": 300, "tag_length": 4, "threads": 2, "no_deisotope": true}"#,
         )
         .unwrap();
         let a = dump_args("/data/run01.mzML", SCAN, Some(&params)).unwrap();
@@ -423,7 +416,7 @@ mod tests {
         assert_eq!(a[t + 1], "0.3");
         assert!(has("-out").is_none() && has("-progress").is_none(), "{a:?}");
         // No file but -in, no species/glyco/report mode, no subsampling.
-        for o in ["-digest_out", "-taxdb", "-species_out", "-species", "-species_rank", "-taxonomy_nodes", "-fasta", "-glyco", "-glyco_out", "-recon_out", "-subsample_spectra", "-resolved_out", "-tag_graph_out", "-resolve_join"] {
+        for o in ["-digest_out", "-taxdb", "-species_out", "-species", "-species_rank", "-taxonomy_nodes", "-fasta", "-glyco", "-glyco_out", "-recon_out", "-subsample_spectra"] {
             assert!(has(o).is_none(), "{o} in {a:?}");
         }
         // What prepares the peaks and builds the tags stays.

@@ -206,12 +206,39 @@ void TOPPFASTag::registerOptionsAndFlags_()
                 "rows + '#end' sentinels on stdout. Core tagging only (refuses "
                 "-fasta, -entrapment_fasta, -species, -species_out, -taxdb, -glyco, "
                 "-recon_out, -recon_id_out, -out_spectra, -delta_out, -digest_out, "
-                "-label_out, -massgap_out, -usi_collection); parameter changes need a restart");
+                "-label_out, -massgap_out, -usi_collection, -terminus); parameter changes need a restart");
 
   registerFlag_("diversity",
                 "On spectra with more tags than -max_tags, prefer tags built from "
                 "different peaks over near-copies of a tag already kept. Changes "
                 "which tags fill the slots, not how many");
+
+  // Subsumed tags: a row whose peaks lie in a longer row of the same spectrum
+  // that reads the row's residues on them (same charge, series and precursor hypothesis) with an
+  // E-value at most its own is not written to -out (FASTag::subsumedTags).
+  // Every other consumer sees all rows.
+  registerStringOption_("subsume_tags", "<on|off>", "on",
+                        "Leave out of -out a tag whose peaks are a run of another tag's that reads the same "
+                        "residues on them, in the same spectrum (same fragment charge, ion series and precursor "
+                        "hypothesis), when that tag is at least "
+                        "as significant (E-value <= its own; a longer tag with a worse E-value keeps the shorter "
+                        "one; of two identical tags the one with the lower E-value is kept). Only the -out rows "
+                        "change; reports, placements and calibrations count every tag. off: every tag is "
+                        "written, as before",
+                        false);
+  setValidStrings_("subsume_tags", ListUtils::create<std::string>("on,off"));
+
+  // -terminus: which series a terminally anchored tag was read off (src/Terminus.h).
+  registerFlag_("terminus",
+                "Append series and terminus columns: each tag read as written (y, or z under c/z) and "
+                "reversed (b, or c), each reading's flanks tested against the peptide termini (one residue "
+                "at most, e.g. a low peak that is y1 of a C-terminal K); terminus lists every token found "
+                "(N, C, C+K, N,C+R; y:..;b:.. when both readings are anchored, '-' if none); series is the "
+                "one reading anchored through a kind that decides it (any N-side token, C, y1 of a "
+                "C-terminal K or R, a C-terminal set holding K or R such as C+[KQ]; not a lone K or R from "
+                "the precursor, b(n-1), nor another C-terminal residue): b or y, '-' if none or both, "
+                "'-' above 25 ppm or 0.02 Da fragment tolerance, and '-' on c/z rows (c/z anchors were not "
+                "measured; terminus still lists their tokens). Not with -stream");
 
   // ProForma 2.0 rendering of each tag, appended as a trailing column. Off by
   // default so the TSV schema is unchanged unless asked for. See Proforma.h.
@@ -246,6 +273,18 @@ void TOPPFASTag::registerOptionsAndFlags_()
                      "in fasta_hit", false);
   setValidFormats_("entrapment_fasta", ListUtils::create<std::string>("fasta"));
 
+  // Which -fasta proteins a matching tag occurs in, and where. Opt-in: the
+  // three columns change -out's format, and the locate index costs ~6.5
+  // bytes per database residue (shared with -recon_out's when that reads
+  // the same -fasta).
+  registerIntOption_("fasta_proteins", "<n>", 0,
+                     "Name up to <n> of the -fasta proteins each matching tag occurs in. "
+                     "Appends the columns db_proteins (identifier@start-end, 1-based, "
+                     "';'-separated), db_genes (the GN= of each) and db_protein_count "
+                     "(all of them); entrapment matches name entrapment proteins. "
+                     "0 writes none. Requires -fasta", false);
+  setMinInt_("fasta_proteins", 0);
+
   // Tag reconciliation (placement plus gap interpretation, after TagRecon)
   // at proteome scale: place each reported tag onto tryptic windows of a
   // database by its flanking masses and localize/interpret the single mass
@@ -265,6 +304,13 @@ void TOPPFASTag::registerOptionsAndFlags_()
   registerInputFile_("recon_fasta", "<file>", "",
                      "Protein database for -recon_out. Default: the -fasta file", false);
   setValidFormats_("recon_fasta", ListUtils::create<std::string>("fasta"));
+  // Feedback 422372a2: a shipped proteome as the database of -recon_out, so
+  // a mass-shift survey of a common organism needs no FASTA of one's own.
+  registerStringOption_("recon_proteome", "<name>", "",
+                        "Shipped proteome for -recon_out when -recon_fasta is not given: human, mouse, yeast "
+                        "or ecoli (the UniProt reference proteomes of share/FASTag/alkylation). Used before "
+                        "-fasta. Tags place on them from 8 residues (human, mouse) or 7 (yeast, ecoli)", false);
+  setValidStrings_("recon_proteome", ListUtils::create<std::string>(",human,mouse,yeast,ecoli"));
   registerIntOption_("recon_missed_cleavages", "<n>", 1,
                      "Missed tryptic cleavages allowed in reconciliation windows (at most 10)", false);
   setMinInt_("recon_missed_cleavages", 0);
@@ -851,30 +897,37 @@ void TOPPFASTag::registerOptionsAndFlags_()
                         "a model name of the protease table (e.g. Trypsin) or 'auto' (the report's call). "
                         "Experimental; empty = off",
                         false, true);
-  // #3g the alkylation call (src/AlkylationCall.h), from the reconciler's
-  // placements. Opt-in; every other output is the same with or without it.
+  // #3g the alkylation call. Since feedback 202dbcf4 read off the tags
+  // alone (src/AlkylationTags.h, no database); the reconciler's placements
+  // (src/AlkylationCall.h) refine it when there is a database. Opt-in; every
+  // other output is the same with or without it.
   registerOutputFile_("alkylation_out", "<file>", "",
-                      "Report which reagent alkylated the cysteines (or none), from the placements of "
-                      "single-Cys peptides on -recon_fasta or -alkylation_proteome: Cys form counts and "
-                      "the call (not validated on held-out data)", false);
+                      "Report which reagent alkylated the cysteines (or none). No database is needed: the call is "
+                      "read off the C residues in the tags (a second tagging pass with unmodified C and one C edge "
+                      "per reagent). With -recon_fasta, -fasta or -alkylation_proteome the placements of single-Cys "
+                      "peptides on that database are added. A reagent whose C has the mass of two residues "
+                      "(Carbamidomethyl = C + G, Propionamide = A + C) is only a candidate from the tags (no_call "
+                      "alias_needs_database) and is called when those placements agree. Votes per C form and the call; "
+                      "give -extension (tested with -tag_length 4 -extension 6), without it few spectra vote",
+                      false);
   setValidFormats_("alkylation_out", ListUtils::create<std::string>("tsv"));
   registerStringOption_("alkylation_proteome", "<name>", "auto",
-                        "Database of -alkylation_out without -recon_fasta: a FASTA file (.gz allowed). The names "
-                        "auto (= human), human, mouse, yeast and ecoli stand for the shipped UniProt reference "
-                        "proteomes (reviewed entries; share/FASTag/alkylation, release in its proteomes.tsv). "
-                        "Tags place on them from 8 residues (human, mouse) or 7 (yeast, ecoli): give -tag_length 8 "
-                        "or 7, at the default no tag places and there is no call (reason tags_too_short)",
+                        "Database that -alkylation_out places single-Cys peptides on, to refine the tag call. auto: "
+                        "-recon_fasta or -fasta when given, else none (tags only). A FASTA file (.gz allowed), or "
+                        "human, mouse, yeast, ecoli for the shipped UniProt reference proteomes (reviewed entries; "
+                        "share/FASTag/alkylation, release in its proteomes.tsv). Tags place on those from 8 residues "
+                        "(human, mouse) or 7 (yeast, ecoli): give -tag_length 8 or 7",
                         false, true);
   registerIntOption_("alkylation_min_spectra", "<n>", 10,
-                     "Spectra the -alkylation_out call needs, binned and for the called class", false, true);
+                     "Spectra (votes, or binned placements) an alkylation call needs, in total and for the called class", false, true);
   setMinInt_("alkylation_min_spectra", 1);
   registerDoubleOption_("alkylation_min_share", "<f>", 0.6,
-                        "Share of the binned spectra the -alkylation_out call needs", false, true);
+                        "Share of the votes (or binned placements) an alkylation call needs", false, true);
   setMinFloat_("alkylation_min_share", 0.0);
   setMaxFloat_("alkylation_min_share", 1.0);
   registerDoubleOption_("alkylation_window", "<Da>", 0.0,
-                        "Window of -alkylation_out around each Cys form mass; 0 = 0.02 Da on a ppm run, "
-                        "0.5 Da on a run with a Da fragment tolerance", false, true);
+                        "Window of the -alkylation_out placements around each Cys form mass (with a database only); "
+                        "0 = 0.02 Da on a ppm run, 0.5 Da on a run with a Da fragment tolerance", false, true);
   setMinFloat_("alkylation_window", 0.0);
   // 1.13 #22: the database-free alkylation call (src/AlkylationTags.h),
   // from a second, unwritten tagging pass with alternative C edges.
@@ -972,6 +1025,15 @@ void TOPPFASTag::registerOptionsAndFlags_()
                         "options given) as JSON lines and exit; needs no -out. Prepares the "
                         "given precursor at its charge (or 2+) only",
                         false, true);
+  // The desktop app's capability check: its presence in --helphelp says this
+  // FASTag reports its data folders and reads -alkylation_proteome auto as
+  // no database (the GUI's check before a run follows what it prints).
+  registerFlag_("data_paths",
+                "Print, as one JSON line, the folders this FASTag reads its shipped data from (digest "
+                "data, alkylation proteomes; after FASTAG_DIGEST_DIR and FASTAG_ALKYLATION_DIR), the "
+                "digest folders looked in, the shipped proteomes present, and what -alkylation_proteome "
+                "auto reads without a database (none), and exit; needs no -in or -out",
+                true);
   // ---- 1.16: options ----
   // Mass-shift survey: -delta_out's site and name columns.
   registerDoubleOption_("delta_name_tolerance", "<tol>", 10.0,
@@ -1050,44 +1112,6 @@ void TOPPFASTag::registerOptionsAndFlags_()
                       "and the sums that must hold, as key/value TSV",
                       false, true);
   setValidFormats_("delta_counts_out", ListUtils::create<std::string>("tsv"));
-  // ---- tag merging: options ----
-  // The tags of a spectrum merged into resolved tags and ranked
-  // (src/TagGraph.h, the GUI Spectrum tab's merge). Off unless a table is asked for.
-  registerOutputFile_("resolved_out", "<file>", "",
-                      "Merge each spectrum's tags (of -out, E-value <= -resolve_max_evalue) on its peaks into "
-                      "resolved tags and write one row per resolved tag, best first: sequence N->C, series "
-                      "call, flanks, score, evidence, peaks and steps (both in ascending m/z order: for y "
-                      "and z the steps run C->N, the reverse of sequence), the member rows of -out and the "
-                      "ranking it was made with (scheme, threshold: -resolve_score, -resolve_threshold), "
-                      "and whether it lies at a peptide terminus (terminus: N, C, N,C, or one residue "
-                      "away as N+K or C+[KQ]; empty if neither)",
-                      false);
-  setValidFormats_("resolved_out", ListUtils::create<std::string>("tsv"));
-  registerOutputFile_("tag_graph_out", "<file>", "",
-                      "The merge graph of each spectrum: one row per placement of its tags on the peaks, "
-                      "with its layer, series (as judged on its own peaks, before complement pairing: it can "
-                      "be the other series of the pair than the resolved tag's in -resolved_out, which is "
-                      "authoritative), steps (ascending m/z), rows, the resolved tag that uses it and the "
-                      "placements that continue it",
-                      false, true);
-  setValidFormats_("tag_graph_out", ListUtils::create<std::string>("tsv"));
-  registerStringOption_("resolve_score", "<scheme>", "cstar",
-                        "How resolved tags are ranked: cstar (each step a chain adds is worth its C* "
-                        "log-odds of being right, from its peaks, mass error, rivals and support, less "
-                        "-resolve_threshold; rank 1 is the best resolved tag that holds no peak together "
-                        "with its own complement), steplogodds (the same with the simpler 1.15 step model "
-                        "and no complement rule), evidence (summed E-value evidence of its tags) or anchor "
-                        "(the best single tag first, then steplogodds)",
-                        false, true);
-  setValidStrings_("resolve_score", ListUtils::create<std::string>("cstar,steplogodds,evidence,anchor"));
-  registerDoubleOption_("resolve_threshold", "<t>", 3.0,
-                        "The log-odds a step must exceed to lengthen a resolved tag (cstar, steplogodds, anchor)",
-                        false, true);
-  registerDoubleOption_("resolve_max_evalue", "<E>", 1.0,
-                        "Largest E-value of the tags merged into resolved tags",
-                        false, true);
-  setMinFloat_("resolve_max_evalue", 0.0);
-  registerFlag_("resolve_join", "Join tags that only touch at a peak into one resolved tag", true);
 }
 
 bool TOPPFASTag::optionNonDefault_(const std::string& name) const

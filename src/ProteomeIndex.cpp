@@ -11,6 +11,7 @@
 #include <OpenMS/CHEMISTRY/ResidueDB.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -259,6 +260,60 @@ namespace FASTag
                             return x.pos == y.pos && x.len == y.len && x.reversed == y.reversed;
                           }),
               out.end());
+  }
+
+  void ProteomeIndex::proteinHits(const std::string& tag, bool reversed, const std::vector<char>& decoy,
+                                  std::vector<ProteinHit>& out) const
+  {
+    out.clear();
+    std::vector<TagOcc> occ;
+    locateTag(tag, reversed, occ);  // sorted by position: proteins come in database order
+    for (const TagOcc& o : occ)
+    {
+      if (o.reversed != reversed) continue;
+      const uint32_t i = proteinIndexAt(o.pos);
+      if (i >= acc_.size()) continue;
+      if (!out.empty() && out.back().protein == i) continue;  // its first occurrence is kept
+      const uint32_t start = proteinOffset(o.pos) + 1;
+      out.push_back({i, start, start + o.len - 1u});
+    }
+    if (!decoy.empty())
+      std::stable_partition(out.begin(), out.end(), [&decoy](const ProteinHit& h) {
+        return h.protein >= decoy.size() || !decoy[h.protein];
+      });
+  }
+
+  std::string fastaGeneName(const std::string& description)
+  {
+    for (size_t p = description.find("GN="); p != std::string::npos; p = description.find("GN=", p + 1))
+    {
+      if (p > 0 && !std::isspace(static_cast<unsigned char>(description[p - 1]))) continue;
+      size_t e = p + 3;
+      while (e < description.size() && !std::isspace(static_cast<unsigned char>(description[e]))) ++e;
+      return description.substr(p + 3, e - p - 3);
+    }
+    return std::string();
+  }
+
+  std::string dbProteinCells(const ProteomeIndex& idx, const std::vector<std::string>& genes,
+                             const std::vector<ProteomeIndex::ProteinHit>& hits, size_t n)
+  {
+    if (hits.empty()) return "-\t-\t0";
+    std::string prot, gene;
+    const size_t k = std::min(n, hits.size());
+    for (size_t j = 0; j < k; ++j)
+    {
+      const ProteomeIndex::ProteinHit& h = hits[j];
+      if (j) { prot += ';'; gene += ';'; }
+      prot += idx.accession(h.protein);
+      prot += '@';
+      prot += std::to_string(h.start);
+      prot += '-';
+      prot += std::to_string(h.end);
+      const std::string* g = h.protein < genes.size() ? &genes[h.protein] : nullptr;
+      gene += (g && !g->empty()) ? *g : std::string("-");
+    }
+    return prot + '\t' + gene + '\t' + std::to_string(hits.size());
   }
 
   void ProteomeIndex::windowsAt(uint32_t pos, uint32_t len, int missed_cleavages,

@@ -57,9 +57,9 @@ const HEADER_CAP: u64 = 4 << 20;
 const HEAD_BYTES: usize = 1 << 20;
 /// Snapshots kept (GUI-DESIGN 5: two files).
 const MAX_SNAPSHOTS: usize = 2;
-/// Snapshots the Spectrum tab's side tables keep: -resolved_out,
-/// -tag_graph_out and -recon_out, all three read for each spectrum shown.
-const SIDE_SNAPSHOTS: usize = 3;
+/// Snapshots the Spectrum tab's side tables keep: -recon_out, read for each
+/// spectrum shown.
+const SIDE_SNAPSHOTS: usize = 1;
 /// The column the background order is built for (D5).
 pub const RANK_COLUMN: &str = "evalue";
 /// The read size of export and of a page (GUI-DESIGN 6.1 item 7).
@@ -234,11 +234,157 @@ pub(crate) struct Index {
     /// (data_end for the last), trailing newline included.
     pub(crate) offsets: Mapped<u64>,
     pub(crate) data_end: u64,
+    /// The file the offsets are of (Codex Earlier 9): every read of a row
+    /// goes through it (Index::reader) and is checked against it
+    /// (Index::verify), so new bytes at old offsets are never read as rows.
+    src: Source,
+}
+
+/// A file as it was indexed: the open handle (on Unix, where it is kept and
+/// every read is from it, so a file renamed over the path is not read), and
+/// its stamp taken from that handle. On Windows a kept handle would stop the
+/// CLI from renaming its new output onto the path, so each read opens the
+/// path again and must find the same file (volume, file index, size, time).
+/// That handle (open_read) shares read and delete but not write: while a
+/// read holds it no program can open the file for writing (the CLI can
+/// still rename a new output over the path), and it cannot be opened while
+/// a writer holds the file, whose last-write time Windows may not update
+/// until that writer closes it (codex6 review n5).
+struct Source {
+    path: String,
+    stamp: Stamp,
+    #[cfg(unix)]
+    file: Arc<File>,
+    /// A read found the file changed: no query is served from it again.
+    stale: AtomicBool,
+}
+
+/// What tells a file's generations apart: size, modification time and its
+/// file identity (fasta.rs file_id).
+#[derive(Clone, Copy, PartialEq, Debug)]
+struct Stamp {
+    len: u64,
+    mtime: Option<SystemTime>,
+    id: (u64, u64),
+}
+
+/// @p path opened for reading. On Windows with the share mode read | delete,
+/// no write (FILE_SHARE_READ | FILE_SHARE_DELETE): the open fails with a
+/// sharing violation while another handle may write the file, and while
+/// this handle is open no writer can open it; renaming or deleting the path
+/// stays possible. Elsewhere File::open (Unix keeps the handle, Source).
+pub(crate) fn open_read(path: &str) -> std::io::Result<File> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_SHARE_READ: u32 = 0x1;
+        const FILE_SHARE_DELETE: u32 = 0x4;
+        std::fs::OpenOptions::new().read(true).share_mode(FILE_SHARE_READ | FILE_SHARE_DELETE).open(path)
+    }
+    #[cfg(not(windows))]
+    {
+        File::open(path)
+    }
+}
+
+/// A Windows sharing violation (ERROR_SHARING_VIOLATION): another program
+/// holds the file open for writing.
+fn being_written(e: &std::io::Error) -> bool {
+    cfg!(windows) && e.raw_os_error() == Some(32)
+}
+
+fn stamp_of(f: &File) -> std::io::Result<Stamp> {
+    let m = f.metadata()?;
+    Ok(Stamp { len: m.len(), mtime: m.modified().ok(), id: crate::fasta::file_id(f, &m) })
+}
+
+/// The refusal of a read that found the indexed file changed under it.
+pub(crate) const CHANGED: &str = "changed while it was read; it is read again";
+
+/// Positional reads of a shared handle as a Read + Seek stream: readers of
+/// one kept handle never move each other's position.
+struct PosReader<'a> {
+    f: &'a File,
+    pos: u64,
+}
+
+impl Read for PosReader<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        #[cfg(unix)]
+        let n = {
+            use std::os::unix::fs::FileExt;
+            self.f.read_at(buf, self.pos)?
+        };
+        #[cfg(windows)]
+        let n = {
+            use std::os::windows::fs::FileExt;
+            self.f.seek_read(buf, self.pos)?
+        };
+        self.pos += n as u64;
+        Ok(n)
+    }
+}
+
+impl Seek for PosReader<'_> {
+    fn seek(&mut self, to: SeekFrom) -> std::io::Result<u64> {
+        let base = match to {
+            SeekFrom::Start(n) => return Ok({ self.pos = n; n }),
+            SeekFrom::Current(d) => self.pos as i128 + d as i128,
+            SeekFrom::End(d) => self.f.metadata()?.len() as i128 + d as i128,
+        };
+        if base < 0 {
+            return Err(std::io::ErrorKind::InvalidInput.into());
+        }
+        self.pos = base as u64;
+        Ok(self.pos)
+    }
 }
 
 impl Index {
     fn end_of(&self, i: usize) -> u64 {
         self.offsets.get(i + 1).copied().unwrap_or(self.data_end)
+    }
+
+    /// The handle every read of the indexed file uses: the kept one (Unix),
+    /// or (Windows) the path opened again, refused unless it is still the
+    /// file indexed.
+    fn reader(&self) -> Result<Arc<File>, String> {
+        #[cfg(unix)]
+        let f = self.src.file.clone();
+        #[cfg(not(unix))]
+        let f = {
+            let path = &self.src.path;
+            match open_read(path) {
+                Ok(f) => Arc::new(f),
+                // A writer has it open: what it holds is not the file indexed.
+                Err(e) if being_written(&e) => {
+                    self.src.stale.store(true, Ordering::Relaxed);
+                    return Err(format!("{path} {CHANGED}"));
+                }
+                Err(e) => return Err(format!("cannot open {path}: {e}")),
+            }
+        };
+        self.verify(&f)?;
+        Ok(f)
+    }
+
+    /// @p f (reader's) still holds the file indexed: same size, time and
+    /// identity. A file rewritten in place (same inode) shows here.
+    fn verify(&self, f: &File) -> Result<(), String> {
+        let path = &self.src.path;
+        if self.src.stale.load(Ordering::Relaxed) {
+            return Err(format!("{path} {CHANGED}"));
+        }
+        let now = stamp_of(f).map_err(|e| format!("cannot read {path}: {e}"))?;
+        if now != self.src.stamp {
+            self.src.stale.store(true, Ordering::Relaxed);
+            return Err(format!("{path} {CHANGED}"));
+        }
+        Ok(())
+    }
+
+    fn stale(&self) -> bool {
+        self.src.stale.load(Ordering::Relaxed)
     }
 }
 
@@ -618,7 +764,7 @@ struct PartOut {
 }
 
 fn typed_part(path: &str, index: &Index, cols: &TypedCols, mut part: TypedPart, cancel: &Cancel) -> Result<PartOut, String> {
-    let f = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+    let f = index.reader()?;
     let mut out = PartOut { dict: HashMap::new(), exc: Vec::new(), ev_inf: Vec::new(), all_clean: true };
     let mut buf: Vec<u8> = Vec::new();
     let mut r = part.ra;
@@ -702,6 +848,7 @@ fn typed_part(path: &str, index: &Index, cols: &TypedCols, mut part: TypedPart, 
         }
         r = e;
     }
+    index.verify(&f)?;
     Ok(out)
 }
 
@@ -893,7 +1040,7 @@ fn keep_bits(t: &Typed, res: &Resolved, n: usize, ev: Option<&[u64]>) -> Vec<u64
 /// binary search reading those cells), and the infinities of @p inf.
 fn evalue_bits(snap: &Snapshot, rank: &Rank, column: usize, max: f64, inf: &[(u32, f64)]) -> Result<Vec<u64>, String> {
     let (path, index) = (&snap.path, &snap.index);
-    let f = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+    let f = index.reader()?;
     let mut buf = Vec::new();
     let mut value = |row: u32| -> Result<f64, String> {
         let (s, l) = row_span(index, row as usize);
@@ -910,6 +1057,7 @@ fn evalue_bits(snap: &Snapshot, rank: &Rank, column: usize, max: f64, inf: &[(u3
             hi = mid;
         }
     }
+    index.verify(&f)?;
     let mut bits = vec![0u64; index.offsets.len().div_ceil(64)];
     for &r in &rank.asc[..lo] {
         bits[r as usize / 64] |= 1 << (r % 64);
@@ -1250,6 +1398,10 @@ impl ViewRows {
 /// One file as indexed, with the orders built over it. Immutable but for
 /// its lazily filled slots; shared by Arc, never locked across a build.
 pub(crate) struct Snapshot {
+    /// Unique in the process: a re-indexed file (rewritten, rerun) is
+    /// another snapshot with another id, so answers of two calls can be
+    /// told apart (the Spectrum tab's ◀ ▶, results_neighbours).
+    pub(crate) id: u64,
     path: String,
     len: u64,
     mtime: Option<SystemTime>,
@@ -1287,7 +1439,9 @@ pub(crate) struct Snapshot {
 
 impl Snapshot {
     fn new(path: &str, len: u64, mtime: Option<SystemTime>, index: Index) -> Snapshot {
+        static NEXT: AtomicU64 = AtomicU64::new(1);
         Snapshot {
+            id: NEXT.fetch_add(1, Ordering::Relaxed),
             path: path.to_string(),
             len,
             mtime,
@@ -1451,12 +1605,11 @@ impl BrowserCache {
     }
 }
 
-/// The tables the Spectrum tab reads a spectrum's rows of besides the tags
-/// (-resolved_out, -tag_graph_out, -recon_out): no table opens them, so they
-/// are read as export reads (Mode::Exact, not refused as a file nobody has
-/// open), with snapshots of their own, so that reading them never evicts the
-/// open file's (MAX_SNAPSHOTS); room for all three (SIDE_SNAPSHOTS), so that
-/// the next spectrum does not index them again.
+/// The table the Spectrum tab reads a spectrum's rows of besides the tags
+/// (-recon_out): no table opens it, so it is read as export reads
+/// (Mode::Exact, not refused as a file nobody has open), with a snapshot of
+/// its own, so that reading it never evicts the open file's (MAX_SNAPSHOTS),
+/// and the next spectrum does not index it again (SIDE_SNAPSHOTS).
 #[derive(Clone)]
 pub struct SideTables(Arc<Shared>);
 
@@ -1482,8 +1635,13 @@ fn field_at(raw: &[u8], col: usize) -> &[u8] {
 }
 
 pub(crate) fn build_index(path: &str, cancel: &Cancel) -> Result<Index, String> {
-    let file = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
-    let mut reader = BufReader::with_capacity(1 << 20, file);
+    // On Windows no writer while the offsets are read (open_read).
+    let file = open_read(path).map_err(|e| {
+        if being_written(&e) { format!("cannot open {path}: another program is writing it") } else { format!("cannot open {path}: {e}") }
+    })?;
+    // The stamp of the very handle the offsets are read from.
+    let stamp = stamp_of(&file).map_err(|e| format!("cannot read {path}: {e}"))?;
+    let mut reader = BufReader::with_capacity(1 << 20, PosReader { f: &file, pos: 0 });
     // One pass counting newlines chunk-wise: line content is not needed here,
     // so a multi-GB file costs one buffer, not one allocation per row.
     let mut offsets: Mapped<u64> = Mapped::with_capacity(1 << 16);
@@ -1551,13 +1709,30 @@ pub(crate) fn build_index(path: &str, cancel: &Cancel) -> Result<Index, String> 
     let columns = match header_end {
         None => Vec::new(),
         Some(end) => {
-            let mut f = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
             let mut raw = vec![0u8; end as usize];
-            f.read_exact(&mut raw).map_err(|e| format!("cannot read {path}: {e}"))?;
+            read_exact_at(&file, &mut raw, 0).map_err(|e| format!("cannot read {path}: {e}"))?;
             header_columns(&raw)
         }
     };
-    Ok(Index { columns, offsets, data_end })
+    drop(reader);
+    let index = Index {
+        columns,
+        offsets,
+        data_end,
+        src: Source {
+            path: path.to_string(),
+            stamp,
+            #[cfg(unix)]
+            file: Arc::new(file.try_clone().map_err(|e| format!("cannot open {path}: {e}"))?),
+            stale: AtomicBool::new(false),
+        },
+    };
+    // Rewritten while it was indexed: the offsets are of no one file.
+    #[cfg(unix)]
+    index.verify(&index.src.file)?;
+    #[cfg(not(unix))]
+    index.verify(&file)?;
+    Ok(index)
 }
 
 /// The header line's columns. A UTF-8 BOM would otherwise rename the first
@@ -1574,7 +1749,7 @@ fn header_columns(raw: &[u8]) -> Vec<String> {
 type Head = (Vec<String>, Vec<Vec<String>>, bool);
 
 pub(crate) fn read_head(path: &str, max_rows: usize) -> Result<Head, String> {
-    let mut f = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+    let mut f = open_read(path).map_err(|e| format!("cannot open {path}: {e}"))?;
     let mut buf = Vec::with_capacity(HEAD_BYTES);
     (&mut f)
         .take(HEAD_BYTES as u64 + 1)
@@ -1724,8 +1899,8 @@ impl Resolved {
 /// The rows matching @p res's row filters, as a bitset in file order: the
 /// chunk-scan fallback for a file beyond the typed budget (item 12).
 fn filter_rows(path: &str, index: &Index, res: &Resolved, cancel: &Cancel) -> Result<Vec<u64>, String> {
-    let file = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
-    let mut reader = BufReader::with_capacity(1 << 20, file);
+    let file = index.reader()?;
+    let mut reader = BufReader::with_capacity(1 << 20, PosReader { f: &file, pos: 0 });
     reader
         .seek(SeekFrom::Start(index.offsets.first().copied().unwrap_or(index.data_end)))
         .map_err(|e| e.to_string())?;
@@ -1747,6 +1922,8 @@ fn filter_rows(path: &str, index: &Index, res: &Resolved, cancel: &Cancel) -> Re
             keep[i / 64] |= 1 << (i % 64);
         }
     }
+    drop(reader);
+    index.verify(&file)?;
     Ok(keep)
 }
 
@@ -1866,7 +2043,7 @@ fn fill_round(
             return Ok(());
         }
         let row_of = |k: usize| rows.map_or(k, |r| r[k] as usize);
-        let file = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+        let file = index.reader()?;
         // span[..have] holds the file's bytes from `at`.
         let (mut at, mut have) = (0u64, 0usize);
         let mut num = [0u8; 8];
@@ -1896,7 +2073,7 @@ fn fill_round(
             r[..take].copy_from_slice(&left[..take]);
             r[w] = block << 7 | left.len().min(w + 1) as u8;
         }
-        Ok(())
+        index.verify(&file)
     };
     let work = &work;
     if jobs.len() == 1 {
@@ -2123,7 +2300,13 @@ pub(crate) fn build_order(
 /// contiguous rows merged into one read of up to CHUNK bytes, mapped back.
 fn read_rows(snap: &Snapshot, rows: &[u32]) -> Result<Vec<Vec<String>>, String> {
     let (path, index) = (&snap.path, &snap.index);
-    let f = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+    #[cfg(test)]
+    READ_HOOK.with(|h| {
+        if let Some(f) = h.borrow_mut().as_mut() {
+            f()
+        }
+    });
+    let f = index.reader()?;
     let mut by_offset: Vec<usize> = (0..rows.len()).collect();
     by_offset.sort_unstable_by_key(|&k| rows[k]);
     let mut out: Vec<Vec<String>> = vec![Vec::new(); rows.len()];
@@ -2156,25 +2339,48 @@ fn read_rows(snap: &Snapshot, rows: &[u32]) -> Result<Vec<Vec<String>>, String> 
         }
         j = e;
     }
+    // Rewritten in place while it was read: these bytes may be of two files.
+    index.verify(&f)?;
     Ok(out)
 }
 
-fn file_meta(path: &str) -> Result<(u64, Option<SystemTime>), String> {
+#[cfg(test)]
+thread_local! {
+    /// Called before each read_rows: the tests' way to change the file
+    /// between the reads of one call (neighbours).
+    pub(crate) static READ_HOOK: std::cell::RefCell<Option<Box<dyn FnMut()>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// A file's size, time and (Unix) device and inode, as file_meta reads them.
+type PathMeta = (u64, Option<SystemTime>, Option<(u64, u64)>);
+
+/// The size, time and (Unix) device and inode of the file at @p path now.
+fn file_meta(path: &str) -> Result<PathMeta, String> {
     let meta = std::fs::metadata(path).map_err(|e| format!("cannot open {path}: {e}"))?;
     // A FIFO or device would block the reader or never end; a directory has no rows.
     if !meta.is_file() {
         return Err(format!("{path} is not a file"));
     }
-    Ok((meta.len(), meta.modified().ok()))
+    #[cfg(unix)]
+    let id = {
+        use std::os::unix::fs::MetadataExt;
+        Some((meta.dev(), meta.ino()))
+    };
+    #[cfg(not(unix))]
+    let id = None;
+    Ok((meta.len(), meta.modified().ok(), id))
 }
 
 impl Shared {
-    fn fresh(&self, path: &str, len: u64, mtime: Option<SystemTime>) -> Option<Arc<Snapshot>> {
+    /// The snapshot of the file at @p path as it is now: the same size and
+    /// time, the same file (Unix: device and inode; elsewhere each read
+    /// checks it), and no read of it found it changed.
+    fn fresh(&self, path: &str, len: u64, mtime: Option<SystemTime>, id: Option<(u64, u64)>) -> Option<Arc<Snapshot>> {
         self.snaps
             .read()
             .unwrap()
             .iter()
-            .find(|s| s.path == path && s.len == len && s.mtime == mtime)
+            .find(|s| s.path == path && s.len == len && s.mtime == mtime && id.is_none_or(|i| i == s.index.src.stamp.id) && !s.index.stale())
             .cloned()
     }
 
@@ -2207,8 +2413,8 @@ impl Shared {
     /// has open with a token nothing cancels. An Interactive call for a file
     /// that is not open does not index it at all.
     fn snapshot_mode(&self, path: &str, mode: Mode) -> Result<Arc<Snapshot>, String> {
-        let (len, mtime) = file_meta(path)?;
-        if let Some(s) = self.fresh(path, len, mtime) {
+        let (len, mtime, id) = file_meta(path)?;
+        if let Some(s) = self.fresh(path, len, mtime, id) {
             return Ok(s);
         }
         let token = match (self.index_token(path), mode) {
@@ -2218,13 +2424,15 @@ impl Shared {
         };
         let _one = self.build.lock().unwrap_or_else(|e| e.into_inner());
         // Another build may have finished while this one waited.
-        if let Some(s) = self.fresh(path, len, mtime) {
+        if let Some(s) = self.fresh(path, len, mtime, id) {
             return Ok(s);
         }
         if token.is_cancelled() {
             return Err(CANCELLED.into());
         }
         let index = build_index(path, &token)?;
+        // The stamp of the handle indexed, not of the look before it.
+        let (len, mtime) = (index.src.stamp.len, index.src.stamp.mtime);
         let snap = Arc::new(Snapshot::new(path, len, mtime, index));
         let mut snaps = self.snaps.write().unwrap();
         snaps.retain(|s| s.path != path);
@@ -2686,8 +2894,8 @@ pub(crate) fn open(shared: &Arc<Shared>, path: &str, emit: Emit) -> Result<Resul
 /// Where file row @p row sits in @p spec's view, if that view is built (the
 /// renderer's anchor across the D5 swap). Never starts a build.
 pub(crate) fn position(shared: &Arc<Shared>, path: &str, spec: &ViewSpec, row: u32) -> Result<Option<usize>, String> {
-    let (len, mtime) = file_meta(path)?;
-    let Some(snap) = shared.fresh(path, len, mtime) else {
+    let (len, mtime, id) = file_meta(path)?;
+    let Some(snap) = shared.fresh(path, len, mtime, id) else {
         return Ok(None);
     };
     let res = Resolved::bind(spec, &snap.index.columns);
@@ -2701,6 +2909,118 @@ pub(crate) fn position(shared: &Arc<Shared>, path: &str, spec: &ViewSpec, row: u
         }
     }
     Ok(snap.cached_view(spec).and_then(|v| v.position(row)))
+}
+
+/// A spectrum ◀ or ▶ leads to: its first row in the order walked.
+#[derive(Serialize, Debug, PartialEq, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct NavStep {
+    pub spectrum: String,
+    pub row_id: u32,
+}
+
+/// Where a spectrum sits in a view and which spectra lie either side of it,
+/// every part read from one snapshot (`snapshot`: its id).
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(tag = "status", rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum NavAnswer {
+    /// The view is not in its final order yet (D5: the E-value order is
+    /// being built); asked again later.
+    Pending { snapshot: u64 },
+    /// Neither the row nor any row of the spectrum is in the view.
+    Absent { snapshot: u64 },
+    /// At position `pos` of the `matched` rows, on file row `row_id`;
+    /// `prev` and `next`: none at an end (or past NAV_SCAN * NAV_SCAN_PAGES
+    /// rows of the same spectrum).
+    At { snapshot: u64, pos: usize, matched: usize, row_id: u32, prev: Option<NavStep>, next: Option<NavStep> },
+}
+
+/// Rows read at a time while stepping over the other rows of one spectrum,
+/// and at most that many reads each way.
+const NAV_SCAN: usize = 200;
+const NAV_SCAN_PAGES: usize = 50;
+
+/// ◀ ▶ of the Spectrum tab: where @p spectrum sits in @p spec's view (file
+/// row @p row when it is in the view and of that spectrum, else the
+/// spectrum's first row there) and the nearest row of another spectrum
+/// either side. One snapshot answers all of it: a file rewritten between
+/// the renderer's calls can no longer give a position of one file and the
+/// rows of another.
+pub(crate) fn neighbours(
+    shared: &Arc<Shared>,
+    path: &str,
+    spec: &ViewSpec,
+    row: Option<u32>,
+    spectrum: &str,
+    mode: Mode,
+) -> Result<NavAnswer, String> {
+    let snap = shared.snapshot_mode(path, mode)?;
+    let snapshot = snap.id;
+    let (rows, ranked, _) = shared.view_of(&snap, spec, mode, None)?;
+    if !ranked {
+        return Ok(NavAnswer::Pending { snapshot });
+    }
+    let sp_col = snap.index.columns.iter().position(|c| c == "spectrum");
+    let spectra_of = |ids: &[u32]| -> Result<Vec<Option<String>>, String> {
+        let Some(c) = sp_col else {
+            return Ok(vec![None; ids.len()]);
+        };
+        Ok(read_rows(&snap, ids)?.into_iter().map(|mut f| (c < f.len()).then(|| std::mem::take(&mut f[c]))).collect())
+    };
+    let mut at: Option<(usize, u32)> = None;
+    if let Some(r) = row.filter(|&r| (r as usize) < snap.index.offsets.len()) {
+        if let Some(p) = rows.position(r) {
+            // A row id of an older file names another spectrum in this one.
+            if spectra_of(&[r])?[0].as_deref() == Some(spectrum) {
+                at = Some((p, r));
+            }
+        }
+    }
+    let (pos, row_id) = match at {
+        Some(a) => a,
+        None => {
+            let mine = ViewSpec { spectrum: Some(spectrum.to_string()), spectrum_exact: true, ..spec.clone() };
+            let (m, m_ranked, _) = shared.view_of(&snap, &mine, mode, None)?;
+            // The filters do not wait for the E-value order: no row is no row.
+            let Some(&first) = m.window(0, 1).first() else {
+                return Ok(NavAnswer::Absent { snapshot });
+            };
+            // Which row is first is not known before the order is.
+            if !m_ranked {
+                return Ok(NavAnswer::Pending { snapshot });
+            }
+            match rows.position(first) {
+                Some(p) => (p, first),
+                None => return Ok(NavAnswer::Absent { snapshot }),
+            }
+        }
+    };
+    let n = rows.len();
+    let step = |fwd: bool| -> Result<Option<NavStep>, String> {
+        for k in 0..NAV_SCAN_PAGES {
+            let (a, b) = if fwd {
+                let a = pos + 1 + k * NAV_SCAN;
+                (a, (a + NAV_SCAN).min(n))
+            } else {
+                let b = pos.saturating_sub(k * NAV_SCAN);
+                (b.saturating_sub(NAV_SCAN), b)
+            };
+            if a >= b {
+                return Ok(None);
+            }
+            let ids = rows.window(a, b - a);
+            let sps = spectra_of(&ids)?;
+            let hit = |i: usize| sps[i].as_deref().filter(|s| *s != spectrum).map(|s| NavStep { spectrum: s.to_string(), row_id: ids[i] });
+            let found = if fwd { (0..ids.len()).find_map(hit) } else { (0..ids.len()).rev().find_map(hit) };
+            if found.is_some() {
+                return Ok(found);
+            }
+        }
+        Ok(None)
+    };
+    let prev = step(false)?;
+    let next = step(true)?;
+    Ok(NavAnswer::At { snapshot, pos, matched: n, row_id, prev, next })
 }
 
 #[tauri::command]
@@ -2757,6 +3077,20 @@ pub async fn results_position(
 ) -> Result<Option<usize>, String> {
     let shared = state.0.clone();
     tauri::async_runtime::spawn_blocking(move || position(&shared, &path, &view, row))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn results_neighbours(
+    state: tauri::State<'_, BrowserCache>,
+    path: String,
+    view: ViewSpec,
+    row: Option<u32>,
+    spectrum: String,
+) -> Result<NavAnswer, String> {
+    let shared = state.0.clone();
+    tauri::async_runtime::spawn_blocking(move || neighbours(&shared, &path, &view, row, &spectrum, Mode::Interactive))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -2923,7 +3257,7 @@ pub(crate) fn export_to(
         format_header(&index.columns, &pick, fmt, &mut head);
         w.write_all(&head).map_err(err)?;
         progress(0, total);
-        let src = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+        let src = index.reader()?;
         // The read span (at most CHUNK, or one capped row), in a mapping of
         // its own like the window buffers below: returned when the export
         // ends, not kept by the allocator (GUI-DESIGN 7, backend peak).
@@ -3040,6 +3374,11 @@ pub(crate) fn export_to(
             }
         }
         w.flush().map_err(err)?;
+        // Codex6 review n5: the source checked again before the export is
+        // committed, from the handle every row came from: a file rewritten
+        // in place while it was read (same size and identity, a new time)
+        // fails here, and its rows are not committed.
+        index.verify(&src)?;
         Ok(total)
     };
     let written = write(&mut rw);
@@ -3439,6 +3778,104 @@ mod tests {
         std::fs::remove_file(&dest).ok();
     }
 
+    // Codex6 review n5: the export checked its source only when it opened
+    // it, then committed: a rewrite in place while the rows were read (same
+    // size and identity) went into the export. The source is checked again
+    // before the commit, and such an export writes nothing.
+    #[test]
+    fn an_export_whose_source_changes_while_it_is_read_is_not_committed() {
+        let p = fixture("export-inplace.tsv");
+        let dest = format!("{p}.out.tsv");
+        let cache = Arc::new(Shared::default());
+        let cols = vec!["tag".to_string(), "evalue".to_string()];
+        let before = std::fs::read(&p).unwrap();
+        // Codex7 review n5: on Windows the export's read handle shares no
+        // write (open_read), so the writer is refused with a sharing
+        // violation and no rewrite in place can happen while it reads; the
+        // test asserts that refusal there instead of unwrapping the open.
+        let rewritten = AtomicBool::new(false);
+        let rewrite = || {
+            use std::io::{Seek, SeekFrom, Write};
+            let mut f = match std::fs::OpenOptions::new().write(true).open(&p) {
+                Ok(f) => f,
+                Err(e) => {
+                    assert!(cfg!(windows), "a writer was refused off Windows: {e}");
+                    assert_eq!(e.raw_os_error(), Some(32), "not a sharing violation: {e}");
+                    return;
+                }
+            };
+            assert!(!cfg!(windows), "a writer opened the file the export reads (Windows)");
+            // Same length: one data byte changed, the time moved on.
+            let at = before.iter().position(|&b| b == b'\n').unwrap() as u64 + 1;
+            f.seek(SeekFrom::Start(at)).unwrap();
+            f.write_all(b"X").unwrap();
+            f.set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(5)).unwrap();
+            rewritten.store(true, Ordering::SeqCst);
+        };
+        let done = AtomicBool::new(false);
+        let progress = |k: usize, total: usize| {
+            // Every row read, the export not yet committed.
+            if k == total && total > 0 && !done.swap(true, Ordering::SeqCst) {
+                rewrite();
+            }
+        };
+        let r = export_to(&cache, &p, &ViewSpec::default(), &cols, &dest, ExportFormat::Tsv, &Cancel::default(), &progress);
+        assert!(done.load(Ordering::SeqCst), "the rewrite ran");
+        assert_eq!(std::fs::metadata(&p).unwrap().len(), before.len() as u64);
+        if cfg!(windows) {
+            // The writer was refused: the source is unchanged and the export
+            // of it is committed whole.
+            assert!(!rewritten.load(Ordering::SeqCst));
+            assert_eq!(std::fs::read(&p).unwrap(), before, "the source changed although its writer was refused");
+            assert!(r.as_ref().is_ok_and(|&n| n > 0), "{r:?}");
+            assert!(std::path::Path::new(&dest).exists(), "the export of an unchanged source was not committed");
+            std::fs::remove_file(&dest).unwrap();
+        } else {
+            assert!(rewritten.load(Ordering::SeqCst), "the rewrite in place ran");
+            assert!(r.as_ref().is_err_and(|e| e.contains(CHANGED)), "{r:?}");
+            assert!(!std::path::Path::new(&dest).exists(), "a mixed export was committed");
+        }
+        let dir = std::path::Path::new(&p).parent().unwrap();
+        let name = std::path::Path::new(&dest).file_name().unwrap().to_string_lossy().to_string();
+        assert!(!std::fs::read_dir(dir).unwrap().flatten().any(|e| {
+            let n = e.file_name().to_string_lossy().to_string();
+            n.starts_with(&name) && n.ends_with(".part")
+        }));
+        // An unchanged source exports (read again: a new index).
+        let cache2 = Arc::new(Shared::default());
+        assert!(export(&cache2, &p, &ViewSpec::default(), &cols, &dest).is_ok());
+        std::fs::remove_file(&p).ok();
+        std::fs::remove_file(&dest).ok();
+    }
+
+    // Codex6 review n5, Windows only (untested on macOS and Linux): a writer
+    // that keeps its handle open may leave the last-write time unchanged, so
+    // a read must not open the file while a writer holds it, and while a
+    // read holds it no writer can open it; renaming a new file over the
+    // path (as the CLI commits its output) still works.
+    #[cfg(windows)]
+    #[test]
+    fn windows_reads_exclude_writers_but_not_renames() {
+        let p = fixture("export-share.tsv");
+        let idx = build_index(&p, &Cancel::default()).unwrap();
+        {
+            use std::io::Write;
+            let mut w = std::fs::OpenOptions::new().write(true).open(&p).unwrap();
+            w.write_all(b"s").unwrap();
+            // Same length, the writer still open: the read is refused.
+            let r = idx.reader();
+            assert!(r.as_ref().is_err_and(|e| e.contains(CHANGED)), "{:?}", r.err());
+        }
+        let idx = build_index(&p, &Cancel::default()).unwrap();
+        let held = idx.reader().unwrap();
+        assert!(std::fs::OpenOptions::new().write(true).open(&p).is_err(), "a writer opened the file a read holds");
+        let next = format!("{p}.next");
+        std::fs::write(&next, "spectrum\ttag\n").unwrap();
+        std::fs::rename(&next, &p).expect("a rename over a file a read holds");
+        drop(held);
+        std::fs::remove_file(&p).ok();
+    }
+
     #[test]
     fn trivial_query_serves_all_rows_and_header() {
         let p = fixture("basic.tsv");
@@ -3719,6 +4156,137 @@ mod tests {
         let r3 = query(&cache, &p, &spec, 0, 100).unwrap();
         assert_eq!(r3.total_rows, 1);
         assert_eq!(col(&r3, 0, "tag"), "ZZ");
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn neighbours_come_from_one_snapshot_across_a_rewrite() {
+        let row = |sp: &str, tag: &str, ev: &str| format!("{sp}\t{tag}\t7\t1\t0\t0\t0\t0\t{ev}\t0.5\t0.5\tfwd");
+        let a = [row("s1", "AAAAAAA", "0.1"), row("s2", "CCCCCCC", "0.2"), row("s3", "DDDDDDD", "0.3")];
+        let p = write_fixture("neighbours.tsv", &format!("{HEADER}\n{}\n", a.join("\n")));
+        let shared = Arc::new(Shared::default());
+        let spec = ViewSpec { sort: Some(SortSpec { column: "evalue".into(), desc: false }), ..Default::default() };
+        let nav = |row: Option<u32>, sp: &str| neighbours(&shared, &p, &spec, row, sp, Mode::Exact).unwrap();
+        let step = |sp: &str, r: u32| Some(NavStep { spectrum: sp.into(), row_id: r });
+        let NavAnswer::At { snapshot: sa, pos, matched, row_id, prev, next } = nav(Some(1), "s2") else { panic!("s2 is in A") };
+        assert_eq!((pos, matched, row_id), (1, 3, 1));
+        assert_eq!((prev, next), (step("s1", 0), step("s3", 2)));
+        // The same file: the same snapshot.
+        assert!(matches!(nav(Some(1), "s2"), NavAnswer::At { snapshot, .. } if snapshot == sa));
+
+        // Rewritten between calls (a rerun): other rows, another length. File
+        // row 1 is now of s9, and s2 sits elsewhere in the E-value order.
+        let b = [
+            row("s7", "EEEEEEE", "0.01"),
+            row("s9", "FFFFFFF", "0.02"),
+            row("s8", "GGGGGGG", "0.03"),
+            row("s2", "CCCCCCC", "0.04"),
+            row("s2", "HHHHHHH", "0.05"),
+            row("s6", "KKKKKKK", "0.06"),
+        ];
+        std::fs::write(&p, format!("{HEADER}\n{}\n", b.join("\n"))).unwrap();
+        let NavAnswer::At { snapshot: sb, pos, matched, row_id, prev, next } = nav(Some(1), "s2") else { panic!("s2 is in B") };
+        assert_ne!(sb, sa);
+        // All of B: not A's position 1 and count 3 with B's rows, and not B's
+        // row 1 (s9) taken for s2.
+        assert_eq!((pos, matched, row_id), (3, 6, 3));
+        // ▶ steps over s2's second row.
+        assert_eq!((prev, next), (step("s8", 2), step("s6", 5)));
+        // A spectrum B does not have.
+        assert_eq!(nav(Some(2), "s3"), NavAnswer::Absent { snapshot: sb });
+        // Ends.
+        assert!(matches!(nav(Some(0), "s7"), NavAnswer::At { pos: 0, prev: None, next: Some(_), .. }));
+        assert!(matches!(nav(Some(5), "s6"), NavAnswer::At { pos: 5, prev: Some(_), next: None, .. }));
+        std::fs::remove_file(&p).ok();
+    }
+
+    // Codex Earlier 9: each row read of one neighbour lookup opened the path
+    // again, so a TSV replaced between two reads gave new bytes at old
+    // offsets under the old snapshot id. Every read is now of the file
+    // indexed: a file renamed over the path mid-lookup is not read (Unix:
+    // the kept handle; elsewhere the lookup is refused), and one rewritten
+    // in place is refused, then indexed again.
+    #[test]
+    fn a_file_replaced_during_one_neighbour_lookup_is_not_read() {
+        let row = |sp: &str, tag: &str, ev: &str| format!("{sp}\t{tag}\t7\t1\t0\t0\t0\t0\t{ev}\t0.5\t0.5\tfwd");
+        let a = [row("s1", "AAAAAAA", "0.1"), row("s2", "CCCCCCC", "0.2"), row("s3", "DDDDDDD", "0.3")];
+        let body_a = format!("{HEADER}\n{}\n", a.join("\n"));
+        // The same length, other spectra at the same offsets.
+        let b = [row("x1", "AAAAAAA", "0.1"), row("x2", "CCCCCCC", "0.2"), row("x3", "DDDDDDD", "0.3")];
+        let body_b = format!("{HEADER}\n{}\n", b.join("\n"));
+        assert_eq!(body_a.len(), body_b.len());
+        let p = write_fixture("neighbours-swap.tsv", &body_a);
+        let shared = Arc::new(Shared::default());
+        let spec = ViewSpec { sort: Some(SortSpec { column: "evalue".into(), desc: false }), ..Default::default() };
+        let step = |sp: &str, r: u32| Some(NavStep { spectrum: sp.into(), row_id: r });
+        // Index and rank it first: the lookup below reads rows only.
+        let NavAnswer::At { snapshot: sa, .. } = neighbours(&shared, &p, &spec, Some(1), "s2", Mode::Exact).unwrap() else { panic!() };
+        let swap = |how: &'static str| {
+            let (p, body_b) = (p.clone(), body_b.clone());
+            let mut n = 0;
+            Box::new(move || {
+                n += 1;
+                // After the first read of the lookup (the position's row).
+                if n == 2 {
+                    if how == "rename" {
+                        let tmp = format!("{p}.new");
+                        std::fs::write(&tmp, &body_b).unwrap();
+                        std::fs::rename(&tmp, &p).unwrap();
+                    } else {
+                        std::thread::sleep(Duration::from_millis(20));
+                        let mut f = std::fs::OpenOptions::new().write(true).open(&p).unwrap();
+                        f.write_all(body_b.as_bytes()).unwrap();
+                    }
+                }
+            }) as Box<dyn FnMut()>
+        };
+        READ_HOOK.with(|h| *h.borrow_mut() = Some(swap("rename")));
+        let got = neighbours(&shared, &p, &spec, Some(1), "s2", Mode::Exact);
+        READ_HOOK.with(|h| *h.borrow_mut() = None);
+        #[cfg(unix)]
+        assert_eq!(
+            got,
+            Ok(NavAnswer::At { snapshot: sa, pos: 1, matched: 3, row_id: 1, prev: step("s1", 0), next: step("s3", 2) }),
+            "every part of the answer from the file indexed"
+        );
+        #[cfg(not(unix))]
+        assert!(got.as_ref().is_err_and(|e| e.contains(CHANGED)), "{got:?}");
+        // The next lookup indexes the new file.
+        let NavAnswer::At { snapshot: sb, next, .. } = neighbours(&shared, &p, &spec, Some(1), "x2", Mode::Exact).unwrap() else { panic!() };
+        assert_ne!(sb, sa);
+        assert_eq!(next, step("x3", 2));
+
+        // In place (same inode, same length, a later time): refused, never
+        // the new spectra under the old snapshot; then read again.
+        std::fs::write(&p, &body_a).unwrap();
+        let NavAnswer::At { snapshot: sc, .. } = neighbours(&shared, &p, &spec, Some(1), "s2", Mode::Exact).unwrap() else { panic!() };
+        READ_HOOK.with(|h| *h.borrow_mut() = Some(swap("inplace")));
+        let got = neighbours(&shared, &p, &spec, Some(1), "s2", Mode::Exact);
+        READ_HOOK.with(|h| *h.borrow_mut() = None);
+        assert!(got.as_ref().is_err_and(|e| e.contains(CHANGED)), "{got:?}");
+        let NavAnswer::At { snapshot: sd, prev, .. } = neighbours(&shared, &p, &spec, Some(1), "x2", Mode::Exact).unwrap() else { panic!() };
+        assert_ne!(sd, sc);
+        assert_eq!(prev, step("x1", 0));
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn neighbours_wait_for_the_evalue_order_in_the_table() {
+        let p = fixture("neighbours-pending.tsv");
+        let shared = Arc::new(Shared::default());
+        // The open file, its E-value order being built (D5): pending, never
+        // the file order taken for it.
+        let snap = shared.snapshot(&p).unwrap();
+        *shared.open.lock().unwrap() = Some(OpenState { path: p.clone(), generation: 1, emit: Arc::new(|_| {}), index: Cancel::default() });
+        *snap.rank.lock().unwrap() = RankSlot::Building(Cancel::default());
+        let spec = ViewSpec { sort: Some(SortSpec { column: "evalue".into(), desc: false }), ..Default::default() };
+        assert_eq!(neighbours(&shared, &p, &spec, Some(0), "frame=5", Mode::Interactive).unwrap(), NavAnswer::Pending { snapshot: snap.id });
+        finish_rank_after(&shared, &snap, 0).join().unwrap();
+        // Ranked: frame=7 (0.0001) is first, then frame=5's rows.
+        let NavAnswer::At { pos, prev, next, .. } = neighbours(&shared, &p, &spec, Some(0), "frame=5", Mode::Interactive).unwrap() else { panic!() };
+        assert_eq!(pos, 1);
+        assert_eq!(prev, Some(NavStep { spectrum: "frame=7".into(), row_id: 2 }));
+        assert_eq!(next, Some(NavStep { spectrum: "Frame=9".into(), row_id: 3 }));
         std::fs::remove_file(&p).ok();
     }
 
@@ -4032,32 +4600,25 @@ mod tests {
         std::fs::remove_file(&p).ok();
     }
 
-    /// The Spectrum tab's side tables: a file no table has open is refused
-    /// to an Interactive query, and read by side_query; their snapshots are
-    /// their own, so the open file's stays.
+    /// The Spectrum tab's side table (-recon_out): a file no table has open
+    /// is refused to an Interactive query, and read by side_query; its
+    /// snapshot is its own, so the open file's stays.
     #[test]
     fn side_tables_are_read_without_an_open_and_keep_the_open_files_snapshot() {
         let tags = fixture("side-tags.tsv");
-        let head = "spectrum\trank\tsequence";
-        let resolved = write_fixture("side.resolved.tsv", &format!("{head}\nscan=1\t1\tPEP\nscan=10\t1\tTID\nscan=1\t2\tW\n"));
-        let graph = write_fixture("side.taggraph.tsv", "spectrum\tnode\nscan=1\t0\nscan=10\t0\n");
+        let recon = write_fixture("side.recon.tsv", "spectrum\tpeptide\nscan=1\tPEPTIDE\nscan=10\tTIDE\nscan=1\tW\n");
         let main = Arc::new(Shared::default());
         main.snapshot(&tags).unwrap();
         let exact = ViewSpec { spectrum: Some("scan=1".into()), spectrum_exact: true, ..Default::default() };
-        assert_eq!(query_mode(&main, &resolved, &exact, 0, 10, Mode::Interactive).err().as_deref(), Some(CANCELLED));
+        assert_eq!(query_mode(&main, &recon, &exact, 0, 10, Mode::Interactive).err().as_deref(), Some(CANCELLED));
         let side = SideTables::default();
-        let r = side_query(&side, &resolved, &exact, 0, 10).unwrap();
+        let r = side_query(&side, &recon, &exact, 0, 10).unwrap();
         assert_eq!(r.matched_rows, 2);
-        assert_eq!((0..2).map(|i| col(&r, i, "sequence")).collect::<Vec<_>>(), ["PEP", "W"]);
-        assert_eq!(side_query(&side, &graph, &exact, 0, 10).unwrap().row_ids, [0]);
+        assert_eq!((0..2).map(|i| col(&r, i, "peptide")).collect::<Vec<_>>(), ["PEPTIDE", "W"]);
         assert!(main.fresh_any(&tags).is_some());
-        // -recon_out too, and all three stay indexed for the next spectrum.
-        let recon = write_fixture("side.recon.tsv", "spectrum\tpeptide\nscan=1\tPEPTIDE\n");
-        assert_eq!(side_query(&side, &recon, &exact, 0, 10).unwrap().matched_rows, 1);
-        for p in [&resolved, &graph, &recon] {
-            assert!(side.0.fresh_any(p).is_some(), "{p} was evicted");
-        }
-        for p in [tags, resolved, graph, recon] {
+        // It stays indexed for the next spectrum.
+        assert!(side.0.fresh_any(&recon).is_some(), "{recon} was evicted");
+        for p in [tags, recon] {
             std::fs::remove_file(&p).ok();
         }
     }

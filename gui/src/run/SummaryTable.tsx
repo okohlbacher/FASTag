@@ -108,15 +108,17 @@ export default function SummaryTable({ summary, busy, outDir, onShow, sdrf, prot
               <tr key={r.input} className={`st-${r.status}`}>
                 <td data-text={r.file} title={r.input}>
                   {r.canOpen && !busy ? (
-                    <button type="button" className="link" aria-label={`Open ${r.file} in Results`} title={r.input} onClick={() => onShow(r.input)}>
+                    <button type="button" className="link file-name" aria-label={`Open ${r.file} in Results`} title={r.input} onClick={() => onShow(r.input)}>
                       {r.file}
                     </button>
                   ) : (
-                    r.file
+                    // Bounded like the link: a long name is cut, never wider than the view.
+                    <span className="file-name">{r.file}</span>
                   )}
                 </td>
                 <td data-text={r.statusText} className="status" title={r.statusText}>
-                  {r.statusText}
+                  {/* Wrapped, at most three lines; the whole text in the title, the job's Log and the banner. */}
+                  <span className="status-text">{r.statusText}</span>
                 </td>
                 <td data-text={count(r.tags)} className="num">
                   {count(r.tags)}

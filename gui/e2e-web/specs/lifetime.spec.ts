@@ -4,7 +4,6 @@ import { test, expect, openApp, mockState } from './fixtures'
 // the next start, and the files it left are offered for removal, once.
 test('the files an interrupted run left are offered at startup and removed on the click', async ({ page }) => {
   await openApp(page, 'interrupted')
-  await expect(page.locator('.last-run')).toContainText('Failed in an earlier session')
   const box = page.getByRole('region', { name: 'Files left by an unfinished run' })
   await expect(box).toContainText('/data/run01.tags.tsv')
   await expect(box).toContainText('/data/run01.digest.tsv.part')

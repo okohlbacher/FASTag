@@ -101,11 +101,18 @@ run none "${COMMON[@]}" -species "${TAX[@]}" -species_call none -threads 2 || { 
 cmp -s "$TMP/absent.species.tsv" "$TMP/none.species.tsv" || fail "-species_call none changed the species report"
 cmp -s "$TMP/absent.tsv" "$TMP/none.tsv" || fail "-species_call none changed the tags"
 [ "$(fields "$TMP/absent.species.tsv")" = 8 ] || fail "the legacy report does not have 8 fields"
+# -subsume_tags (on by default) changes only -out: the species evidence counts
+# every row, so the report is the same under off (-extension 1 drops rows here).
+run subsoff "${COMMON[@]}" -species "${TAX[@]}" -threads 2 -subsume_tags off \
+  || { cat "$TMP/subsoff.log" >&2; fail "-subsume_tags off"; }
+[ "$(wc -l < "$TMP/absent.tsv")" -lt "$(wc -l < "$TMP/subsoff.tsv")" ] \
+  || fail "-subsume_tags drops no row at -tag_length 7 -extension 1 (the species check is vacuous)"
+cmp -s "$TMP/absent.species.tsv" "$TMP/subsoff.species.tsv" || fail "-subsume_tags changed the species report"
 if [ -n "${FASTAG_BASELINE_BIN:-}" ] && [ -x "${FASTAG_BASELINE_BIN}" ]; then
   "$FASTAG_BASELINE_BIN" -out "$TMP/base.tsv" "${COMMON[@]}" -species "${TAX[@]}" -threads 2 > "$TMP/base.log" 2>&1 \
     || { cat "$TMP/base.log" >&2; fail "baseline run"; }
   cmp -s "$TMP/base.species.tsv" "$TMP/none.species.tsv" || fail "species report differs from $FASTAG_BASELINE_BIN"
-  cmp -s "$TMP/base.tsv" "$TMP/none.tsv" || fail "tags differ from $FASTAG_BASELINE_BIN"
+  cmp -s "$TMP/base.tsv" "$TMP/subsoff.tsv" || fail "tags differ from $FASTAG_BASELINE_BIN (-subsume_tags off)"
   echo "species_call_test: -species_call none equals $FASTAG_BASELINE_BIN"
 fi
 

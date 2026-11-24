@@ -17,6 +17,7 @@ import type { ResolvedOutputs, RunResult, SpeciesReport } from '../types'
 import type { JobAction } from '../runJob'
 import { baseName, type Report } from '../digestReport'
 import { addJobs, renameJobs, type BatchJob } from './batch'
+import { refusalOf } from '../inspector/checks'
 import type { Refusal } from '../inspector/checks'
 import { createLogStore, type LogStore } from './logStore'
 import type { TableGen, TablePaths } from '../results/tables'
@@ -567,6 +568,9 @@ export function queueView(s: RunState): BatchJob[] {
     .map((j) => {
       const b: BatchJob = { input: j.input, out: j.out, status: j.status === 'ok' ? 'done' : j.status }
       if (j.reason !== undefined) b.reason = j.reason
+      // FASTag's refusal (raw DIA), read from the job's own notes.
+      const refusal = j.status === 'failed' ? refusalOf(j.notes ?? [], j.result?.code) : null
+      if (refusal) b.refusal = refusal
       if (ended(j)) {
         if (j.startedAt !== undefined && j.endedAt !== undefined) b.ms = j.endedAt - j.startedAt
         if (j.status === 'ok' && j.resolvedOutputs) b.outputs = j.resolvedOutputs

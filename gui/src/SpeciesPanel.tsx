@@ -114,7 +114,7 @@ export default function SpeciesPanel({
   if (report.taxa.length === 0) {
     return (
       <div className="species">
-        <ReportHeader title="Species" paths={[report.path]} help={{ to: 'species-reading', label: 'About this tab' }} />
+        <ReportHeader title="Species" paths={[report.path]} />
         <CzNote n={czExcluded} />
         <DaBanner tol={daTolerance}>An empty report at this tolerance says nothing about the sample.</DaBanner>
         <div className="empty-state">
@@ -150,7 +150,7 @@ export default function SpeciesPanel({
       <ReportHeader
         title="Species"
         paths={[report.path]}
-        help={{ to: 'species-reading', label: 'About this tab' }}
+       
         sub={
           <>
             {runInput && enabled && (

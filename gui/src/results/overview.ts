@@ -16,7 +16,7 @@ import { alkylationCall as alkylationReportCall, fmt, fmtQ, pct, type Alkylation
 import type { ParamValue } from '../ParamField'
 import type { SpeciesReport } from '../types'
 import { electronReadAsBy, noActivationMeta } from '../inspector/checks'
-import { alkylationExtension, alkylationShipped, alkylationShort, alkylationTarget } from '../setup/products'
+import { alkylationExtension, alkylationTagOnly, alkylationShipped, alkylationShort, alkylationTarget } from '../setup/products'
 import { longestSeed } from '../paramLayout'
 import {
   alkylationCall,
@@ -618,7 +618,7 @@ export function buildOverview(i: OverviewInputs): Overview {
       evidence: 'default',
       note:
         alkCall
-          ? `default; no alkylation call (${alkylationReason(alkCall.reason)})`
+          ? `default; no alkylation call (${alkylationReason(alkCall.reason, alkCall.source)})`
           : alk.state === 'counts' && !alk.placed
           ? 'default, alkylation not assessed (no tag placed in the FASTA)'
           : alk.state === 'counts'
@@ -859,46 +859,108 @@ function alkylationTile(c: AlkylationCall, fasta: boolean, params: Record<string
     ...base,
     value: 'not assessed',
     tone: 'off',
-    note: `the alkylation report was not written${raise ? `; adding it raises the extension from ${ext} to ${raise}, so tags reach the ${target} residues the proteome needs` : short ? `; on this database it needs extension ${short}${Number(String(params['recon_min_length'] ?? '')) > 0 ? '' : ' for a human-sized one'}` : ''}`,
+    note: `the alkylation report was not written${raise ? `; adding it raises the extension from ${ext} to ${raise}, so tags reach the ${target} residues the proteome needs` : short ? `; on this database it needs extension ${short}${Number(String(params['recon_min_length'] ?? '')) > 0 ? '' : ' for a human-sized one'}` : alkylationTagOnly(withAlk) ? '; it needs no database (the call is read off the tags)' : ''}`,
     action: enable('Alkylation report', { alkylation_out: 'alkylation.tsv', ...(raise ? { extension: raise } : {}) })
   }
 }
 
-/// The reasons of an alkylation no call, in words.
-export function alkylationReason(reason: string | undefined): string {
+/// The reasons of an alkylation no call, in words; @p source: the call's
+/// (format 2), whose tag votes are not spectra with one cysteine.
+export function alkylationReason(reason: string | undefined, source?: string): string {
+  const fromTags = source === 'tags' || source === 'tags+placement'
   switch (reason) {
     case 'tags_too_short':
       return 'no tag reaches the length the proteome needs (8 residues for human or mouse, 7 for yeast or E. coli)'
     case 'few_cys_spectra':
-      return 'too few spectra with one cysteine'
+      return fromTags ? 'too few tag votes for a cysteine form' : 'too few spectra with one cysteine'
     case 'ambiguous':
       return 'no reagent has a clear majority'
+    case 'unresolved_forms':
+      return 'the fragment tolerance cannot tell two cysteine forms apart'
+    case 'disagree':
+      return 'the tags and the placements on the database call different reagents'
+    case 'alias_needs_database':
+      return 'the reagent the tags favour has the mass of two residues, so it needs a protein database to confirm'
     default:
       return reason ? reason.replace(/_/g, ' ') : 'no reason given'
   }
 }
+
+/// Codex7 review n1: what the Overview tile and the Digest panel say of a
+/// tag candidate only a protein database can confirm (no_call
+/// alias_needs_database).
+export const CANDIDATE_NOTE = (name: string): string => `Candidate: ${name} — needs a protein database to confirm`
+export const CANDIDATE_HINT =
+  'run again with a FASTA (Protein database) or a shipped proteome (Alkylation proteome): its placements confirm the candidate'
 
 /// The tile of an alkylation report (-alkylation_out): its call or its no
 /// call with the reason; too short tags offer the run with extension 3.
 function alkylationReportTile(c: AlkylationReport, params: Record<string, unknown>): Tile {
   const base = { id: 'alkylation', label: 'Alkylation' }
   const db = c.databaseSource ? ` on ${c.databaseSource.replace(/^bundled:/, 'the shipped ').replace(/^proteome$/, 'the proteome given')}` : ''
+  // Format 2: the call is read off the tags (no database); the placements
+  // on a database, when given, refine it (source).
+  const fromTags = c.source === 'tags' || c.source === 'tags+placement'
+  // Release-gate review n4: the share is over the reported denominator (the
+  // share row's n), which from format 3 holds the conflicted votes too, and
+  // from format 4 the abstained tag votes (codex6 review n1).
+  const abstained = c.abstained ?? 0
+  const extra = c.voted != null && c.binned != null && c.voted > c.binned ? c.voted - c.binned : 0
+  const conflicted = Math.max(0, extra - abstained)
+  const parts = [`${fmt(c.binned)} for a form`, ...(conflicted ? [`${fmt(conflicted)} conflicted`] : []), ...(abstained ? [`${fmt(abstained)} abstained`] : [])]
+  const counted = extra
+    ? fromTags
+      ? `${fmt(c.voted)} tag votes (${parts.join(', ')})${c.source === 'tags+placement' ? `; the placements${db} agree` : ', no database'}`
+      : `${fmt(c.voted)} spectra with one cysteine (${fmt(c.binned)} binned, ${fmt(conflicted)} conflicted)${db}`
+    : fromTags
+      ? `${fmt(c.binned)} spectra whose tags read a cysteine${c.source === 'tags+placement' ? `; the placements${db} agree` : ', no database'}`
+      : `${fmt(c.binned)} spectra with one cysteine${db}`
   if (c.status === 'call')
     return {
       ...base,
       value: c.reagent === 'none' ? 'none (not alkylated)' : (c.reagent ?? 'call'),
       tone: 'call',
-      note: `${c.share != null ? `${pct(c.share)} of ` : ''}${fmt(c.binned)} spectra with one cysteine${db}; not validated`
+      note: `${c.share != null ? `${pct(c.share)} of ` : ''}${counted}; ${fromTags ? 'experimental' : 'not validated'}`
+    }
+  // Codex7 review n1: the tags favour a form whose C reads like two residues
+  // (CAM = C + G): named as the candidate only, to confirm with a database.
+  if (c.reason === 'alias_needs_database') {
+    const name = c.candidate ?? 'a reagent'
+    const placed = c.databaseSource != null && c.databaseSource !== 'none'
+    return {
+      ...base,
+      value: `Candidate: ${name}`,
+      tone: 'nocall',
+      note: `needs a protein database to confirm${c.share != null ? ` (${pct(c.share)} of ${fmt(c.voted)} tag votes)` : ''}; ${placed ? `the placements on the database do not confirm it (${alkylationReason(c.placement?.reason)})` : CANDIDATE_HINT}`
+    }
+  }
+  // Too short tags for the proteome: the call's reason (format 1, where it is
+  // the placement call), or the placement call's in format 2, where the
+  // report's call is then the tag call's no call (neither calls).
+  const short = c.reason === 'tags_too_short' || c.placement?.reason === 'tags_too_short'
+  const fewVotes = c.source === 'tags' && c.reason === 'few_cys_spectra'
+  if (fewVotes && !short)
+    return {
+      ...base,
+      value: 'no call',
+      tone: 'nocall',
+      note: `${fmt(c.binned)} spectra vote from their tags, fewer than the call needs; longer tags (Extension) give more votes`
     }
   // The extension the run's proteome needs at its tag length; a FASTA of
-  // the user's needs about 8 residues (its index sets the length).
-  const need = c.reason === 'tags_too_short' ? alkylationShort(params as Record<string, ParamValue>) : null
-  const target = alkylationTarget(params as Record<string, ParamValue>)
+  // the user's needs about 8 residues (its index sets the length). A format
+  // 1 report on a shipped proteome may come from auto, which then meant
+  // human: its database_source names the proteome.
+  const shipped = c.databaseSource?.startsWith('bundled:') ? c.databaseSource.slice('bundled:'.length) : null
+  const p = (shipped ? { ...params, alkylation_proteome: shipped } : params) as Record<string, ParamValue>
+  const need = short ? alkylationShort(p) : null
+  const target = alkylationTarget(p)
+  const tooShort = `no tag reaches the ${target} residues the proteome needs`
+  const tags = fewVotes ? `${fmt(c.binned)} spectra vote from their tags, fewer than the call needs` : alkylationReason(c.reason, c.source)
   return {
     ...base,
     value: 'no call',
     tone: 'nocall',
-    note: c.reason === 'tags_too_short' ? `no tag reaches the ${target} residues the proteome needs` : alkylationReason(c.reason),
+    note: c.reason === 'tags_too_short' ? tooShort : short ? `${tags}; the placements: ${tooShort}` : alkylationReason(c.reason, c.source),
     ...(need ? { action: { kind: 'enable' as const, label: `Run again with extension ${need}`, values: { extension: need } } } : {})
   }
 }

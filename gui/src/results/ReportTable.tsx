@@ -1,5 +1,6 @@
 // The reports of the workflows as Results views (doc/GUI-WORKFLOWS.md 3):
-// the QC report of Run QC as a summary strip over grouped key/value pairs,
+// the QC report of Run QC as headline tiles, small charts and every other
+// row under "All values" (qcModel.ts, QcCharts.tsx),
 // the protein shortlist of Database reduction as a ranked table with its
 // reduced FASTA and engine configuration, the identifiability ranking of
 // Identifiability triage with an identified/unknown/not identified filter,
@@ -10,13 +11,19 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import DataTable, { type Column } from './DataTable'
 import { baseName } from '../digestReport'
-import { revealLabel, stripExt } from '../app/paths'
+import { stripExt } from '../app/paths'
 import { pathKey } from '../run/batch'
 import { evalueText, spectrumHint } from '../ResultsTable'
 import { PARAM_BY_NAME, choiceText, humanName } from '../paramLayout'
 import ReportHeader from './ReportHeader'
-import { unassessedKits } from './calls'
+import ProductFiles from './ProductFiles'
+import { evidenceText, isKitCallKey, kitCallOf, reporterChannels, unassessedKits, type ReporterChannel } from './calls'
 import { shortlistFacts } from './overview'
+import TriageOverview, { NO_IDS } from './TriagePanel'
+import { OBSERVED_SHARE, TILE_KEYS, assessability, caveats, chargeBars, kitLine, msLevels, pctText, qcChannels, qcTiles, resolutionClasses, valueGroups, type Group as QcGroup, type ResClass } from './qcModel'
+import { BarChart, ResolutionChart, StackChart } from './QcCharts'
+import { QC_SECTION, QC_TILE_SECTION, focusHeading } from './tileLinks'
+import { IconChevron } from '../icons'
 
 export type ReportKind = 'qc' | 'shortlist' | 'triage' | 'generic'
 
@@ -155,7 +162,9 @@ function columnsOf(tsv: Tsv): Column[] {
       text: f.text ? (i: number) => f.text!(raw(i)) : raw,
       // A blank cell is no value: it sorts last, not as 0 (Number('')).
       key: num ? (i: number) => (raw(i).trim() === '' ? NaN : Number(raw(i))) : undefined,
-      cellTitle: f.title ? (i: number) => f.title!(raw(i)) : undefined
+      cellTitle: f.title ? (i: number) => f.title!(raw(i)) : undefined,
+      // The native ID: the scan links to the Spectrum tab (spectrumLink.ts).
+      spectrum: c === 'spectrum' ? (i: number) => (raw(i) === '-' ? '' : raw(i)) : undefined
     }
   })
 }
@@ -274,9 +283,9 @@ function commonN(lines: QcLine[]): string | null {
 
 /// The headline numbers of a QC report (MS/MS read, tag yield, instrument,
 /// serial, start time, isobaric kit), each when the report has it.
-export function qcSummary(rows: QcRow[]): { label: string; value: string; title?: string }[] {
+export function qcSummary(rows: QcRow[]): { label: string; value: string; title?: string; warn?: boolean }[] {
   const get = (k: string): QcRow | undefined => rows.find((r) => r.key === k)
-  const out: { label: string; value: string; title?: string }[] = []
+  const out: { label: string; value: string; title?: string; warn?: boolean }[] = []
   const ms2 = get('count_ms2')
   if (ms2) out.push({ label: 'MS2 spectra', value: isNum(ms2.value) ? fmtInt(Number(ms2.value)) : ms2.value, title: ms2.desc })
   const yieldRow = get('tag_yield')
@@ -294,6 +303,19 @@ export function qcSummary(rows: QcRow[]): { label: string; value: string; title?
   ] as const) {
     const r = get(k)
     if (r) out.push({ label, value: r.value, title: r.desc })
+  }
+  // qc_version 3: one kit, or the short list the channels leave, said
+  // with how it was decided; it replaces the list of compatible kits.
+  const call = kitCallOf(get)
+  if (call) {
+    out.push({
+      label: 'Isobaric kit',
+      value: call.text,
+      title: [evidenceText(call.evidence), call.note].filter(Boolean).join('. '),
+      // A conflict of label mass and channels is a warning, not a kit.
+      ...(call.evidence === 'label_conflict' ? { warn: true } : {})
+    })
+    return out
   }
   const kits = get('reporter_compatible_kits')
   // "none" also when no kit could be assessed (unassessedKits): that is no
@@ -320,48 +342,249 @@ const SUMMARY_KEYS: Record<string, string[]> = {
 }
 export const summaryKeys = (summary: { label: string }[]): Set<string> => new Set(summary.flatMap((x) => SUMMARY_KEYS[x.label] ?? []))
 
+/// The QC page: headline tiles, small charts of the distributions, and every
+/// other row behind one "All values" disclosure (qcModel.ts, QcCharts.tsx).
 function QcView({ tsv }: { tsv: Tsv }): JSX.Element {
   const rows = useMemo(() => qcRows(tsv), [tsv])
-  const lines = useMemo(() => {
-    const strip = summaryKeys(qcSummary(rows))
-    return qcLines(rows).filter((l) => !strip.has(l.key))
-  }, [rows])
-  const [all, setAll] = useState(false)
-  const summary = qcSummary(rows)
-  // The QC section first: the run settings are its context, not its result.
-  const sections = [...new Set(rows.map((r) => r.sec))].sort((a, b) => (a === 'qc' ? -1 : b === 'qc' ? 1 : 0))
-  const hidden = lines.filter((l) => l.empty).length
+  const summary = useMemo(() => qcSummary(rows), [rows])
+  const model = useMemo(() => {
+    const strip = summaryKeys(summary)
+    for (const k of TILE_KEYS) strip.add(k)
+    // With a kit call (qc_version 3) its rows are the kit tile and the
+    // channel table; the list of compatible kits is left out.
+    const v3 = rows.some((r) => r.key === 'reporter_kit')
+    const said = (k: string): boolean => strip.has(k) || (v3 && (isKitCallKey(k) || k === 'reporter_compatible_kits'))
+    return {
+      tiles: qcTiles(rows, summary),
+      levels: msLevels(rows),
+      caveats: caveats(rows),
+      charge: chargeBars(rows),
+      resolution: resolutionClasses(rows),
+      assess: assessability(rows),
+      channels: qcChannels(rows),
+      kit: kitLine(rows, summary),
+      groups: valueGroups(rows, qcLines(rows), said)
+    }
+  }, [rows, summary])
+  const run = (k: string): string | undefined => rows.find((r) => r.key === k)?.value
+  // A kit call (qc_version 3) is said also without assessability or channel rows.
+  const reporters = model.assess.length > 0 || model.channels.channels.length > 0 || rows.some((r) => r.key === 'reporter_kit')
+  // Every MS2 assessable for every family: one sentence, not a chart of full bars.
+  const assessAll = model.assess.length > 0 && model.assess.every((s) => s.segments.length === 1 && s.segments[0].id === 'assessable')
+  // The sections on the page a tile can move to.
+  const shownSections = new Set<string>([
+    ...(model.levels.length > 0 ? [QC_SECTION.spectra] : []),
+    ...(model.charge.length > 0 ? [QC_SECTION.charge] : []),
+    ...(reporters ? [QC_SECTION.reporters] : [])
+  ])
+  const toSection = (id: string): void => {
+    const el = document.getElementById(id)
+    if (el) focusHeading(el)
+  }
   return (
     <div className="qc-view">
-      {summary.length > 0 && (
-        <dl className="qc-strip" aria-label="QC summary">
-          {summary.map((x) => (
-            <div key={x.label} className="stat" title={x.title}>
-              <dt>{x.label}</dt>
-              <dd>{x.value}</dd>
+      {model.tiles.length > 0 && (
+        <dl className="qc-strip qc-tiles" aria-label="QC summary">
+          {model.tiles.map((x) => {
+            // A tile with a section below moves to it (tileLinks.ts).
+            const to = QC_TILE_SECTION[x.label]
+            const go = to && shownSections.has(to) ? () => toSection(to) : null
+            return (
+            <div key={x.label} className={`stat${x.low ? ' low' : ''}`} data-link={go ? '' : undefined} title={x.title} onClick={go ? (e) => { if (!(e.target as HTMLElement).closest('button') && !window.getSelection()?.toString()) go() } : undefined}>
+              <dt>
+                {go ? (
+                  <button type="button" className="tile-open" onClick={go} aria-label={`${x.label}: go to its section`}>
+                    {x.label}
+                    <IconChevron size={10} />
+                  </button>
+                ) : (
+                  x.label
+                )}
+              </dt>
+              <dd className={x.warn ? 'warn-text' : undefined}>{x.value}</dd>
+              {x.sub && <dd className="qc-sub">{x.sub}</dd>}
+              {x.meter != null && (
+                <dd className="qc-meter" aria-hidden="true">
+                  <span style={{ width: `${x.meter * 100}%` }} />
+                </dd>
+              )}
             </div>
-          ))}
+            )
+          })}
         </dl>
       )}
-      {hidden > 0 && (
-        <label className="check-inline">
-          <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> Show {hidden} empty {hidden === 1 ? 'row' : 'rows'}
-        </label>
+      {model.levels.length > 0 && (
+        <section className="qc-block" aria-label="Spectra">
+          <h3 className="section-label" id={QC_SECTION.spectra}>Spectra</h3>
+          <StackChart
+            caption="Spectra per MS level, by analyser"
+            rowName="MS level"
+            stacks={model.levels}
+            end={(s) => `${fmtInt(s.total)}${s.segments.length === 1 ? ` · ${s.segments[0].label}` : ''}${s.note ? ` · ${s.note}` : ''}`}
+            summary={model.levels.map((s) => `${s.label} ${fmtInt(s.total)} (${s.segments.map((g) => `${g.label} ${fmtInt(g.value)}`).join(', ')})`).join('; ')}
+          />
+          {model.caveats.length > 0 && (
+            <ul className="qc-notes">
+              {model.caveats.map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ul>
+          )}
+        </section>
       )}
-      {sections.map((sec) => {
-        const secLines = lines.filter((l) => rows.some((r) => r.key === l.key && r.sec === sec))
-        const n = commonN(secLines)
+      {(model.charge.length > 0 || model.resolution.length > 0) && (
+        <div className="qc-pair">
+          {model.charge.length > 0 && (
+            <section className="qc-block" aria-label="Precursor charge">
+              <h3 className="section-label" id={QC_SECTION.charge}>Precursor charge</h3>
+              <BarChart
+                caption="Share of the MS2 by precursor charge"
+                bars={model.charge}
+                xTitle="charge"
+                tableLabel="Precursor charge"
+                tip={(b) => ({
+                  head: b.id === '?' ? 'No charge in the file' : `Charge ${b.label}`,
+                  lines: [
+                    `${fmtInt(b.value)}${b.n ? ` of ${fmtInt(b.n)} MS2` : ''}${b.share != null ? ` (${pctText(b.share)})` : ''}`,
+                    ...(b.id === '?' && run('unknown_charge') ? [`Precursors without a charge: ${run('unknown_charge')}`] : [])
+                  ]
+                })}
+                columns={[
+                  { id: 'z', label: 'Charge', text: (i) => model.charge[i].label },
+                  { id: 'n', label: 'MS2', num: true, text: (i) => fmtInt(model.charge[i].value), key: (i) => model.charge[i].value },
+                  { id: 'share', label: 'Share', num: true, text: (i) => (model.charge[i].share == null ? '' : pctText(model.charge[i].share!)), key: (i) => model.charge[i].share ?? NaN }
+                ]}
+                summary={`Precursor charges: ${model.charge.map((b) => `${b.label} ${b.share != null ? pctText(b.share) : fmtInt(b.value)}`).join(', ')}`}
+              />
+            </section>
+          )}
+          {model.resolution.length > 0 && (
+            <section className="qc-block" aria-label="Resolution">
+              <h3 className="section-label">Resolution</h3>
+              {model.resolution.some((c) => c.bands.length > 0 || c.stated != null) ? (
+                <ResolutionChart classes={model.resolution} summary={`Resolution: ${model.resolution.map((c) => `${c.label} ${c.value != null ? fmtInt(c.value) : 'not measured'}`).join(', ')}`}>
+                  <ResolutionNotes classes={model.resolution} />
+                </ResolutionChart>
+              ) : (
+                <ResolutionNotes classes={model.resolution} />
+              )}
+            </section>
+          )}
+        </div>
+      )}
+      {reporters && (
+        <section className="qc-block" aria-label="Reporter ions">
+          <h3 className="section-label" id={QC_SECTION.reporters}>Reporter ions</h3>
+          {model.kit && (
+            <p className="qc-kit">
+              Isobaric kit: <strong className={summary.some((s) => s.label === 'Isobaric kit' && s.warn) ? 'warn-text' : undefined}>{model.kit}</strong>
+            </p>
+          )}
+          {assessAll && (
+            <p className="qc-kit">
+              Every MS2 can show {model.assess.map((a) => a.label).join(' and ')} reporters ({model.assess.map((a) => `${fmtInt(a.total)}`).filter((v, i, l) => l.indexOf(v) === i).join(', ')} MS2).
+            </p>
+          )}
+          <div className="qc-pair">
+            {model.assess.length > 0 && !assessAll && (
+              <StackChart
+                caption="MS2 that can show reporter ions"
+                rowName="Family"
+                stacks={model.assess}
+                relative
+                end={(s) => `${pctText((s.segments.find((g) => g.id === 'assessable')?.value ?? 0) / s.total)} of ${fmtInt(s.total)}`}
+                summary={model.assess.map((s) => `${s.label}: ${s.segments.map((g) => `${g.label} ${fmtInt(g.value)}`).join(', ')}`).join('; ')}
+              />
+            )}
+            {model.channels.channels.length > 0 && (
+              <BarChart
+                caption="Share of the assessable MS2 with each reporter channel"
+                bars={model.channels.channels.map((c) => ({ id: c.label, label: c.label, value: c.seen ?? c.share ?? 0, share: c.share, n: c.assessable, muted: c.observed === false || (c.observed == null && (c.share ?? 0) < OBSERVED_SHARE) }))}
+                xTitle="channel"
+                rule={{ at: OBSERVED_SHARE, label: `seen: ${OBSERVED_SHARE * 100}%` }}
+                legend={[
+                  { tone: 'peaks', label: 'seen' },
+                  { tone: 'muted', label: 'not seen' },
+                  { tone: 'muted', shape: 'rule', label: `seen threshold (${OBSERVED_SHARE * 100}% of the MS2)` }
+                ]}
+                tableLabel="Reporter channels"
+                tip={(b) => {
+                  const c = model.channels.channels.find((x) => x.label === b.id)!
+                  return {
+                    head: `Channel ${c.label}`,
+                    lines: [
+                      ...(c.mz != null ? [`m/z ${c.mz.toFixed(4)}`] : []),
+                      c.seen == null
+                        ? `${c.share != null ? pctText(c.share) : '–'} of ${fmtInt(c.assessable)} assessable MS2 (the report gives the share only)`
+                        : `${fmtInt(c.seen)} of ${fmtInt(c.assessable)} assessable MS2${c.share != null ? ` (${pctText(c.share)})` : ''}`
+                    ]
+                  }
+                }}
+                tableView={<ReporterChannels channels={model.channels.channels} />}
+                summary={`Reporter channels: ${model.channels.channels.map((c) => `${c.label} ${c.share != null ? pctText(c.share) : c.seen != null ? fmtInt(c.seen) : '–'}`).join(', ')}`}
+              >
+                <p className="footnote">
+                  Seen: the reporter ion within 20 ppm at 3× the median peak or more.
+                  {model.channels.partial && ' Older report: shares only, no per-channel counts; only the channels seen in 20% of the MS2 or more are listed.'}
+                </p>
+              </BarChart>
+            )}
+          </div>
+        </section>
+      )}
+      <AllValues groups={model.groups} />
+    </div>
+  )
+}
+
+/// The classes of the resolution chart in words: the value of each, and why
+/// a class has none ("ITMS MS2: not measured (centroid only)").
+function ResolutionNotes({ classes }: { classes: ResClass[] }): JSX.Element {
+  return (
+    <ul className="qc-notes">
+      {classes.map((c) => (
+        <li key={c.cls}>
+          {c.label}: {c.value != null ? `${fmtInt(c.value)}${c.source ? ` (${c.source})` : ''}` : `not measured${c.why ? ` (${c.why})` : ''}`}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/// Every row the page does not say on a tile or as the kit call (its
+/// channel counts are the channel chart's Table view), grouped, with a filter.
+function AllValues({ groups }: { groups: QcGroup[] }): JSX.Element | null {
+  const [all, setAll] = useState(false)
+  const [filter, setFilter] = useState('')
+  const total = groups.reduce((n, g) => n + g.lines.length, 0)
+  if (total === 0) return null
+  const hidden = groups.reduce((n, g) => n + g.lines.filter((l) => l.empty).length, 0)
+  const f = filter.trim().toLowerCase()
+  const match = (l: QcLine): boolean => f === '' || `${l.label} ${l.key} ${l.value}`.toLowerCase().includes(f)
+  return (
+    <details className="qc-all">
+      <summary className="section-label">All values ({fmtInt(total)})</summary>
+      <div className="qc-all-bar">
+        <input type="search" aria-label="Filter the values" placeholder="Filter" value={filter} onChange={(e) => setFilter(e.target.value)} />
+        {hidden > 0 && (
+          <label className="check-inline">
+            <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> Show {hidden} empty {hidden === 1 ? 'row' : 'rows'}
+          </label>
+        )}
+      </div>
+      {groups.map((g) => {
+        const lines = g.lines.filter((l) => (all || !l.empty) && match(l))
+        if (lines.length === 0) return null
+        const n = commonN(lines)
         return (
-          <section key={sec} className="qc-section" aria-label={sec === 'run' ? 'Run' : sec === 'qc' ? 'Quality' : sec}>
+          <section key={g.name} className="qc-section" aria-label={`All values: ${g.name}`}>
             <h3>
-              {sec === 'run' ? 'Run settings and instrument' : sec === 'qc' ? 'Spectra and tags' : sec}
-              {n && <span className="muted small"> · counts of {fmtInt(Number(n))} spectra unless stated</span>}
+              {g.name}
+              {n && isNum(n) && <span className="muted small"> · of {fmtInt(Number(n))} spectra unless stated</span>}
             </h3>
             <table className="kv">
-              <tbody>
-                {secLines
-                  .filter((l) => all || !l.empty)
-                  .map((l, i) => (
+                <tbody>
+                  {lines.map((l, i) => (
                     // The row's sentence is its tooltip, not a column.
                     <tr key={`${l.key}-${i}`} title={l.desc || undefined}>
                       <th scope="row">{l.label}</th>
@@ -369,12 +592,62 @@ function QcView({ tsv }: { tsv: Tsv }): JSX.Element {
                       <td className="muted">{l.n && l.n !== '-' && l.n !== n ? `of ${isNum(l.n) ? fmtInt(Number(l.n)) : l.n}` : ''}</td>
                     </tr>
                   ))}
-              </tbody>
+                </tbody>
             </table>
           </section>
         )
       })}
-    </div>
+    </details>
+  )
+}
+
+/// The reporter channels of the run (qc_version 3): in how many assessable
+/// MS2 each reporter ion was seen above the noise threshold.
+function ReporterChannels({ channels }: { channels: ReporterChannel[] }): JSX.Element {
+  const families = new Set(channels.map((c) => c.assessable))
+  const n = channels[0]?.assessable ?? 0
+  return (
+    <section className="qc-section" aria-label="Reporter channels">
+      <h3>
+        Reporter channels
+        <span className="muted small">
+          {' '}
+          · MS2 with the reporter ion within 20 ppm at 3× the median peak or more{families.size === 1 ? `, of ${fmtInt(n)} assessable MS2` : ''}
+        </span>
+      </h3>
+      <table className="kv qc-channels">
+        <thead>
+          <tr>
+            <th scope="col">Channel</th>
+            <th scope="col" className="num">
+              m/z
+            </th>
+            <th scope="col" className="num">
+              MS2 with the ion
+            </th>
+            <th scope="col" className="num">
+              Assessable MS2
+            </th>
+            <th scope="col" className="num">
+              Share
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {channels.map((c) => (
+            <tr key={c.label} className={(c.observed ?? (c.seen ?? 0) > 0) ? undefined : 'muted'}>
+              <th scope="row" className="mono">
+                {c.label}
+              </th>
+              <td className="num mono">{c.mz == null ? '–' : c.mz.toFixed(4)}</td>
+              <td className="num mono">{c.seen == null ? '–' : fmtInt(c.seen)}</td>
+              <td className="num mono">{fmtInt(c.assessable)}</td>
+              <td className="num mono">{c.share == null ? '–' : `${(c.share * 100).toFixed(1)}%`}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   )
 }
 
@@ -460,8 +733,6 @@ function ShortlistNotes({ notes }: { notes: string[] }): JSX.Element | null {
 
 function ShortlistView({ tsv, files }: { tsv: Tsv; files: { label: string; path: string }[] }): JSX.Element {
   const columns = useMemo(() => columnsOf(tsv), [tsv])
-  // A file that cannot be revealed says why.
-  const [revealErr, setRevealErr] = useState<string | null>(null)
   const kept = tsv.columns.indexOf('kept')
   const reason = tsv.columns.indexOf('reason')
   // Background proteins (-shortlist_background) are rows without evidence:
@@ -482,29 +753,7 @@ function ShortlistView({ tsv, files }: { tsv: Tsv; files: { label: string; path:
         {background > 0 && <>, plus {background} {background === 1 ? 'protein' : 'proteins'} kept as background</>}.
       </p>
       <ShortlistNotes notes={tsv.notes} />
-      {files.length > 0 && (
-        <div className="row tight">
-          {files.map((f) => (
-            <button
-              key={f.path}
-              type="button"
-              className="secondary small"
-              title={f.path}
-              onClick={() => {
-                setRevealErr(null)
-                window.fastag.revealOutput(f.path, false).catch((e: unknown) => setRevealErr(`Cannot reveal ${baseName(f.path)}: ${e instanceof Error ? e.message : String(e)}`))
-              }}
-            >
-              {revealLabel()}: {f.label} ({baseName(f.path)})
-            </button>
-          ))}
-        </div>
-      )}
-      {revealErr && (
-        <p className="warn" role="alert">
-          {revealErr}
-        </p>
-      )}
+      <ProductFiles files={files} label="Shortlist files" />
       <DataTable label="Protein shortlist" columns={columns} ids={ids} total={tsv.rows.length} keep={tsv} />
     </>
   )
@@ -521,9 +770,17 @@ const FILTERS = [
 ] as const
 type Filter = (typeof FILTERS)[number]['id']
 
-const NO_IDS = 'Give the identifications of this run in Setup to mark identified spectra.'
 
-function TriageView({ tsv, path, openSpectrum }: { tsv: Tsv; path: string; openSpectrum?: (spectrum: string) => void }): JSX.Element {
+interface TriageViewProps {
+  tsv: Tsv
+  path: string
+  openSpectrum?: (spectrum: string) => void
+  params?: Record<string, unknown> | null
+  summaryPath?: string | null
+  summaryGen?: number
+}
+
+function TriageView({ tsv, path, openSpectrum, params, summaryPath, summaryGen }: TriageViewProps): JSX.Element {
   // The ranking first: rank, score, identified, candidate, status, then what the spectrum is.
   const columns = useMemo(() => {
     const all = columnsOf(tsv)
@@ -581,6 +838,9 @@ function TriageView({ tsv, path, openSpectrum }: { tsv: Tsv; path: string; openS
   }
   return (
     <>
+      {/* The overview of every row first, then the table it summarizes. */}
+      <TriageOverview tsv={tsv} params={params} summaryPath={summaryPath} summaryGen={summaryGen} source={baseName(path)} />
+      <h3 className="section-label tri-table-head">{label}</h3>
       <p className="report-sum">
         {fmtInt(tsv.rows.length)} MS2 spectra{scored ? ', ranked by how identifiable they are' : ' in file order (no identifiability score)'}
         {trc >= 0 && <>; {fmtInt(count('candidates'))} triage candidates</>}
@@ -641,6 +901,11 @@ export interface ReportTableProps {
   files?: { label: string; path: string }[]
   /// Triage: open the spectrum of a row (its native ID) in the Spectrum tab.
   openSpectrum?(spectrum: string): void
+  /// Triage: the parameters of the run that wrote the table, and its census
+  /// summary (the overview reads -max_tags, the Triage E-value and more).
+  params?: Record<string, unknown> | null
+  summaryPath?: string | null
+  summaryGen?: number
 }
 
 const REPORT_TITLE: Partial<Record<ReportKind, string>> = {
@@ -654,7 +919,7 @@ const REPORT_HELP: Partial<Record<ReportKind, { to: string; label: string }>> = 
   triage: { to: 'workflow-triage', label: 'How to read the ranking' }
 }
 
-export default function ReportTable({ kind, path, gen, files = [], openSpectrum }: ReportTableProps): JSX.Element {
+export default function ReportTable({ kind, path, gen, files = [], openSpectrum, params, summaryPath, summaryGen }: ReportTableProps): JSX.Element {
   const { tsv, error } = useReport(path, gen)
   // A census without a score is no ranking (TriageView says the same).
   const census = kind === 'triage' && !!tsv && !tsv.columns.includes('ident_score')
@@ -674,7 +939,7 @@ export default function ReportTable({ kind, path, gen, files = [], openSpectrum 
       ) : kind === 'shortlist' ? (
         <ShortlistView tsv={tsv} files={files} />
       ) : kind === 'triage' ? (
-        <TriageView tsv={tsv} path={path} openSpectrum={openSpectrum} />
+        <TriageView tsv={tsv} path={path} openSpectrum={openSpectrum} params={params} summaryPath={summaryPath} summaryGen={summaryGen} />
       ) : (
         <GenericView tsv={tsv} label={baseName(path)} />
       )}

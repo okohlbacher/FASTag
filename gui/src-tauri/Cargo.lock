@@ -987,7 +987,7 @@ dependencies = [
 
 [[package]]
 name = "fastag"
-version = "1.15.7"
+version = "1.16.0"
 dependencies = [
  "block2",
  "cairo-rs",
@@ -1002,6 +1002,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",

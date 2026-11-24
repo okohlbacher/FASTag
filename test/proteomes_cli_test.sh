@@ -4,10 +4,12 @@
 #      UniProt release, the sha256 of each .fasta.gz and of its FASTA, the
 #      number of entries, every header's OX= the manifest's taxon, a known
 #      protein per proteome, and README.md quotes every sha256;
-#  (b) every name (auto, human, mouse, yeast, ecoli) resolves through the
+#  (b) every name (human, mouse, yeast, ecoli) resolves through the
 #      digest directory (share/FASTag/digest -> share/FASTag/alkylation) and
 #      exits 0 with database_source bundled:<name> and the manifest's
 #      database_release row; the tag TSV is the one without -alkylation_out;
+#      the default auto reads no proteome (feedback 202dbcf4: tags only,
+#      database_source none, no index);
 #  (c) the flat release layout (share-FASTag-digest -> share-FASTag-alkylation);
 #  (d) refusals: a file whose FASTA sha256 differs from the manifest's
 #      fasta_sha256 (truncated, or the same entries with one residue changed;
@@ -15,8 +17,8 @@
 #      differs, and a manifest without a valid row stop with exit 3
 #      (INPUT_FILE_CORRUPT) before any output is written; a manifest naming a
 #      missing file stops with exit 6.
-#  At -tag_length 4 nothing places on a shipped proteome: the report's reason
-#  is tags_too_short with a min_tag_length row, and the log warns; at the
+#  At -tag_length 4 nothing places on a shipped proteome: the placement call's
+#  reason is tags_too_short with a min_tag_length row, and the log warns; at the
 #  derived minimum (7 on E. coli) tags place and neither appears.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
@@ -76,10 +78,20 @@ COMMON=(-in "$IN" -tag_length 4 -fragment_tolerance 0.5 -fragment_tolerance_unit
 mkdir -p "$TMP/inst/share/FASTag"
 cp -R "$DIGEST" "$TMP/inst/share/FASTag/digest"
 cp -R "$ALK" "$TMP/inst/share/FASTag/alkylation"
-for prot in default auto human mouse yeast ecoli; do
-  want=$prot; { [ "$want" = default ] || [ "$want" = auto ]; } && want=human
+# feedback 202dbcf4: the default and auto read no proteome, even when one is installed
+for prot in default auto; do
   # ${args[@]+...}: bash 3.2 (macOS) treats an empty array as unset under set -u
   args=(); [ "$prot" = default ] || args=(-alkylation_proteome "$prot")
+  FASTAG_DIGEST_DIR="$TMP/inst/share/FASTag/digest" "$BIN" "${COMMON[@]}" -out "$TMP/$prot.tsv" \
+    -alkylation_out "$TMP/$prot.alk.tsv" ${args[@]+"${args[@]}"} > "$TMP/log" 2>&1 || { cat "$TMP/log" >&2; fail "$prot: exit $?"; }
+  [ "$(val "$TMP/$prot.alk.tsv" alk_run database_source)" = none ] || fail "$prot: database_source is not none"
+  grep -q "Recon index" "$TMP/log" && fail "$prot: a proteome was indexed"
+  tr -d '\r' < "$TMP/$prot.alk.tsv" | cut -f1 | grep -qx alk_cys && fail "$prot: placement rows without a database"
+  cmp -s "$TMP/base.tsv" "$TMP/$prot.tsv" || fail "$prot: -alkylation_out changed the tag TSV"
+done
+for prot in human mouse yeast ecoli; do
+  want=$prot
+  args=(-alkylation_proteome "$prot")
   FASTAG_DIGEST_DIR="$TMP/inst/share/FASTag/digest" "$BIN" "${COMMON[@]}" -out "$TMP/$prot.tsv" \
     -alkylation_out "$TMP/$prot.alk.tsv" ${args[@]+"${args[@]}"} > "$TMP/log" 2>&1
   rc=$?
@@ -104,15 +116,16 @@ for prot in default auto human mouse yeast ecoli; do
   [ "${mt:-0}" -gt 4 ] 2> /dev/null || fail "$prot: min_tag_length '$mt', want the derived minimum above 4"
   [ "$(tr -d '\r' < "$TMP/$prot.alk.tsv" | awk -F'\t' '$1 == "alk_run" && $2 == "min_tag_length" { print $4 }')" = 4 ] \
     || fail "$prot: min_tag_length does not name the longest tag (4)"
-  [ "$(val "$TMP/$prot.alk.tsv" alkylation_call reason)" = tags_too_short ] \
-    || fail "$prot: reason '$(val "$TMP/$prot.alk.tsv" alkylation_call reason)', want tags_too_short"
+  [ "$(val "$TMP/$prot.alk.tsv" alkylation_placement_call reason)" = tags_too_short ] \
+    || fail "$prot: reason '$(val "$TMP/$prot.alk.tsv" alkylation_placement_call reason)', want tags_too_short"
+  [ "$(val "$TMP/$prot.alk.tsv" alkylation_call reason)" != tags_too_short ] \
+    || fail "$prot: the combined call says tags_too_short (the tags call without a database)"
   grep -q -- "this run's longest tag has 4 .*Give -tag_length $mt or more" "$TMP/log" \
     || { cat "$TMP/log" >&2; fail "$prot: no warning that the tags are too short"; }
   echo "proteomes_cli_test: $prot -> bundled:$want ($(man $want entries) entries, tags place from $mt)"
 done
 cnt() { tr -d '\r' < "$1" | awk -F'\t' '$1 == "alk_cys" { printf "%s=%s/%s ", $2, $3, $4 }'; }
-cmp -s "$TMP/auto.alk.tsv" "$TMP/human.alk.tsv" || fail "auto is not human"
-cmp -s "$TMP/default.alk.tsv" "$TMP/human.alk.tsv" || fail "the default is not human"
+cmp -s "$TMP/auto.alk.tsv" "$TMP/default.alk.tsv" || fail "auto is not the default"
 
 # ---- (c) the flat release layout, and FASTAG_ALKYLATION_DIR
 mkdir -p "$TMP/flat"
@@ -147,11 +160,11 @@ placed=$(tr -d '\r' < "$TMP/s7.alk.tsv" | awk -F'\t' '$1 == "alk_cys" && $2 == "
 [ "$(cnt "$TMP/s7.alk.tsv")" = "$(cnt "$TMP/p7.alk.tsv")" ] || fail "tag length 7: the shipped ecoli and its FASTA give different counts"
 [ "$(val "$TMP/s7.alk.tsv" alk_run spectra)" = "$(val "$TMP/p7.alk.tsv" alk_run spectra)" ] || fail "tag length 7: spectra differ"
 [ "$(val "$TMP/s7.alk.tsv" alk_run min_tag_length)" = 7 ] || fail "tag length 7: min_tag_length $(val "$TMP/s7.alk.tsv" alk_run min_tag_length), want 7"
-[ "$(val "$TMP/s7.alk.tsv" alkylation_call reason)" != tags_too_short ] || fail "tag length 7: tags_too_short although tags place"
+[ "$(val "$TMP/s7.alk.tsv" alkylation_placement_call reason)" != tags_too_short ] || fail "tag length 7: tags_too_short although tags place"
 grep -q "no tag will place" "$TMP/log" && fail "tag length 7: the too-short warning although tags place"
 # a FASTA path keeps the 1.12 report: no min_tag_length row, the 1.12 reason
 tr -d '\r' < "$TMP/p.alk.tsv" | cut -f2 | grep -qx min_tag_length && fail "FASTA path: a min_tag_length row"
-[ "$(val "$TMP/p.alk.tsv" alkylation_call reason)" = few_cys_spectra ] || fail "FASTA path: reason changed"
+[ "$(val "$TMP/p.alk.tsv" alkylation_placement_call reason)" = few_cys_spectra ] || fail "FASTA path: reason changed"
 
 # ---- (d) refusals
 refused() {  # DIR NAME WANT_RC MESSAGE

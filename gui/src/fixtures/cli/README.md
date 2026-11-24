@@ -162,20 +162,25 @@ sha256 of each file:
     6e898e629a0085b33534d5d37f6c2eb395839db89ca7b2aa794afc2ad3774893  v112-ecoli-dump/helphelp.txt
     1aff50da904ee24e42c3bd35ce1d22bd7bd989d44d397ff8ad3341a75a21d9c9  v112-ecoli-dump/unknown.err
 
-## v115-ecoli-resolved: -resolved_out and -tag_graph_out
+## v115-pxd003531-terminus: -terminus parity (b/y)
 
-The cliGraph.ts adapter checked against the C++ writer (`cliGraph.test.ts`).
-The binary is the local macOS arm64 dev build of `feat/tag-consolidation` at
-2ebb2d23 (FASTag 1.15.7, OpenMS 3.7.0-pre; sha256 0f2995c7...), the input
-the repository's public `test/fixtures/Ecoli_MS2_small.mzML` at 0.3 Da
-(`cmd.txt`). One spectrum is kept, scan=11586 (48 placements, 41 resolved
-tags of both series, two with tags inside them): its rows of the tags, the
-resolved tags and the tag graph, and its `-dump_spectrum`. Over all 85
-spectra with resolved tags the adapter reads every one, and its ranking
-equals the GUI's (`buildGraph` with `stepWeight`).
+The GUI/CLI parity test of the terminal anchor
+(`src/spectrum/terminusParity.test.ts`): for every row, the GUI's
+anchor-only decision on the row's own peaks (terminus.ts `usedAnchor`) is
+the CLI's `series` column and its tokens the `terminus` column. The binary is
+the uncommitted consol-wizard worktree build (Version 1.15.7, macOS arm64,
+sha256 388a82d9...e794e5). Input: the public PXD003531 Q Exactive run
+`20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML` (sha256
+2b1da222...9ace4a), 20 ppm. `cmd.txt` holds the command lines: 30 spectra
+drawn with `-subsample_spectra 30 -subsample_seed 13` (23 MS2 tagged, 1,098
+rows; the seed was picked for rows with both readings anchored and lone
+C-terminal K/R anchors from the precursor), then `-dump_spectrum` for each
+spectrum of the rows. `run.log` is the run's stdout and stderr without the
+timing line.
 
-    705f18112b537cbf45895f02e830f95b62f9a3c58185d3247fd1c672d57f50f9  v115-ecoli-resolved/cmd.txt
-    ab4b350be6e49c7bc430008cdc54eaced26e27e81f7cc1cee55341776a7a0faa  v115-ecoli-resolved/dump.jsonl
-    db10baaebfc50d46019631501bcac49a31c5d26ec1789a986afe12cb9cf8d6b8  v115-ecoli-resolved/run.resolved.tsv
-    5746144e8bf77948977e04f20b3cf3fdbcb5381a2f811813941298fce70c0a40  v115-ecoli-resolved/run.taggraph.tsv
-    3b5fda429f3c432ff7d7be6eba4c0ad6cdae2010a8dc73f13e0b6c0a25d84902  v115-ecoli-resolved/run.tags.tsv
+sha256 of each file:
+
+    14de82e387dcab0161f8d50740b4c2b345d467e5ccbfb16466a46bcb340903d8  v115-pxd003531-terminus/cmd.txt
+    e07f6d2d145840dd8b4983ed04927923dc38c5b155898f8499bd1477f91c90c4  v115-pxd003531-terminus/dumps.jsonl
+    71b851b463b84122f42f8e463015b7cd5224832f8859ef261bcbef969db51016  v115-pxd003531-terminus/run.log
+    05a75136327d038ebeee4f88edfd3e1e9092d209478bcc0fcc9919c67c567e09  v115-pxd003531-terminus/run.tags.tsv

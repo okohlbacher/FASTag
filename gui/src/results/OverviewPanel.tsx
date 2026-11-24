@@ -4,10 +4,12 @@
 // evidence of each line. A tile whose report the run did not write offers
 // to turn it on and run again.
 
-import { useEffect, useRef, useState, type JSX } from 'react'
+import { useEffect, useRef, useState, type JSX, type MouseEvent } from 'react'
 import { baseName } from '../digestReport'
+import { IconChevron } from '../icons'
+import type { Tab } from '../app/viewStore'
 import { leadTiles, settingWords, shownTiles, type Overview, type Tile, type TileAction } from './overview'
-import { HelpLink } from '../help/HelpLink'
+import { TAB_LABEL, tileTarget, type TileTarget } from './tileLinks'
 
 export interface OverviewPanelProps {
   overview: Overview
@@ -29,15 +31,46 @@ export interface OverviewPanelProps {
   workflowId?: string | null
   /// Reports the run was asked for and did not write, in words.
   missing?: string[]
+  /// The tabs shown: a tile whose detail is in one of them opens it
+  /// (tileLinks.ts). None: no tile is a link.
+  tabs?: readonly Tab[]
+  onOpen?(to: TileTarget): void
 }
 
 const EVIDENCE: Record<string, string> = { call: 'call', ranking: 'ranking', default: 'default', preset: 'preset', run: 'as run' }
 
-function TileView({ t, busy, actionable, onAction }: { t: Tile; busy: boolean; actionable: boolean; onAction(a: TileAction): void }): JSX.Element {
+interface TileProps {
+  t: Tile
+  busy: boolean
+  actionable: boolean
+  onAction(a: TileAction): void
+  to: TileTarget | null
+  onOpen?(to: TileTarget): void
+}
+
+function TileView({ t, busy, actionable, onAction, to, onOpen }: TileProps): JSX.Element {
+  const open = to && onOpen ? () => onOpen(to) : null
+  // A click anywhere on the tile opens it, but not one on its own button,
+  // nor the end of a text selection; the heading's button is the way for
+  // the keyboard and screen readers.
+  function onClick(e: MouseEvent<HTMLElement>): void {
+    if (!open || (e.target as HTMLElement).closest('button, a, details, summary')) return
+    if (window.getSelection()?.toString()) return
+    open()
+  }
   return (
     <li>
-      <section className={`tile tone-${t.tone}`} aria-label={t.label}>
-        <h3 className="tile-label">{t.label}</h3>
+      <section className={`tile tone-${t.tone}`} data-link={open ? '' : undefined} aria-label={t.label} onClick={open ? onClick : undefined}>
+        <h3 className="tile-label">
+          {open && to ? (
+            <button type="button" className="tile-open" onClick={open} aria-label={`${t.label}: open the ${TAB_LABEL[to.tab]} tab`}>
+              {t.label}
+              <IconChevron size={10} />
+            </button>
+          ) : (
+            t.label
+          )}
+        </h3>
         <p className={`tile-value${t.muted ? ' muted' : ''}`} title={t.muted}>
           {t.value}
         </p>
@@ -55,7 +88,7 @@ function TileView({ t, busy, actionable, onAction }: { t: Tile; busy: boolean; a
   )
 }
 
-export default function OverviewPanel({ overview: o, input, busy, onAction, actionable = true, params, workflow, workflowId, missing = [] }: OverviewPanelProps): JSX.Element {
+export default function OverviewPanel({ overview: o, input, busy, onAction, actionable = true, params, workflow, workflowId, missing = [], tabs = [], onOpen }: OverviewPanelProps): JSX.Element {
   const [copied, setCopied] = useState<'yes' | 'no' | null>(null)
   const revision = useRef(0)
   useEffect(() => {
@@ -78,15 +111,6 @@ export default function OverviewPanel({ overview: o, input, busy, onAction, acti
       <h2>
         Overview of <span className="mono">{baseName(input)}</span>
       </h2>
-      <p className="overview-sub">
-        {workflow && (
-          <>
-            <strong>{workflow}</strong>
-            {' · '}
-          </>
-        )}
-        <HelpLink to="workflow-overview">How to read this overview</HelpLink>
-      </p>
       {missing.length > 0 && (
         <p className="caveat" role="status">
           Asked for, but not written: {missing.join(', ')}. The log says why.
@@ -104,7 +128,7 @@ export default function OverviewPanel({ overview: o, input, busy, onAction, acti
           <p className="tiles-head">Main result</p>
           <ul className="tiles" aria-label="Main result">
             {tiles.figures.slice(0, tiles.lead).map((t) => (
-              <TileView key={t.id} t={t} busy={busy} actionable={actionable} onAction={onAction} />
+              <TileView key={t.id} t={t} busy={busy} actionable={actionable} onAction={onAction} to={tileTarget(t, tabs)} onOpen={onOpen} />
             ))}
           </ul>
           <p className="tiles-head">Run</p>
@@ -112,13 +136,13 @@ export default function OverviewPanel({ overview: o, input, busy, onAction, acti
       )}
       <ul className="tiles" aria-label="Key figures">
         {tiles.figures.slice(tiles.lead ?? 0).map((t) => (
-          <TileView key={t.id} t={t} busy={busy} actionable={actionable} onAction={onAction} />
+          <TileView key={t.id} t={t} busy={busy} actionable={actionable} onAction={onAction} to={tileTarget(t, tabs)} onOpen={onOpen} />
         ))}
       </ul>
       {tiles.calls.length > 0 && (
       <ul className="tiles" aria-label="Calls">
         {tiles.calls.map((t) => (
-          <TileView key={t.id} t={t} busy={busy} actionable={actionable} onAction={onAction} />
+          <TileView key={t.id} t={t} busy={busy} actionable={actionable} onAction={onAction} to={tileTarget(t, tabs)} onOpen={onOpen} />
         ))}
       </ul>
       )}

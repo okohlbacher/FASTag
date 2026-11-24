@@ -27,9 +27,9 @@ for (const w of RUNS) {
     await expect
       .poll(async () => (await page.getByRole('tab').allTextContents()).map((t) => t.replace(/\d+$/, '')))
       .toEqual(w.tabs)
-    // The Overview names the workflow.
+    // The Overview names the workflow, in the page header.
     await page.getByRole('tab', { name: 'Overview' }).click()
-    await expect(page.locator('.overview-sub')).toContainText(w.name)
+    await expect(page.locator('.view-results .page-header .run-workflow')).toContainText(w.name)
   })
 }
 
@@ -55,3 +55,43 @@ test('each Setup step fits 1280 x 800 (Advanced closed), Outputs & run but for M
     await fits(`${w.name} Outputs & run`)
   }
 })
+
+// Feedback 20261124T095212Z: a Mass-shift survey with every product checked
+// names the identifications .mzTab (the form Mass shifts shows), and its
+// Mass shifts tab shows no red error. Named .idXML by the user, the file is
+// listed there with Reveal and Open, still with no error.
+for (const format of ['mzTab', 'idXML'] as const) {
+  test(`Mass-shift survey, every product checked, identifications as ${format}: no error in Mass shifts`, async ({ page }) => {
+    await openApp(page, 'gate-recon')
+    await chooseTask(page, 'Mass-shift survey')
+    await toStep(page, 'Inputs')
+    await page.getByRole('button', { name: 'Choose file…' }).click()
+    await page.locator('#p-recon_fasta').fill('/data/human.fasta')
+    await toStep(page, 'Outputs & run')
+    const boxes = page.locator('.view-setup ul.products input[type="checkbox"]')
+    for (let i = 0; i < (await boxes.count()); i++) {
+      const b = boxes.nth(i)
+      if (!(await b.isDisabled()) && !(await b.isChecked())) await b.check()
+    }
+    await expect(page.locator('#out-recon_id_out')).toBeChecked()
+    const row = page.locator('li.product', { has: page.locator('#out-recon_id_out') })
+    await expect(row.locator('.product-file')).toHaveText(/\.recon_id\.mzTab$/)
+    if (format === 'idXML') {
+      await page.evaluate(() => {
+        ;(window as unknown as { __fastagE2E: { mock: { nextPickOutput: string } } }).__fastagE2E.mock.nextPickOutput = '/data/run01.recon_id.idXML'
+      })
+      await page.getByRole('button', { name: 'Change the file of Placements as identifications' }).click()
+      await expect(row.locator('.product-file')).toHaveText(/\.recon_id\.idXML$/)
+    }
+    await page.locator('.view-setup .runbar').getByRole('button', { name: /^Run$/ }).click()
+    await expect(page.getByRole('region', { name: 'Running' })).toHaveCount(0, { timeout: 20_000 })
+    await page.getByRole('tab', { name: 'Mass shifts' }).click()
+    await expect(page.locator('.recon-view .stat').first()).toBeVisible()
+    if (format === 'idXML') {
+      const files = page.getByRole('group', { name: 'Identification files' })
+      await expect(files).toContainText('run01.recon_id.idXML')
+      await expect(files.getByRole('button', { name: /with the default app$/ })).toBeVisible()
+    }
+    await expect(page.locator('.recon-view [role="alert"]')).toHaveCount(0)
+  })
+}

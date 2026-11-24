@@ -268,7 +268,11 @@ namespace FASTag::Alkylation
     }
     c.cls = top;
     c.top = t.cls[static_cast<std::size_t>(top)];
-    c.share = c.binned ? static_cast<double>(c.top) / static_cast<double>(c.binned) : 0.0;
+    // Review n3: a conflicted vote counts against the share (10 CAM and 90
+    // conflicts are a share of 0.1, not 1). Unexplained votes (placement
+    // call only) stay out of it.
+    c.voted = c.binned + t.conflict;
+    c.share = c.voted ? static_cast<double>(c.top) / static_cast<double>(c.voted) : 0.0;
     if (c.binned < s.min_spectra) c.reason = "few_cys_spectra";
     else if (tie || c.top < s.min_spectra || c.share < s.min_share) c.reason = "ambiguous";
     else c.called = true;
@@ -293,6 +297,133 @@ namespace FASTag::Alkylation
     }
   }
 
+  Call combineCalls(const Call& tags, const Call* placement)
+  {
+    Call out = tags;
+    out.source = "tags";
+    if (!placement) return out;
+    // Codex7 review n1: a tag candidate only a database can confirm
+    // (AlkylationTags::aliasGuard) is called when the placements agree.
+    const bool candidate = tags.called || tags.reason == ALIAS_NEEDS_DATABASE;
+    if (placement->called && !candidate)
+    {
+      out = *placement;
+      out.source = "placement";
+    }
+    else if (placement->called && candidate)
+    {
+      out.source = "tags+placement";
+      if (placement->cls != tags.cls)
+      {
+        out.called = false;
+        out.reason = "disagree";
+      }
+      else
+      {
+        out.called = true;
+        out.reason = "-";
+        out.confirmed = !tags.called;
+      }
+    }
+    return out;
+  }
+
+  std::vector<Digest::Row> tagOnlyRunRows(const Settings& s)
+  {
+    using Digest::num;
+    std::vector<Digest::Row> r;
+    auto add = [&](const std::string& key, const std::string& value, const std::string& d) {
+      r.push_back(Digest::Row{"alk_run", key, value, "-", d});
+    };
+    add("format", std::to_string(REPORT_FORMAT),
+        "The alkylation report follows format " + std::to_string(REPORT_FORMAT) + " (doc/ALKYLATION-REPORT.md).");
+    add("method", "tags",
+        "The call is read off the tags alone (alkt_* sections); no protein database is used. Give -recon_fasta, "
+        "-fasta or -alkylation_proteome to add the placement call.");
+    add("database", "-", "No protein database is used.");
+    add("database_source", "none", "No protein database is used.");
+    add("min_spectra", u(s.min_spectra), "A call needs " + u(s.min_spectra) + " votes in total and for the called class.");
+    add("min_share", num(s.min_share), "A call needs a share of " + num(s.min_share) + " of the votes, conflicts included.");
+    return r;
+  }
+
+  std::vector<Digest::Row> callRows(const std::string& section, const Call& c, const Settings& s,
+                                    const std::vector<Form>& forms, const std::string& unit, bool with_source)
+  {
+    using Digest::num;
+    std::vector<Digest::Row> r;
+    auto add = [&](const std::string& key, const std::string& value, const std::string& n, const std::string& d) {
+      r.push_back(Digest::Row{section, key, value, n, d});
+    };
+    const std::string name = c.cls >= 0 ? className(c.cls) : "-";
+    // The tag call's abstentions (AlkylationTags::callTags) are in the share's denominator.
+    const std::string parts = c.abstained ? " (binned, conflicted and abstained)" : " (binned plus conflicted)";
+    const std::string in_share = u(c.binned) + " binned to a class, " + u(c.voted - c.binned - c.abstained) + " conflicted" +
+                                 (c.abstained ? ", " + u(c.abstained) + " abstained (alkt_form alias_unconfirmed)" : "") + ".";
+    const std::string from = !with_source ? std::string()
+        : c.source == "placement"      ? " (from the placements on the database)"
+        : c.source == "tags+placement" ? " (the tags and the placements agree)"
+                                       : " (from the tags, no database)";
+    if (c.called)
+    {
+      double mass = 0.0;
+      for (const Form& fm : forms)
+        if (fm.cls == c.cls && fm.cls != NONE) { mass = fm.mass; break; }
+      add("status", "call", u(c.binned),
+          (c.cls == NONE ? std::string("The cysteines are not alkylated") : "The cysteines are alkylated with " + name) + from + ".");
+      add("reagent", name, u(c.top), "The call is " + name + ".");
+      add("mass", c.cls == NONE ? "-" : num(mass), "-",
+          c.cls == NONE ? "A call of none has no reagent mass." : name + " adds " + num(mass) + " Da to C.");
+      add("share", num(c.share), u(c.voted),
+          "A share of " + f3(c.share) + " of the " + u(c.voted) + " " + unit + parts + " are " + name + ".");
+      add("voted", u(c.voted), u(c.binned),
+          u(c.voted) + " " + unit + " are in the share: " + in_share);
+      add("reason", "-", "-", "The call is made.");
+    }
+    else
+    {
+      add("status", "no_call", u(c.binned),
+          c.reason == "tags_too_short"
+              ? "No alkylation is called: the run's tags are too short to place on this database (alk_run min_tag_length)."
+          : c.reason == "unresolved_forms"
+              ? std::string("No alkylation is called: the fragment tolerance does not resolve the C forms (alkt_form twin.*).")
+          : c.reason == "disagree"
+              ? "No alkylation is called: the tags call " + name + ", the placements on the database call another class "
+                "(alkylation_tags_call, alkylation_placement_call)."
+          : c.reason == ALIAS_NEEDS_DATABASE
+              ? "No alkylation is called: the candidate is " + name + " (" + u(c.top) + " of " + u(c.voted) + " " + unit +
+                    "), but an alias of C[" + name + "] reads the same in every spectrum (alkt_form needs_database." + name +
+                    "), so the tags alone cannot confirm it; a placement call on a protein database (-fasta, -recon_fasta "
+                    "or -alkylation_proteome) that calls it too does."
+          : c.reason == "few_cys_spectra"
+              ? "No alkylation is called: " + u(c.binned) + " " + unit + " are fewer than " + u(s.min_spectra) + "."
+              : "No alkylation is called: the leading class " + name + " has " + u(c.top) + " of " + u(c.voted) + " " + unit +
+                    parts + ", short of " + u(s.min_spectra) + " and a share of " + num(s.min_share) + " (or tied).");
+      add("reagent", "-", "-", "No reagent is called.");
+      add("mass", "-", "-", "No reagent is called.");
+      add("share", c.voted ? num(c.share) : "-", u(c.voted),
+          c.voted ? "The leading class " + name + " has a share of " + f3(c.share) + " of the " + u(c.voted) + " " + unit +
+                        parts + "."
+                  : "Nothing is counted.");
+      add("voted", u(c.voted), u(c.binned),
+          u(c.voted) + " " + unit + " are in the share: " + in_share);
+      add("reason", c.reason, "-", "The first no-call rule that applies is " + c.reason + ".");
+      if (c.reason == ALIAS_NEEDS_DATABASE)
+        add("candidate", name, u(c.top),
+            "The candidate is " + name + ", with " + u(c.top) + " " + unit + ", a share of " + f3(c.share) +
+                "; it needs a protein database to confirm.");
+    }
+    if (with_source)
+      add("source", c.source, "-",
+          c.source == "placement"        ? "The call is that of the placements on the database; the tags make none."
+          : c.source == "tags+placement"
+              ? (c.confirmed ? "The placements on the database confirm the tags' candidate, which the tags alone do not call "
+                               "(alkylation_tags_call alias_needs_database)."
+                             : "Both the tags and the placements on the database make a call.")
+                                         : "The call is that of the tags (no database, or the placements make none).");
+    return r;
+  }
+
   std::vector<Digest::Row> alkylationRows(const Tally& t, const Call& c, const Settings& s,
                                           const std::vector<Form>& forms, const ReportInfo& info)
   {
@@ -303,6 +434,9 @@ namespace FASTag::Alkylation
     // ---- alk_run: settings and what was counted
     add("alk_run", "format", std::to_string(REPORT_FORMAT), "-",
         "The alkylation report follows format " + std::to_string(REPORT_FORMAT) + " (doc/ALKYLATION-REPORT.md).");
+    add("alk_run", "method", "tags+placement", "-",
+        "The call is read off the tags (alkt_* sections) and off the placements of single-Cys peptides on the database "
+        "(alk_cys, alkylation_placement_call); alkylation_call combines them.");
     add("alk_run", "database", info.database, "-", "The placements are on the database " + info.database + ".");
     add("alk_run", "database_source", info.database_source, "-",
         info.database_source == "recon_fasta" ? "The database is -recon_fasta."
@@ -335,7 +469,7 @@ namespace FASTag::Alkylation
     add("alk_run", "min_spectra", u(s.min_spectra), "-",
         "A call needs " + u(s.min_spectra) + " spectra binned in total and for the called class.");
     add("alk_run", "min_share", num(s.min_share), "-",
-        "A call needs a share of " + num(s.min_share) + " of the binned spectra.");
+        "A call needs a share of " + num(s.min_share) + " of the binned and conflicted spectra.");
     add("alk_run", "tags", u(t.tags), "-", u(t.tags) + " placed tags (ungapped, E-value at most 1) were looked at.");
     add("alk_run", "spectra", u(t.spectra), "-",
         u(t.spectra) + " MS2 spectra have a tag with a single-Cys placement that counts; each votes once, with its best such tag.");
@@ -354,7 +488,7 @@ namespace FASTag::Alkylation
     add("alk_cys", "unexplained", u(t.unexplained), u(t.spectra),
         u(t.unexplained) + " spectra have a reagent mass no Cys form explains within the window.");
     add("alk_cys", "conflict", u(t.conflict), u(t.spectra),
-        u(t.conflict) + " spectra have a best tag whose counted placements disagree on the class.");
+        u(t.conflict) + " spectra have a best tag whose counted placements disagree on the class; they count against the share.");
     std::uint64_t placements = 0;
     for (std::uint64_t v : t.outcomes) placements += v;
     for (int k = static_cast<int>(Outcome::NO_CYS); k < static_cast<int>(Outcome::COUNT); ++k)
@@ -372,39 +506,8 @@ namespace FASTag::Alkylation
         u(t.excluded_non_by) + " of " + u(t.tags + t.excluded_non_by) +
             " tags are left out because they are not b/y tags (c/z); they are not placed for the call.");
 
-    // ---- alkylation_call
-    const std::string name = c.cls >= 0 ? className(c.cls) : "-";
-    if (c.called)
-    {
-      double mass = 0.0;
-      for (const Form& fm : forms)
-        if (fm.cls == c.cls && fm.cls != NONE) { mass = fm.mass; break; }
-      add("alkylation_call", "status", "call", u(c.binned),
-          c.cls == NONE ? "The cysteines are not alkylated (not validated on held-out data)."
-                        : "The cysteines are alkylated with " + name + " (not validated on held-out data).");
-      add("alkylation_call", "reagent", name, u(c.top), "The call is " + name + ".");
-      add("alkylation_call", "mass", c.cls == NONE ? "-" : num(mass), "-",
-          c.cls == NONE ? "A call of none has no reagent mass." : name + " adds " + num(mass) + " Da to C.");
-      add("alkylation_call", "share", num(c.share), u(c.binned),
-          "A share of " + f3(c.share) + " of the " + u(c.binned) + " binned spectra are " + name + ".");
-      add("alkylation_call", "reason", "-", "-", "The call is made.");
-    }
-    else
-    {
-      add("alkylation_call", "status", "no_call", u(c.binned),
-          c.reason == "tags_too_short"
-              ? "No alkylation is called: the run's tags are too short to place on this database (alk_run min_tag_length)."
-          : c.reason == "few_cys_spectra"
-              ? "No alkylation is called: " + u(c.binned) + " binned spectra are fewer than " + u(s.min_spectra) + "."
-              : "No alkylation is called: the leading class " + name + " has " + u(c.top) + " of " + u(c.binned) +
-                    " binned spectra, short of " + u(s.min_spectra) + " spectra and a share of " + num(s.min_share) +
-                    " (or tied).");
-      add("alkylation_call", "reagent", "-", "-", "No reagent is called.");
-      add("alkylation_call", "mass", "-", "-", "No reagent is called.");
-      add("alkylation_call", "share", c.binned ? num(c.share) : "-", u(c.binned),
-          c.binned ? "The leading class " + name + " has a share of " + f3(c.share) + "." : "No spectrum is binned.");
-      add("alkylation_call", "reason", c.reason, "-", "The first no-call rule that applies is " + c.reason + ".");
-    }
+    // ---- alkylation_placement_call (format 2; the alkylation_call of format 1)
+    for (Digest::Row& row : callRows("alkylation_placement_call", c, s, forms, "binned spectra", false)) r.push_back(std::move(row));
     return r;
   }
 
