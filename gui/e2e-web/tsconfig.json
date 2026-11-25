@@ -1,0 +1,18 @@
+{
+  // The Playwright specs, typechecked by CI (ci.yml job gui, `npx tsc -p e2e-web`):
+  // the app's tsconfig covers src/ only, so a spec calling a removed helper
+  // (suite-1 of 1.16.1) went unnoticed.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"]
+}

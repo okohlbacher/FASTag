@@ -214,6 +214,26 @@ test('a view switch that hides the focused control moves focus into the view sho
   expect(await focusIn()).toBe('batch')
 })
 
+/** Wait until no element of the page scrolls any more (a smooth scrollIntoView has ended). */
+async function settleScroll(page: Page): Promise<void> {
+  const at = () =>
+    page.evaluate(() => {
+      let sum = window.scrollY
+      for (const e of document.querySelectorAll('*')) sum += e.scrollTop
+      return sum
+    })
+  let last = await at()
+  let still = 0
+  const end = Date.now() + 5000
+  while (still < 3 && Date.now() < end) {
+    await page.waitForTimeout(100)
+    const now = await at()
+    still = now === last ? still + 1 : 0
+    last = now
+  }
+  expect(still, 'the page still scrolls after 5 s').toBeGreaterThanOrEqual(3)
+}
+
 // Screenshots for review: every view, both themes, both window sizes.
 for (const [w, h] of [
   [960, 600],
@@ -236,6 +256,9 @@ for (const [w, h] of [
         await page.screenshot({ path: info.outputPath(`shell-${v.toLowerCase()}-${w}x${h}-${scheme}.png`) })
       }
       await page.getByRole('button', { name: 'Help', exact: true }).click()
+      // Help scrolls to its section smoothly (HelpView.tsx): photograph it once
+      // every scroll position has held for three samples (suite-5 of 1.16.1).
+      await settleScroll(page)
       await page.screenshot({ path: info.outputPath(`shell-help-${w}x${h}-${scheme}.png`) })
     }
   })

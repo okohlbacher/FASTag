@@ -103,16 +103,27 @@ test('setup screens of every workflow', async ({ page, browserName }) => {
   await page.getByRole('radio', { name: 'One file' }).check()
 })
 
-test('help popovers and the run bar', async ({ page, browserName }) => {
+test('help popovers and the run bar', async ({ page, browserName }, info) => {
   test.skip(browserName !== 'chromium')
   await openApp(page, 'gate')
   await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
+  // The settings and their (?) are on step 3 of the wizard.
+  await toStep(page, 'Settings')
   // tag_length sits in the third column of Settings: its popover opens to
-  // the left of its (?).
+  // the left of its (?). Only a (?) that is shown; Advanced is opened when
+  // it is not.
+  const missing: string[] = []
   for (const name of ['extension', 'max_evalue', 'tag_length']) {
-    const q = page.locator(`button[data-param-help="${name}"]`).first()
-    if ((await q.count()) === 0) continue
+    let q = page.locator(`button[data-param-help="${name}"]:visible`).first()
+    if ((await q.count()) === 0) {
+      await openAdvanced(page)
+      q = page.locator(`button[data-param-help="${name}"]:visible`).first()
+    }
+    if ((await q.count()) === 0) {
+      missing.push(name)
+      continue
+    }
     await q.scrollIntoViewIfNeeded()
     await q.click()
     await expect(page.getByRole('dialog', { name: /^About / })).toBeVisible()
@@ -120,11 +131,13 @@ test('help popovers and the run bar', async ({ page, browserName }) => {
     await page.screenshot({ path: shot(`20-help-popover-${name}`) })
     await page.keyboard.press('Escape')
   }
+  info.annotations.push({ type: 'no visible (?)', description: missing.join(', ') || 'none' })
   // A (?) with a tip below its text (digest_models_version), in the
   // Characterize workflow's own Advanced group.
-  await workflow(page, 'Characterize a run').check()
+  await chooseTask(page, 'Characterize a run')
+  await toStep(page, 'Settings')
   await openAdvanced(page)
-  const tip = page.locator('button[data-param-help="digest_models_version"]').first()
+  const tip = page.locator('button[data-param-help="digest_models_version"]:visible').first()
   if ((await tip.count()) > 0) {
     await tip.scrollIntoViewIfNeeded()
     await tip.click()
@@ -135,6 +148,8 @@ test('help popovers and the run bar', async ({ page, browserName }) => {
   }
   await page.locator('details.advanced > summary').click()
   await page.locator('.view-setup .runbar').screenshot({ path: shot('21-run-bar') })
+  // The file card is on step 2.
+  await toStep(page, 'Inputs')
   await page.screenshot({ path: shot('22-setup-file-chosen') })
 })
 
@@ -143,7 +158,7 @@ for (const [i, w] of WORKFLOWS.entries()) {
     test.skip(browserName !== 'chromium')
     test.setTimeout(90_000)
     await openApp(page, w.fixture)
-    await workflow(page, w.name).check()
+    await chooseTask(page, w.name)
     await toStep(page, 'Inputs')
     await page.getByRole('button', { name: 'Choose file…' }).click()
     // The example's MS2 are ion trap CID, as the recorded runs were.

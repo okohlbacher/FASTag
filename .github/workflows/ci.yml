@@ -1826,6 +1826,8 @@ jobs:
         run: |
           npm ci
           npm run typecheck
+          # The Playwright specs too (suite-1 of 1.16.1: a removed helper went unnoticed).
+          npx tsc -p e2e-web
           npm test
           npm run build
       # Tauri's build script refuses to compile unless every path in

@@ -91,7 +91,7 @@ test('a tighter E-value cutoff never adds rows, with and without the best tag pe
 })
 
 test('filters commute: the order they are set in changes neither the view nor its rows', async ({ page }) => {
-  type Step = (p: Page) => Promise<void>
+  type Step = (p: Page) => Promise<unknown>
   const steps: Step[] = [
     (p) => setBox(p, 'Min. length', '3'),
     (p) => setBox(p, 'Spectrum contains', 'SCAN=11'),
