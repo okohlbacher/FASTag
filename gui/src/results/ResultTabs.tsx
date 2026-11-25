@@ -434,14 +434,14 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
             {tab === 'triage' && wr.censusSummary && (
               <details className="raw">
                 <summary>Run summary of the identifiability table</summary>
-                <ReportTable key={`sum:${wr.censusSummary}`} kind="generic" path={wr.censusSummary} gen={reports.workflowGen?.censusSummary} />
+                <ReportTable key={`sum:${wr.censusSummary}`} kind="generic" title="Run summary of the identifiability table" path={wr.censusSummary} gen={reports.workflowGen?.censusSummary} />
               </details>
             )}
           </div>
         ) : tab === 'triage' && wr.censusSummary ? (
           <div className="tablewrap">
             <p className="hint">The run summary of the identifiability table; the ranking of the spectra is in a file of its own.</p>
-            <ReportTable key={`sum:${wr.censusSummary}`} kind="generic" path={wr.censusSummary} gen={reports.workflowGen?.censusSummary} />
+            <ReportTable key={`sum:${wr.censusSummary}`} kind="generic" title="Run summary of the identifiability table" path={wr.censusSummary} gen={reports.workflowGen?.censusSummary} />
           </div>
         ) : tab === 'recon' ? (
           <div className="tablewrap">
@@ -454,14 +454,14 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
               <details className="raw" open={!hasRecon}>
                 <summary>Spectra per mass shift</summary>
                 <SpectrumLinkContext.Provider value={linkFor(wr.deltaSpectra)}>
-                  <ReportTable key={`ds:${wr.deltaSpectra}`} kind="generic" path={wr.deltaSpectra} gen={reports.workflowGen?.deltaSpectra} />
+                  <ReportTable key={`ds:${wr.deltaSpectra}`} kind="generic" title="Spectra per mass shift" path={wr.deltaSpectra} gen={reports.workflowGen?.deltaSpectra} />
                 </SpectrumLinkContext.Provider>
               </details>
             )}
             {wr.deltaCounts && (
               <details className="raw" open={!hasRecon}>
                 <summary>Mass-shift accounting: how many spectra reach each step</summary>
-                <ReportTable key={`dc:${wr.deltaCounts}`} kind="generic" path={wr.deltaCounts} gen={reports.workflowGen?.deltaCounts} />
+                <ReportTable key={`dc:${wr.deltaCounts}`} kind="generic" title="Mass-shift accounting" path={wr.deltaCounts} gen={reports.workflowGen?.deltaCounts} />
               </details>
             )}
           </div>
@@ -557,8 +557,8 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
                 <span>
                   {results.recorded ? (
                     <>
-                      <strong>Incomplete.</strong> The run that wrote <code>{results.path}</code> was{' '}
-                      {results.recorded.status} ({new Date(results.recorded.end).toLocaleString()}), so the file
+                      <strong>Incomplete.</strong> The run that wrote <code>{results.path}</code>{' '}
+                      {results.recorded.status === 'failed' ? 'failed' : 'was cancelled'} ({new Date(results.recorded.end).toLocaleString()}), so the file
                       may hold only part of a table.{' '}
                     </>
                   ) : (
