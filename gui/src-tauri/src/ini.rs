@@ -286,6 +286,21 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
+    /// @p p ("/d/a.mzML") as an absolute path on this platform: "C:/d/a.mzML" on Windows,
+    /// where a path without a drive is not absolute.
+    fn abs(p: &str) -> String {
+        if cfg!(windows) { format!("C:{p}") } else { p.to_string() }
+    }
+    /// A request whose "/d/..." paths are abs("/d/...").
+    fn on_d(json: &str) -> String {
+        json.replace("\"/d/", &format!("\"{}", abs("/d/")))
+    }
+    /// @p name made absolute against the folder abs("/d"), the way build_args does it.
+    fn in_d(name: &str) -> String {
+        std::path::Path::new(&abs("/d")).join(name).display().to_string()
+    }
+
+
     fn rp(json: &str) -> RunParams {
         serde_json::from_str(json).unwrap()
     }
@@ -302,14 +317,14 @@ mod tests {
     #[test]
     fn items_are_the_argv_of_the_same_request() {
         let a = argv(
-            r#"{"in":"/d/a.mzML","out":"/d/a.tags.tsv","params":{"tag_length":"5","species":true,"glyco":false,
+            &on_d(r#"{"in":"/d/a.mzML","out":"/d/a.tags.tsv","params":{"tag_length":"5","species":true,"glyco":false,
                "fragment_tolerance":"0.3","fragment_tolerance_unit":"Da","tag_lengths":["5","6"],
-               "fixed_modifications":[],"digest_out":"a.digest.tsv","threads":"0"}}"#,
+               "fixed_modifications":[],"digest_out":"a.digest.tsv","threads":"0"}}"#),
         );
         let items = items_from_argv(&a);
         let m = by_name(&items);
-        assert_eq!(m.get("in"), Some(&scalar("/d/a.mzML")));
-        assert_eq!(m.get("out"), Some(&scalar("/d/a.tags.tsv")));
+        assert_eq!(m.get("in"), Some(&scalar(&abs("/d/a.mzML"))));
+        assert_eq!(m.get("out"), Some(&scalar(&abs("/d/a.tags.tsv"))));
         assert_eq!(m.get("tag_length"), Some(&scalar("5")));
         assert_eq!(m.get("species"), Some(&scalar("true")));
         // A switch that is off is not in the argv, so the CLI default (off) stays.
@@ -318,7 +333,7 @@ mod tests {
         // Cleared on purpose: an empty list, not the Carbamidomethyl default.
         assert_eq!(m.get("fixed_modifications"), Some(&IniValue::List(vec![])));
         // A relative report path is the absolute one the run is given.
-        assert_eq!(m.get("digest_out"), Some(&scalar("/d/a.digest.tsv")));
+        assert_eq!(m.get("digest_out"), Some(&scalar(&in_d("a.digest.tsv"))));
         assert_eq!(m.get("threads"), Some(&scalar("0")));
         // -progress is the GUI's own; an exported INI leaves it to the CLI.
         assert!(!m.contains_key("progress"));
@@ -329,10 +344,10 @@ mod tests {
 
     #[test]
     fn negative_numbers_and_dash_file_names_stay_values() {
-        let a = argv(r#"{"in":"/d/a.mzML","out":"/d/o.tsv","params":{"subsample_seed":"-1","fasta":"-db.fasta"}}"#);
+        let a = argv(&on_d(r#"{"in":"/d/a.mzML","out":"/d/o.tsv","params":{"subsample_seed":"-1","fasta":"-db.fasta"}}"#));
         let m = by_name(&items_from_argv(&a));
         assert_eq!(m.get("subsample_seed"), Some(&scalar("-1")));
-        assert_eq!(m.get("fasta"), Some(&scalar("/d/-db.fasta")));
+        assert_eq!(m.get("fasta"), Some(&scalar(&in_d("-db.fasta"))));
     }
 
     #[test]

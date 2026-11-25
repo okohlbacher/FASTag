@@ -78,6 +78,15 @@ jobs:
         env:
           CI: '1'
         run: npm run e2e
+      # The review screenshots (screens.spec.ts, skipped without SCREENS_DIR),
+      # once, Chromium only: the spec broke unseen in 1.16.1 (suite-1).
+      - name: Review screenshots (screens.spec.ts, Chromium)
+        timeout-minutes: 10
+        env:
+          CI: '1'
+          SCREENS_DIR: e2e-web/screens
+        # Its own output folder and the list reporter: a second run would empty the first one's test-results and overwrite its HTML report.
+        run: npx playwright test -c e2e-web screens.spec.ts --project chromium --reporter list --output e2e-web/test-results-screens
       - name: Screenshots and report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -85,6 +94,8 @@ jobs:
           name: playwright-${{ github.run_id }}
           path: |
             gui/e2e-web/test-results
+            gui/e2e-web/test-results-screens
+            gui/e2e-web/screens
             gui/e2e-web/playwright-report
           if-no-files-found: ignore
           retention-days: 14

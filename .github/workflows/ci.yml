@@ -147,6 +147,8 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
       legs: ${{ steps.legs.outputs.legs }}
+      linux_legs: ${{ steps.legs.outputs.linux_legs }}
+      macos_legs: ${{ steps.legs.outputs.macos_legs }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -210,7 +212,13 @@ jobs:
           else
             legs=$(jq -c . <<<"$legs")
           fi
-          echo "legs=$legs" >> "$GITHUB_OUTPUT"
+          # Two jobs (build, build-macos), so the Linux GUI jobs need only the
+          # Linux legs and never wait for a macOS runner.
+          {
+            echo "legs=$legs"
+            echo "linux_legs=$(jq -c 'map(select(.name | startswith("linux")))' <<<"$legs")"
+            echo "macos_legs=$(jq -c 'map(select(.name | startswith("macos")))' <<<"$legs")"
+          } >> "$GITHUB_OUTPUT"
           echo "build legs: $(jq -r 'map(.name) | join(", ")' <<<"$legs")" | tee -a "$GITHUB_STEP_SUMMARY"
 
   build:
@@ -244,19 +252,25 @@ jobs:
     # reasons for each runner are written down: macos-x64 is in it only on a
     # v* tag and on a manual dispatch, so a pull request or a push to main
     # never waits for an Intel runner and never shows a skipped Intel job.
+    #
+    # This job runs the Linux legs; build-macos runs the macOS ones with the
+    # same steps (the YAML alias build-steps), so gui-linux and gui-linux-arm64
+    # start as soon as the Linux legs are done.
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.version.outputs.legs) }}
+        include: ${{ fromJSON(needs.version.outputs.linux_legs) }}
 
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+    steps: &build-steps
+      - &build-checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
       # The same libraries OpenMS was built against (.github/env/openms.yml),
       # the same compilers, plus what packaging needs.
-      - name: Install the toolchain and dependencies
+      - &build-toolchain
+        name: Install the toolchain and dependencies
         uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
         with:
           environment-file: .github/env/openms.yml
@@ -267,14 +281,18 @@ jobs:
       # OpenMS: restored from the cache, or built from source and saved at once,
       # so a later FASTag failure in this job cannot keep the build from the
       # cache (actions/cache would save only from a successful job).
-      - name: Restore OpenMS
+      - &openms-restore
+        name: Restore OpenMS
         id: openms-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: openms-install
+          # openms-cache-macos-x64 only asks whether the cache is there.
+          lookup-only: ${{ matrix.cache_only == true }}
           key: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
 
-      - name: Check out OpenMS at the pinned commit
+      - &openms-checkout
+        name: Check out OpenMS at the pinned commit
         if: steps.openms-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
@@ -297,7 +315,8 @@ jobs:
       # The .NET SDK the Thermo bridge's managed half is built with (only
       # when OpenMS is built; the runtime the CLI uses is installed below on
       # every run).
-      - name: Install the .NET SDK (OpenMS Thermo bridge)
+      - &openms-dotnet
+        name: Install the .NET SDK (OpenMS Thermo bridge)
         if: steps.openms-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
@@ -306,7 +325,8 @@ jobs:
           bash "$RUNNER_TEMP/dotnet-install.sh" --version "$DOTNET_SDK_VERSION" --install-dir "$RUNNER_TEMP/dotnet-sdk" --no-path
           "$RUNNER_TEMP/dotnet-sdk/dotnet" --info | head -20
 
-      - name: Build and install OpenMS
+      - &openms-build
+        name: Build and install OpenMS
         if: steps.openms-cache.outputs.cache-hit != 'true'
         shell: bash -el {0}
         run: |
@@ -342,7 +362,8 @@ jobs:
           cmake --build openms-build --parallel "$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)"
           cmake --install openms-build
 
-      - name: Save OpenMS
+      - &openms-save
+        name: Save OpenMS
         if: steps.openms-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
@@ -1217,7 +1238,9 @@ jobs:
           # The asset's dumps replace the repo copies: they are the ones the
           # index was built against.
           rm -rf dist/FASTag/share-FASTag-taxonomy
-          tar -xzf /tmp/taxdb/FASTag-taxonomy-k7.tar.gz -C dist/FASTag
+          # linux-1: the pinned tarball was packed on a Mac; GNU tar would unpack its
+          # AppleDouble files (._*) into every package. bsdtar turns them into xattrs.
+          tar --exclude='._*' -xzf /tmp/taxdb/FASTag-taxonomy-k7.tar.gz -C dist/FASTag
           test -s dist/FASTag/share-FASTag-taxonomy/tax_k7.taxdb
           # The asset predates -species_call (1.12 #1): put its frozen
           # parameters back beside the index, or -species_call decoy refuses.
@@ -1262,6 +1285,8 @@ jobs:
           set -euo pipefail
           tar -C dist -czf FASTag-${{ matrix.name }}-portable.tar.gz FASTag
           ls -l FASTag-${{ matrix.name }}-portable.tar.gz
+          # linux-1: the release tarball and both GUI packages are made from it.
+          bash tools/check_no_appledouble.sh FASTag-${{ matrix.name }}-portable.tar.gz
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: matrix.name == 'linux-x64' || matrix.name == 'linux-arm64'
         with:
@@ -1531,6 +1556,22 @@ jobs:
             [ "$a" = "$ARCH" ] || { echo "::error::$m is '${a:-unreadable}', expected $ARCH"; exit 1; }
             echo "$m: $a"
           done
+          # The shipped app itself starts (on Intel for the first time in CI) and
+          # runs its start-up probe (fastag.rs self_test, FASTAG_SELFTEST_OUT):
+          # the GUI's resolution, environment and spawn path run the bundled
+          # CLI from the mounted, signed image; exit 0 only if it ran. perl's
+          # alarm is the timeout (no coreutils timeout on the runner).
+          exe="${apps[0]}/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${apps[0]}/Contents/Info.plist")"
+          st="$RUNNER_TEMP/selftest.json"; rm -f "$st"
+          set +e
+          FASTAG_SELFTEST_OUT="$st" perl -e 'alarm 180; exec @ARGV or die "exec: $!"' "$exe" > "$RUNNER_TEMP/selftest.log" 2>&1
+          rc=$?
+          set -e
+          echo "app self-test: exit $rc"; cat "$st" 2>/dev/null || { echo '(no self-test output)'; cat "$RUNNER_TEMP/selftest.log"; }
+          if [ "$rc" -ne 0 ] || ! grep -q '"ok": true' "$st"; then
+            echo "::error::the app in the dmg did not start or could not run its bundled CLI (exit $rc)"; exit 1
+          fi
+          echo "- ${{ matrix.name }}: the app in the dmg starts and its self-test runs the bundled CLI" >> "$GITHUB_STEP_SUMMARY"
           if [ "$SIGNED" = "true" ]; then
             codesign --verify --deep --strict --verbose=2 "${apps[0]}"
             # The .app inside the dmg carries no stapled ticket of its own (only the dmg is
@@ -1705,8 +1746,53 @@ jobs:
             gh release upload "${{ github.ref_name }}" "FASTag-${ASSET_VERSION}-${{ matrix.name }}.dmg" --clobber
           else
             tar -C dist -czf "FASTag-${ASSET_VERSION}-${{ matrix.name }}.tar.gz" FASTag
+            bash tools/check_no_appledouble.sh "FASTag-${ASSET_VERSION}-${{ matrix.name }}.tar.gz"
             gh release upload "${{ github.ref_name }}" "FASTag-${ASSET_VERSION}-${{ matrix.name }}.tar.gz" --clobber
           fi
+
+  # The macOS legs of build: the same steps, a job of their own so that the
+  # Linux GUI jobs do not wait for them (release-complete still needs both).
+  build-macos:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    needs: [version]
+    env:
+      ASSET_VERSION: ${{ needs.version.outputs.version }}
+    permissions:
+      contents: write
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.version.outputs.macos_legs) }}
+    steps: *build-steps
+
+  # The OpenMS cache of the macOS Intel leg, filled from main. The leg runs
+  # only on v* tags and dispatches, and a tag run can read a cache saved by
+  # the default branch but not one saved by another tag: without this job
+  # every Intel tag build compiled OpenMS from source (up to 4 h). On a push
+  # to main (or a dispatch on main) it looks the key up, the very key of
+  # build-macos, and on a miss builds OpenMS and saves it; nothing else. A
+  # hit costs a lookup. GitHub evicts a cache unused for 7 days, so a quiet
+  # main can still leave a tag cold.
+  openms-cache-macos-x64:
+    name: OpenMS cache (macos-x64)
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: macos-26-intel
+    timeout-minutes: 300
+    strategy:
+      matrix:
+        include:
+          # Must stay equal to the macos-x64 leg of job version.
+          - {name: macos-x64, runner: macos-26-intel, arch: x86_64, compilers: "clangxx_osx-64=19.* llvm-openmp=19.*", toolchain: clang19, extra: "", cache_only: true}
+    steps:
+      - *build-checkout
+      - *build-toolchain
+      - *openms-restore
+      - *openms-checkout
+      - *openms-dotnet
+      - *openms-build
+      - *openms-save
 
   # ----------------------------------------------------------- GUI checks
   # Independent on purpose: no `needs:` -- waiting for OpenMS to test
@@ -1740,6 +1826,8 @@ jobs:
         run: |
           npm ci
           npm run typecheck
+          # The Playwright specs too (suite-1 of 1.16.1: a removed helper went unnoticed).
+          npx tsc -p e2e-web
           npm test
           npm run build
       # Tauri's build script refuses to compile unless every path in
@@ -1852,7 +1940,6 @@ jobs:
       - name: Backend unit tests (Windows)
         working-directory: gui/src-tauri
         shell: pwsh
-        continue-on-error: true
         run: |
           $ErrorActionPreference = 'Stop'
           cargo test --lib
@@ -2214,6 +2301,8 @@ jobs:
           # The names the release would attach, checked on a dry run too.
           names=("$DEB" "$TGZ"); [ -f "$APPIMAGE" ] && names+=("$APPIMAGE")
           tools/release_assets.sh check "$VER" "${names[@]}"
+          # linux-1: no package carries macOS AppleDouble files (._*).
+          bash tools/check_no_appledouble.sh "${names[@]}"
           # GitHub refuses a release asset of 2 GiB or more.
           mb() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1000000 }'; }
           echo "### Linux desktop app, $GUI_ARCH (ubuntu $(. /etc/os-release && echo "$VERSION_ID"), glibc $(ldd --version | head -1 | awk '{print $NF}'), WebKitGTK $(pkg-config --modversion webkit2gtk-4.1))" >> "$GITHUB_STEP_SUMMARY"
@@ -2403,9 +2492,21 @@ jobs:
             echo "::error::$APP logged a fatal start-up error"; exit 1
           fi
           echo "### .deb on ${{ matrix.os }}: installs, runs the fixture, the app stays up" >> "$GITHUB_STEP_SUMMARY"
+      # The installed app's own start-up probe (fastag.rs self_test), the check
+      # tools/windows_installed_check.ps1 runs on Windows: the GUI's resolution,
+      # environment and spawn path run the bundled CLI; exit 0 only if it ran.
+      - name: The installed app runs its start-up self-test
+        run: |
+          set +e -uo pipefail
+          out="$RUNNER_TEMP/selftest.json"; rm -f "$out"
+          FASTAG_SELFTEST_OUT="$out" dbus-run-session -- xvfb-run -a timeout 180 "$APP" > "$RUNNER_TEMP/selftest.log" 2>&1
+          rc=$?
+          echo "app self-test: exit $rc"; cat "$out" 2>/dev/null || { echo '(no self-test output)'; cat "$RUNNER_TEMP/selftest.log"; }
+          if [ "$rc" -ne 0 ] || ! grep -q '"ok": true' "$out"; then echo "::error::the installed app could not run its bundled CLI (exit $rc)"; exit 1; fi
+          echo "- the installed app's start-up self-test runs its bundled CLI" >> "$GITHUB_STEP_SUMMARY"
+      # Blocking since 1.16.2 (ci-1: the Cancel spec raced the input probe).
       - name: tauri-driver specs against the installed app (real CLI)
         id: real-specs
-        continue-on-error: true
         working-directory: gui
         env:
           FASTAG_APP: ${{ env.APP }}
@@ -2666,7 +2767,9 @@ jobs:
             gh release download "$TAXDB_TAG" --repo "$GITHUB_REPOSITORY" -p 'FASTag-taxonomy-k7.tar.gz' -D "$RUNNER_TEMP/taxdb"
             archive="$RUNNER_TEMP/taxdb/FASTag-taxonomy-k7.tar.gz"
             echo "$TAXDB_SHA256  $archive" | sha256sum --check --status
-            tar -xzf "$archive" -C "$root"
+            # linux-1: the pinned tarball was packed on a Mac; GNU tar would unpack its
+            # AppleDouble files (._*) into every package. bsdtar turns them into xattrs.
+            tar --exclude='._*' -xzf "$archive" -C "$root"
           fi
           test -s "$root/share-FASTag-taxonomy/tax_k7.taxdb"
           cp data/taxonomy/species_call.tsv "$root/share-FASTag-taxonomy/"
@@ -2830,7 +2933,7 @@ jobs:
     # would otherwise turn the cancelled run's completeness check red for
     # uploads the NEW run will finish.
     if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
-    needs: [version, build, taxonomy-asset, release-notes, gui-linux-release, gui-linux-arm64-release, gui-cli-consistency]
+    needs: [version, build, build-macos, taxonomy-asset, release-notes, gui-linux-release, gui-linux-arm64-release, gui-cli-consistency]
     runs-on: ubuntu-24.04
     env:
       V: ${{ needs.version.outputs.version }}
