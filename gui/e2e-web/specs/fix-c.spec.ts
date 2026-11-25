@@ -114,3 +114,45 @@ test('the parameter search for Spectra to read, count from Outputs & run lands o
   await expect(page.locator('#step-3')).toBeVisible()
   await expect.poll(() => focusedId(page)).toMatch(/^p-subsample/)
 })
+
+// shell-3
+test('at 960x600 the docked Feedback panel leaves the app bar and the run\'s Cancel uncovered', async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 600 })
+  await openApp(page, 'slow')
+  await toStep(page, 'Inputs')
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  await runButton(page).click()
+  await expect(page.getByRole('region', { name: 'Running' })).toContainText('50%')
+  await page.getByRole('button', { name: 'Feedback', exact: true }).click()
+  const d = page.getByRole('dialog', { name: 'Feedback' })
+  await expect(d).toBeVisible()
+  const covered = await page.evaluate(() => {
+    const out: string[] = []
+    for (const b of document.querySelectorAll<HTMLElement>('header.topbar button')) {
+      const r = b.getBoundingClientRect()
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+      if (hit && hit.closest('.fb-panel')) out.push((b.getAttribute('aria-label') ?? b.textContent ?? '').trim())
+    }
+    return out
+  })
+  await d.getByRole('button', { name: 'Close Feedback' }).click()
+  await pill(page).getByRole('button', { name: 'Cancel' }).click()
+  expect(covered).toEqual([])
+})
+
+// shell-6
+test('Escape closes a (?) popover opened with the mouse: a field\'s, and "Why the file was not checked"', async ({ page }) => {
+  await openApp(page, 'iontrap')
+  await toStep(page, 'Inputs')
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  await page.getByRole('button', { name: 'About Instrument' }).click()
+  const pop = page.getByRole('dialog', { name: 'About Instrument' })
+  await expect(pop).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(pop).toHaveCount(0)
+  await page.getByRole('button', { name: 'Why the file was not checked' }).click()
+  const why = page.getByRole('dialog', { name: 'Not checked before the run' })
+  await expect(why).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(why).toHaveCount(0)
+})

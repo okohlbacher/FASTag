@@ -2,7 +2,7 @@
 // by default, always wholly in the window, and collapsing toward the edge
 // it is nearer to.
 import { describe, expect, it } from 'vitest'
-import { arrow, clampRect, collapsedY, defaultRect, expandedAt, MARGIN, MIN_W, moveRect, resizeRect } from './floating'
+import { APP_BAR_H, arrow, clampRect, collapsedY, defaultRect, expandedAt, MARGIN, MIN_W, moveRect, resizeRect } from './floating'
 
 const v = { w: 1280, h: 800 }
 
@@ -19,6 +19,10 @@ describe('floating panel geometry', () => {
     const s = defaultRect('compact', { w: 360, h: 300 })
     expect(s.x).toBeGreaterThanOrEqual(0)
     expect(s.x + s.w).toBeLessThanOrEqual(360)
+    // The smallest app window (960x600): docked below the app bar.
+    const m = defaultRect('compact', { w: 960, h: 600 })
+    expect(m.y).toBeGreaterThanOrEqual(APP_BAR_H + MARGIN)
+    expect(m.y + m.h).toBe(600 - MARGIN)
   })
 
   it('stays wholly in the window whatever it is moved, resized or clamped to', () => {
