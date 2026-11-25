@@ -655,7 +655,14 @@ data_paths() { # data_paths <binary> <python check of j>: the line's JSON
   local b="$1" check="$2" out
   out=$(env -u FASTAG_ALKYLATION_DIR "$b" -data_paths 2>/dev/null) || fail "(g) $b -data_paths did not exit 0"
   [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" = 1 ] || fail "(g) $b -data_paths printed more than one line: $out"
-  "$PY" -c 'import json, sys
+  # P(p): a path as the checks compare it. On Windows the binary prints
+  # native paths (C:\Users\RUNNER~1\...) and the expected ones are
+  # natpath's (c:/Users/...): each is resolved (8.3 short names to long ones,
+  # symlinks: /var and /private/var on macOS) and case-folded, so both
+  # spellings of one folder compare equal. None stays None.
+  "$PY" -c 'import json, os, sys
+def P(p):
+    return None if p is None else os.path.normcase(os.path.realpath(p)).replace("\\", "/")
 j = json.loads(sys.argv[1])
 assert set(j) == {"digest_dir", "digest_from_env", "digest_searched", "alkylation_dir", "proteomes", "alkylation_auto"}, j
 assert j["alkylation_auto"] == "none", j
@@ -663,16 +670,16 @@ assert j["alkylation_auto"] == "none", j
 }
 FLAT=$(layout flatdp FASTag/FASTag.bin FASTag/share-FASTag-digest)
 mkdir -p "$TMP/l_flatdp/FASTag/share-FASTag-alkylation"; : > "$TMP/l_flatdp/FASTag/share-FASTag-alkylation/yeast.fasta.gz"
-FLAT_DIR=$(natpath "$(cd "$TMP/l_flatdp/FASTag" && pwd -L)"); FLAT_P=$(natpath "$(cd "$TMP/l_flatdp/FASTag" && pwd -P)")
+FLAT_DIR=$(natpath "$(cd "$TMP/l_flatdp/FASTag" && pwd -L)")
 FASTAG_DIGEST_DIR= data_paths "$FLAT" "
-assert j['digest_dir'] in ('$FLAT_DIR/share-FASTag-digest', '$FLAT_P/share-FASTag-digest'), j
-assert j['alkylation_dir'] in ('$FLAT_DIR/share-FASTag-alkylation', '$FLAT_P/share-FASTag-alkylation'), j
+assert P(j['digest_dir']) == P('$FLAT_DIR/share-FASTag-digest'), j
+assert P(j['alkylation_dir']) == P('$FLAT_DIR/share-FASTag-alkylation'), j
 assert j['proteomes'] == ['yeast'] and j['digest_from_env'] is False and len(j['digest_searched']) == 3, j"
 FASTAG_DIGEST_DIR= data_paths "$B" "
 assert j['digest_dir'] is None and j['alkylation_dir'] is None and j['proteomes'] == [], j
-assert all('..' not in p.split('/') for p in j['digest_searched']), j"
+assert all('..' not in p.replace(chr(92), '/').split('/') for p in j['digest_searched']), j"
 FASTAG_DIGEST_DIR="$NF" data_paths "$FLAT" "
-assert j['digest_dir'] is None and j['digest_from_env'] is True and j['digest_searched'] == ['$NF'], j"
+assert j['digest_dir'] is None and j['digest_from_env'] is True and [P(p) for p in j['digest_searched']] == [P('$NF')], j"
 
 echo "gui_cli_test: all checks passed"
 exit 0

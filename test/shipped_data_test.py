@@ -637,7 +637,10 @@ try:
                  % r.stdout)
         # (d) a linked payload whose target changes after the fetch at the
         # same size: the recorded sha256 and the live size still match, the
-        # live sha256 does not, so it is no complete fetch (also for CMake).
+        # target's time stamp is not the one the fetch recorded when it hashed
+        # it, so it is no complete fetch (also for CMake). The readers compare
+        # size and time stamp, never hash the index again: the change is given
+        # a later time stamp (a rewrite within the fetch's second keeps it).
         src_l = os.path.join(fx, "linked-src")
         os.makedirs(src_l)
         for n in ("tax_k7.taxdb", "nodes.dmp", "names.dmp"):
@@ -648,7 +651,12 @@ try:
         if r.returncode != 0 or not os.path.islink(os.path.join(lfold, "tax_k7.taxdb")) or not complete(lfold):
             fail("(h) fetch_taxonomy_index.py --from <folder> did not link the index: %s" % r.stdout)
         else:
-            write(os.path.join(src_l, "tax_k7.taxdb"), "SYNTHETIC INDEX")  # same size, other bytes
+            li = os.path.join(src_l, "tax_k7.taxdb")
+            st0 = os.stat(li)
+            if ("link tax_k7.taxdb %d" % (st0.st_mtime_ns // 1000000000)) not in text(os.path.join(lfold, fti.MARKER)).splitlines():
+                fail("(h) fetch_taxonomy_index.py: the marker does not record the linked index's time stamp")
+            write(li, "SYNTHETIC INDEX")  # same size, other bytes, written later
+            os.utime(li, ns=(st0.st_atime_ns, st0.st_mtime_ns + 5 * 1000000000))
             if complete(lfold) or run_fetch("--check", lfold).returncode == 0:
                 fail("(h) a linked index changed at the same size still counts as a complete fetch")
             dl = os.path.join(tmp, "bin-linked", "share-FASTag-taxonomy")
@@ -656,7 +664,11 @@ try:
             r = run_search(dl, "OFF", [lfold], [mpath])
             if r.returncode != 0 or os.path.lexists(os.path.join(dl, "tax_k7.taxdb")):
                 fail("(h) stage-data.cmake staged a linked index changed at the same size: %s" % r.stdout)
-            write(os.path.join(src_l, "tax_k7.taxdb"), "synthetic index")
+            # The fetched bytes and time stamp again (as a restore from a backup).
+            write(li, "synthetic index")
+            os.utime(li, ns=(st0.st_atime_ns, st0.st_mtime_ns))
+            if not complete(lfold):
+                fail("(h) a linked index with the fetched size and time stamp again is no complete fetch")
             r = run_search(dl, "OFF", [lfold], [mpath])
             if r.returncode != 0 or not os.path.isfile(os.path.join(dl, "tax_k7.taxdb")):
                 fail("(h) stage-data.cmake did not stage the linked index once it matched again: %s" % r.stdout)

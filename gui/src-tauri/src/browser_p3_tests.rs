@@ -1006,7 +1006,10 @@ fn the_backend_views_of_the_fixture_match_the_golden() {
     if std::env::var("FASTAG_GOLDEN").as_deref() == Ok("write") {
         std::fs::write(ECOLI_VIEWS, &text).unwrap();
     }
-    let want = std::fs::read_to_string(ECOLI_VIEWS).expect("ecoli.views.json: run with FASTAG_GOLDEN=write once");
+    // Line endings aside: a Windows checkout (core.autocrlf) gives the
+    // golden CRLF; the views themselves do not depend on it (the fixture TSV
+    // read with CRLF gives the same ids).
+    let want = std::fs::read_to_string(ECOLI_VIEWS).expect("ecoli.views.json: run with FASTAG_GOLDEN=write once").replace("\r\n", "\n");
     assert!(want == text, "the backend's views of the fixture changed; check them, then rewrite ecoli.views.json with FASTAG_GOLDEN=write");
 }
 

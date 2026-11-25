@@ -37,9 +37,13 @@ TMP=$(mktemp -d "${TMPDIR:-/tmp}/fastag-dbprot-cli.XXXXXX") || exit 1
 trap 'rm -rf "$TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ARGS=(-in "$IN" -tag_length 4 -extension 1 -fragment_tolerance 0.3 -fragment_tolerance_unit Da -threads 2)
+# The TSV with LF line endings (in place): on Windows FASTag writes CRLF, and
+# awk keeps the CR in the last field, so a column cut there or a header
+# matched at its end would differ by it.
 run() { # out log args...
   local out=$1 log=$2; shift 2
   "$BIN" "${ARGS[@]}" -out "$out" "$@" > "$log" 2>&1 || { cat "$log" >&2; fail "run $(basename "$out"): exit non-zero"; }
+  tr -d '\r' < "$out" > "$out.lf" && mv "$out.lf" "$out" || fail "cannot read $out"
 }
 
 # Fixture FASTAs: the target with a GN= per entry (its gene, the second

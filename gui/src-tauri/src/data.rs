@@ -116,14 +116,22 @@ fn sha256_file(p: &Path) -> Option<String> {
     Some(h.finalize().iter().map(|b| format!("{b:02x}")).collect())
 }
 
+/// The modification time of @p m in whole seconds since the epoch, as
+/// tools/fetch_taxonomy_index.py mtime_s writes it into the marker.
+fn mtime_secs(m: &std::fs::Metadata) -> Option<String> {
+    Some(m.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs().to_string())
+}
+
 /// @p d holds a complete fetch of the manifest @p manifest, as
 /// tools/fetch_taxonomy_index.py fetched_complete (and stage-data.cmake)
 /// decide it: its completion marker .fastag-fetched names that manifest by
 /// data release and sha256 and lists each of its files with the pinned
-/// sha256 and size, and each is a regular file of that size in @p d; a
-/// linked file (fetched --from without --copy) is also hashed again, since
-/// its target can change after the fetch at the same size (codex6 review
-/// n3). An interrupted or failed fetch has no such marker.
+/// sha256 and size, and each is a regular file of that size in @p d. A
+/// linked file (fetched --from without --copy) can change after the fetch at
+/// the same size (codex6 review n3): its target must also have the
+/// modification time the marker records for it ("link <name> <seconds>"),
+/// written when the fetch hashed it, so the 1.1 GB index is not hashed again
+/// on every CLI launch. An interrupted or failed fetch has no such marker.
 fn fetched_complete(d: &Path, manifest: &Path) -> bool {
     let marker = d.join(".fastag-fetched");
     if std::fs::symlink_metadata(&marker).map(|m| !m.is_file()).unwrap_or(true) {
@@ -149,7 +157,7 @@ fn fetched_complete(d: &Path, manifest: &Path) -> bool {
         m.is_file()
             && want["bytes"].as_u64().is_none_or(|b| b == m.len())
             && lines.iter().any(|f| f.as_slice() == ["file", name.as_str(), size.as_str(), sha])
-            && (!linked || sha256_file(&p).as_deref() == Some(sha))
+            && (!linked || mtime_secs(&m).is_some_and(|t| lines.iter().any(|f| f.as_slice() == ["link", name.as_str(), t.as_str()])))
     })
 }
 
@@ -638,18 +646,36 @@ mod tests {
         assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(new.clone()));
         // Codex6 review n3: a linked index (fetch --from without --copy)
         // whose target changes at the same size after the fetch: the marker
-        // and the size still match, the live sha256 does not.
+        // and the size still match, the target's time stamp does not (the
+        // fetch recorded it when it hashed the file).
         #[cfg(unix)]
         {
+            use std::time::{Duration, UNIX_EPOCH};
             let target = root.join("linked-index");
+            let at = |secs: u64| {
+                std::fs::OpenOptions::new().write(true).open(&target).unwrap().set_modified(UNIX_EPOCH + Duration::from_secs(secs)).unwrap()
+            };
             std::fs::write(&target, "x").unwrap();
+            at(1_700_000_000);
             std::fs::remove_file(new.join("tax_k7.taxdb")).unwrap();
             std::os::unix::fs::symlink(&target, new.join("tax_k7.taxdb")).unwrap();
+            // A marker without the link's time stamp (written before 1.16.1) is no complete fetch of it.
+            assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(old.clone()));
+            fetched(&new, &mans.join("taxonomy-k7-20270101.json"), "taxonomy-k7-20270101");
+            let t = std::fs::read_to_string(new.join(".fastag-fetched")).unwrap() + "link tax_k7.taxdb 1700000000\n";
+            std::fs::write(new.join(".fastag-fetched"), t).unwrap();
             assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(new.clone()));
             std::fs::write(&target, "y").unwrap();
+            at(1_700_000_005);
             assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(old.clone()));
+            // The recorded bytes and time again: complete (no hash on use).
             std::fs::write(&target, "x").unwrap();
+            at(1_700_000_000);
             assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(new.clone()));
+            // Touched only (same bytes, another time): not used until fetched again.
+            at(1_700_000_009);
+            assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(old.clone()));
+            at(1_700_000_000);
         }
         // Every kind of dev CLI: from FASTAG_BIN, on PATH, a dev bundle of dumps only.
         for source in ["path", "bundled"] {
