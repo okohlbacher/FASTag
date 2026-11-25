@@ -1217,7 +1217,9 @@ jobs:
           # The asset's dumps replace the repo copies: they are the ones the
           # index was built against.
           rm -rf dist/FASTag/share-FASTag-taxonomy
-          tar -xzf /tmp/taxdb/FASTag-taxonomy-k7.tar.gz -C dist/FASTag
+          # linux-1: the pinned tarball was packed on a Mac; GNU tar would unpack its
+          # AppleDouble files (._*) into every package. bsdtar turns them into xattrs.
+          tar --exclude='._*' -xzf /tmp/taxdb/FASTag-taxonomy-k7.tar.gz -C dist/FASTag
           test -s dist/FASTag/share-FASTag-taxonomy/tax_k7.taxdb
           # The asset predates -species_call (1.12 #1): put its frozen
           # parameters back beside the index, or -species_call decoy refuses.
@@ -1262,6 +1264,8 @@ jobs:
           set -euo pipefail
           tar -C dist -czf FASTag-${{ matrix.name }}-portable.tar.gz FASTag
           ls -l FASTag-${{ matrix.name }}-portable.tar.gz
+          # linux-1: the release tarball and both GUI packages are made from it.
+          bash tools/check_no_appledouble.sh FASTag-${{ matrix.name }}-portable.tar.gz
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: matrix.name == 'linux-x64' || matrix.name == 'linux-arm64'
         with:
@@ -1705,6 +1709,7 @@ jobs:
             gh release upload "${{ github.ref_name }}" "FASTag-${ASSET_VERSION}-${{ matrix.name }}.dmg" --clobber
           else
             tar -C dist -czf "FASTag-${ASSET_VERSION}-${{ matrix.name }}.tar.gz" FASTag
+            bash tools/check_no_appledouble.sh "FASTag-${ASSET_VERSION}-${{ matrix.name }}.tar.gz"
             gh release upload "${{ github.ref_name }}" "FASTag-${ASSET_VERSION}-${{ matrix.name }}.tar.gz" --clobber
           fi
 
@@ -2213,6 +2218,8 @@ jobs:
           # The names the release would attach, checked on a dry run too.
           names=("$DEB" "$TGZ"); [ -f "$APPIMAGE" ] && names+=("$APPIMAGE")
           tools/release_assets.sh check "$VER" "${names[@]}"
+          # linux-1: no package carries macOS AppleDouble files (._*).
+          bash tools/check_no_appledouble.sh "${names[@]}"
           # GitHub refuses a release asset of 2 GiB or more.
           mb() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1000000 }'; }
           echo "### Linux desktop app, $GUI_ARCH (ubuntu $(. /etc/os-release && echo "$VERSION_ID"), glibc $(ldd --version | head -1 | awk '{print $NF}'), WebKitGTK $(pkg-config --modversion webkit2gtk-4.1))" >> "$GITHUB_STEP_SUMMARY"
@@ -2402,9 +2409,21 @@ jobs:
             echo "::error::$APP logged a fatal start-up error"; exit 1
           fi
           echo "### .deb on ${{ matrix.os }}: installs, runs the fixture, the app stays up" >> "$GITHUB_STEP_SUMMARY"
+      # The installed app's own start-up probe (fastag.rs self_test), the check
+      # tools/windows_installed_check.ps1 runs on Windows: the GUI's resolution,
+      # environment and spawn path run the bundled CLI; exit 0 only if it ran.
+      - name: The installed app runs its start-up self-test
+        run: |
+          set +e -uo pipefail
+          out="$RUNNER_TEMP/selftest.json"; rm -f "$out"
+          FASTAG_SELFTEST_OUT="$out" dbus-run-session -- xvfb-run -a timeout 180 "$APP" > "$RUNNER_TEMP/selftest.log" 2>&1
+          rc=$?
+          echo "app self-test: exit $rc"; cat "$out" 2>/dev/null || { echo '(no self-test output)'; cat "$RUNNER_TEMP/selftest.log"; }
+          if [ "$rc" -ne 0 ] || ! grep -q '"ok": true' "$out"; then echo "::error::the installed app could not run its bundled CLI (exit $rc)"; exit 1; fi
+          echo "- the installed app's start-up self-test runs its bundled CLI" >> "$GITHUB_STEP_SUMMARY"
+      # Blocking since 1.16.2 (ci-1: the Cancel spec raced the input probe).
       - name: tauri-driver specs against the installed app (real CLI)
         id: real-specs
-        continue-on-error: true
         working-directory: gui
         env:
           FASTAG_APP: ${{ env.APP }}
@@ -2665,7 +2684,9 @@ jobs:
             gh release download "$TAXDB_TAG" --repo "$GITHUB_REPOSITORY" -p 'FASTag-taxonomy-k7.tar.gz' -D "$RUNNER_TEMP/taxdb"
             archive="$RUNNER_TEMP/taxdb/FASTag-taxonomy-k7.tar.gz"
             echo "$TAXDB_SHA256  $archive" | sha256sum --check --status
-            tar -xzf "$archive" -C "$root"
+            # linux-1: the pinned tarball was packed on a Mac; GNU tar would unpack its
+            # AppleDouble files (._*) into every package. bsdtar turns them into xattrs.
+            tar --exclude='._*' -xzf "$archive" -C "$root"
           fi
           test -s "$root/share-FASTag-taxonomy/tax_k7.taxdb"
           cp data/taxonomy/species_call.tsv "$root/share-FASTag-taxonomy/"

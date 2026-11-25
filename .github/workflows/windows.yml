@@ -1061,7 +1061,9 @@ jobs:
           got=$(python -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" /tmp/taxdb/FASTag-taxonomy-k7.tar.gz)
           [ "$got" = "$TAXDB_SHA256" ] || { echo "taxonomy sha256 mismatch: $got"; exit 1; }
           rm -rf dist/FASTag/share-FASTag-taxonomy
-          tar -xzf /tmp/taxdb/FASTag-taxonomy-k7.tar.gz -C dist/FASTag
+          # linux-1: the pinned tarball was packed on a Mac; GNU tar would unpack its
+          # AppleDouble files (._*) into every package. bsdtar turns them into xattrs.
+          tar --exclude='._*' -xzf /tmp/taxdb/FASTag-taxonomy-k7.tar.gz -C dist/FASTag
           test -s dist/FASTag/share-FASTag-taxonomy/tax_k7.taxdb
           # The asset predates -species_call (1.12 #1): put its frozen
           # parameters back beside the index, or -species_call decoy refuses.
@@ -1569,6 +1571,8 @@ jobs:
           setup="FASTag-$V-gui-windows-x64-setup.exe"
           cp "$exe" "$setup"
           tools/release_assets.sh check "$V" "$setup" "$(basename "$zip")"
+          # linux-1: no package carries macOS AppleDouble files (._*).
+          bash tools/check_no_appledouble.sh "$zip"
           gh release create "$TAG" --title "$TAG" --notes "Automated binary upload; the release notes follow from CHANGELOG.md (ci.yml job release-notes)." 2>/dev/null || true
           gh release upload "$TAG" "$setup" "$zip" --clobber
 
