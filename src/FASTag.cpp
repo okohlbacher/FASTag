@@ -1350,7 +1350,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         OPENMS_LOG_WARN << "'" << recon_db << "' holds " << sl_decoys << " decoy entries"
                         << (dh.success ? " (a target-decoy database)" : "")
                         << "; they never enter the shortlist or -fasta_out." << std::endl;
-      if (dh.success && !FASTag::Shortlist::isDecoy(dh.is_prefix ? dh.name + "x" : "x" + dh.name, sl_affixes))
+      // release-3: on a database without decoys the heuristic can succeed with an empty affix; say nothing then.
+      if (dh.success && !dh.name.empty() && !FASTag::Shortlist::isDecoy(dh.is_prefix ? dh.name + "x" : "x" + dh.name, sl_affixes))
         OPENMS_LOG_WARN << "'" << recon_db << "' looks like a target-decoy database with the decoy "
                         << (dh.is_prefix ? "prefix '" : "suffix '") << dh.name
                         << "', which -shortlist_decoy_affix does not list; add it there, or its decoys "

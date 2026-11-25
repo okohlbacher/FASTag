@@ -278,4 +278,14 @@ rgo "$TMP/r5" -out t.tsv "${NEW[@]}" -tag_lengths 3 4
 grep -q -- '-tag_length 4' <(grep 'Shortlist recipe defaults' "$TMP/r5/run.log") && fail "r: recipe set -tag_length although -tag_lengths was given"
 echo "r: shortlist recipe default, plain, explicit tagging options"
 
+# s. 1.16.2 (release-3): Database reduction on the example FASTA, which holds no decoys, must not warn of
+#    a target-decoy database with an empty decoy affix.
+mkdir -p "$TMP/s1"
+( cd "$TMP/s1" && "$BIN" -in "$SRC/examples/Ecoli_MS2_small.mzML" -recon_fasta "$SRC/examples/Ecoli_MS2_small.fasta" \
+    -fragment_tolerance 0.5 -fragment_tolerance_unit Da -tag_length 4 -extension 6 -shortlist_min_spectra 1 \
+    -out t.tsv -shortlist_out sl.tsv -fasta_out reduced.fasta > run.log 2>&1 ); rc=$?
+case $rc in 0|13) ;; *) cat "$TMP/s1/run.log" >&2; fail "s: exit $rc";; esac
+grep -q "looks like a target-decoy database" "$TMP/s1/run.log" && { cat "$TMP/s1/run.log" >&2; fail "s: decoy warning on a database without decoys"; }
+echo "s: no decoy warning on the example FASTA"
+
 echo "shortlist_cli_test: all checks passed"
