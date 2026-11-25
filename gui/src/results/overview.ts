@@ -18,6 +18,7 @@ import type { SpeciesReport } from '../types'
 import { electronReadAsBy, noActivationMeta } from '../inspector/checks'
 import { alkylationExtension, alkylationTagOnly, alkylationShipped, alkylationShort, alkylationTarget } from '../setup/products'
 import { longestSeed } from '../paramLayout'
+import { kitCallOf, unassessedKits } from './calls'
 import {
   alkylationCall,
   censusFacts,
@@ -146,6 +147,24 @@ export function keyValues(text: string | null | undefined): Map<string, string> 
   return m
 }
 
+/// The rows of a key/value report with their descriptions, by key (the
+/// first of a key wins, as in keyValues).
+function keyRows(text: string | null | undefined): Map<string, { key: string; value: string; desc: string }> {
+  const m = new Map<string, { key: string; value: string; desc: string }>()
+  if (!text) return m
+  const lines = text.split(/\r?\n/).filter((l) => l !== '' && !l.startsWith('#'))
+  const head = (lines[0] ?? '').split('\t')
+  const k = head.indexOf('key')
+  const v = head.indexOf('value')
+  const d = head.indexOf('description')
+  if (k < 0 || v < 0) return m
+  for (const l of lines.slice(1)) {
+    const f = l.split('\t')
+    if (f[k] !== undefined && !m.has(f[k])) m.set(f[k], { key: f[k], value: f[v] ?? '', desc: d >= 0 ? (f[d] ?? '') : '' })
+  }
+  return m
+}
+
 const numOf = (s: string | undefined): number | null => (s !== undefined && s.trim() !== '' && Number.isFinite(Number(s)) ? Number(s) : null)
 
 /// What a QC report says: instrument, tag yield, the most frequent charge.
@@ -158,6 +177,11 @@ export function qcFacts(text: string | null | undefined): {
   tagYield: number | null
   tagged: number | null
   topCharge: { z: number; share: number | null } | null
+  /// The isobaric kit as the QC page's tile says it (qcSummary), null: the
+  /// report has no reporter rows.
+  kit: { text: string; called: boolean; note: string } | null
+  /// Redundant MS2 (in spectrum clusters), and with the same best tag.
+  redundancy: { share: number; tagShare: number | null; clusters: string | null; largest: string | null } | null
 } | null {
   const kv = keyValues(text)
   if (kv.size === 0) return null
@@ -180,8 +204,28 @@ export function qcFacts(text: string | null | undefined): {
     })(),
     tagYield: numOf(kv.get('tag_yield')),
     tagged: numOf(kv.get('ms2_tagged_e001')),
-    topCharge: top ? { z: top.z, share: top.share } : null
+    topCharge: top ? { z: top.z, share: top.share } : null,
+    kit: qcKit(text),
+    redundancy: ((): { share: number; tagShare: number | null; clusters: string | null; largest: string | null } | null => {
+      const r = numOf(kv.get('redundancy_share'))
+      return r == null ? null : { share: r, tagShare: numOf(kv.get('redundancy_tag_share')), clusters: kv.get('redundancy_clusters') ?? null, largest: kv.get('redundancy_largest') ?? null }
+    })()
   }
+}
+
+/// The kit of a QC report in the words of the QC page's Isobaric kit tile
+/// (ReportTable qcSummary): the kit call of qc_version 3, else the list of
+/// compatible kits.
+function qcKit(text: string | null | undefined): { text: string; called: boolean; note: string } | null {
+  const rows = keyRows(text)
+  const get = (k: string): { value: string; desc: string } | undefined => rows.get(k)
+  const call = kitCallOf(get)
+  if (call) return { text: call.text, called: call.call != null && call.call !== 'none', note: call.note }
+  const kits = get('reporter_compatible_kits')
+  if (!kits) return null
+  const why = unassessedKits(kits.value, rows.values())
+  if (why) return { text: 'Not assessable', called: false, note: `No kit could be assessed${why.length ? `: ${why.join('; ')}` : ''}.` }
+  return kits.value === 'none' ? { text: 'none found', called: false, note: kits.desc } : { text: kits.value.replace(/,/g, ', '), called: true, note: kits.desc }
 }
 
 /// What a protein shortlist says: proteins kept of those with evidence.
@@ -383,6 +427,25 @@ export function buildOverview(i: OverviewInputs): Overview {
       tone: qc.topCharge ? 'figure' : 'off',
       note: qc.topCharge ? 'the most frequent precursor charge of the MS2 spectra (QC report)' : 'no MS2 spectrum states its precursor charge'
     })
+    // The QC page's other headline values (qcModel qcTiles), each a link to it.
+    if (qc.kit)
+      figures.push({
+        id: 'qc-kit',
+        label: 'Isobaric kit',
+        value: qc.kit.text,
+        tone: qc.kit.called ? 'call' : 'nocall',
+        note: `${qc.kit.note ? `${qc.kit.note.replace(/\.$/, '')}; ` : ''}from the reporter ions of the MS2 spectra (QC report)`
+      })
+    if (qc.redundancy)
+      figures.push({
+        id: 'qc-redundancy',
+        label: 'Redundancy',
+        value: `${(qc.redundancy.share * 100).toFixed(1)}%`,
+        tone: 'figure',
+        note: `MS2 spectra in clusters of the same precursor${qc.redundancy.clusters != null ? ` (${qc.redundancy.clusters} clusters, the largest of ${qc.redundancy.largest ?? '?'})` : ''}${
+          qc.redundancy.tagShare != null ? `; same best tag: ${(qc.redundancy.tagShare * 100).toFixed(1)}%` : ''
+        } (QC report)`
+      })
   }
   const sl = shortlistFacts(i.shortlist)
   if (sl)
@@ -748,6 +811,8 @@ function genusTile(c: SpeciesCall, rank = 'genus'): Tile {
   // The Da caveat is the check line's (said once), not the tile's.
   const caveat = ''
   if (c.state === 'called') {
+    // survey-5: the decoy presence call is experimental (Setup marks it so).
+    const experimental = ' Experimental: the decoy presence call is not calibrated.'
     if (c.present.length === 0)
       return {
         ...base,
@@ -764,14 +829,14 @@ function genusTile(c: SpeciesCall, rank = 'genus'): Tile {
         tone: 'call',
         note: `present by the CLI species call (decoy null), tied at the top: ${tied.map((t) => t.name).join(', ')}${
           c.present.length > tied.length ? `; also present: ${c.present.filter((t) => !tied.includes(t)).map((t) => t.name).join(', ')}` : ''
-        }.${caveat}`
+        }.${experimental}${caveat}`
       }
     const others = c.present.slice(1).map((t) => t.name)
     return {
       ...base,
       value: c.present[0].name,
       tone: 'call',
-      note: `present by the CLI species call (decoy null)${others.length ? `; also present: ${others.join(', ')}` : ''}.${caveat}`
+      note: `present by the CLI species call (decoy null)${others.length ? `; also present: ${others.join(', ')}` : ''}.${experimental}${caveat}`
     }
   }
   if (c.state === 'ranked' && c.tied.length > 1)
@@ -979,6 +1044,8 @@ export function shownTiles(o: Overview, params: Record<string, unknown>): { figu
     instrument: on('digest_out') || on('label_out') || on('massgap_out') || on('qc_out'),
     'qc-tagged': on('qc_out'),
     'qc-charge': on('qc_out'),
+    'qc-kit': on('qc_out'),
+    'qc-redundancy': on('qc_out'),
     shortlist: on('shortlist_out'),
     placed: on('delta_counts_out'),
     topshift: on('delta_out'),
@@ -1001,7 +1068,7 @@ export function shownTiles(o: Overview, params: Record<string, unknown>): { figu
 /// The tiles of each workflow's main result (doc/GUI-WORKFLOWS.md 1): shown
 /// first, in the grid of the counts, not on a row of their own below them.
 const LEAD_TILES: Record<string, string[]> = {
-  'run-qc': ['qc-tagged', 'instrument', 'qc-charge'],
+  'run-qc': ['qc-tagged', 'instrument', 'qc-charge', 'qc-kit', 'qc-redundancy'],
   'mass-shift': ['topshift', 'placed'],
   species: ['genus'],
   'db-reduction': ['shortlist'],

@@ -42,6 +42,8 @@ const TILE_TABS: Record<string, TileTarget[]> = {
   glyco: [{ tab: 'glyco' }],
   'qc-tagged': [{ tab: 'qc' }],
   'qc-charge': [{ tab: 'qc', sections: [QC_SECTION.charge] }],
+  'qc-kit': [{ tab: 'qc', sections: [QC_SECTION.reporters] }],
+  'qc-redundancy': [{ tab: 'qc' }],
   shortlist: [{ tab: 'shortlist' }],
   'ident-score': [{ tab: 'triage' }],
   identified: [{ tab: 'triage' }],
