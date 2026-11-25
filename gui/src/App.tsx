@@ -894,7 +894,7 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
                 />
               )}
               <SetupForm
-                session={session}
+                session={run.inFlight ? { ...session, ...run.inFlight } : session}
                 run={run}
                 onPickInput={pickInput}
                 actionBar={(nav?: ActionNav) =>
