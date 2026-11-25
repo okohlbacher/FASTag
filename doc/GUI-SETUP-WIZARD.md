@@ -55,8 +55,10 @@ sketches below where they differ.
 Section labels use one style (12 px, semibold, muted, sentence case); empty
 states use one component (`shell/EmptyState.tsx`). The app bar's Help opens
 the Help page of the screen shown (the step, the result tab, Batch,
-History); the per-field (?) popovers stay, page-level "Learn more" and
-"How to read…" links are gone, and keyboard hints are tooltips or in Help.
+History); the per-field (?) popovers stay, page-level "Learn more" links
+are gone, and keyboard hints are tooltips or in Help. The "How to read…"
+links stay on the QC, Shortlist and Triage pages, each opening the Help page
+of its report.
 
 ## 0. Audit of the current Setup (main 9e458de2)
 
@@ -317,8 +319,10 @@ Order:
      "used only in Batch mode").
 2. **Required inputs**, each a file field with Browse…, a help line ("A
    protein FASTA of your organism, e.g. its UniProt reference proteome") and
-   the "required" chip: Protein database for Mass-shift survey and Database
-   reduction only. When the Filter database (`fasta`) stands in for it (the
+   the "required" chip: Protein database for Database reduction only.
+   Mass-shift survey shows the Protein database open but optional, with a
+   shipped proteome under About these spectra as the alternative; without
+   either its shift reports are off and the run writes the tags only. When the Filter database (`fasta`) stands in for it (the
    CLI rule "give -recon_fasta (or -fasta)"), the field reads "Using your
    Filter database: x.fasta" with **Choose another**, never "not set".
    What is required follows the products that are on, not only the task: a
@@ -353,7 +357,7 @@ and SECTIONS blurbs):
 | Task | Required | Optional |
 |---|---|---|
 | Generate tags | | Filter database (`fasta`); Entrapment database (`entrapment_fasta`), offered once a Filter database is set |
-| Mass-shift survey | Protein database (`recon_fasta`, or `fasta`) | Filter database (`fasta`; its menu entry says it also stands in for the Protein database); Entrapment database, offered once a Filter database is set |
+| Mass-shift survey | | Protein database (`recon_fasta`, shown open; or a shipped proteome, `recon_proteome`); Filter database (`fasta`; its menu entry says it also stands in for the Protein database); Entrapment database, offered once a Filter database is set |
 | Species | | Your taxonomy (`taxdb` + `taxonomy_nodes` + `taxonomy_names`, one entry) |
 | Characterize a run | | Your taxonomy (one entry, as above) |
 | Database reduction | Protein database (`recon_fasta`, or `fasta`) | Filter database (`fasta`, as for Mass-shift survey); Entrapment database after it; Background proteins (`shortlist_background`) |
@@ -558,7 +562,7 @@ Nothing is dropped. Every control of the audit (section 0):
 | SDRF file (optional) | 1 Input (Batch) | Step 2, Batch mode |
 | Help on input files (?) | 1 Input head | The app bar's Help on step 2 |
 | Search settings… ⌘K | 3 Settings head | App bar (every view) |
-| Protein database (required) | 3 Settings | Step 2, required, Mass-shift and Database reduction only |
+| Protein database (required) | 3 Settings | Step 2: required for Database reduction, optional and shown open for Mass-shift survey |
 | Background proteins, Identifications | 3 Settings | Step 2, Add optional input |
 | Instrument, Fixed modifications | 3 Settings | Step 2, About these spectra |
 | Search engine, Comet template, Protease (Database reduction) | 3 Settings | Step 2, About these spectra |

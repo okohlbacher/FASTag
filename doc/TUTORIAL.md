@@ -102,25 +102,25 @@ FASTag -in examples/Ecoli_MS2_small.mzML -out hits.tsv \
 
 ```
 Filter: 3 sequences, 876 residues; minimum tag length 4 (derived); 13 isobaric rules
-139 MS2 spectra, 6459 tags -> 112 after filtering
+139 MS2 spectra, 6671 tags -> 105 after filtering
   len         tags      matched    by chance enrichment
-    3          319            0          135          -
-    4         2763           79          102       0.8x  <- at chance
-    5         3377           33            9       3.8x
-Wrote 54 spectra to hits.mzML (two-pass, O(1) memory)
+    3          182            0           77          -
+    4         2450           70           90       0.8x  <- at chance
+    5         4039           40           10       3.9x
+Wrote 57 spectra to hits.mzML (two-pass, O(1) memory)
 ```
 
-Expected: 112 tag rows from 54 spectra in `hits.tsv` (62 `fwd`, 50 `rev`), and 54 spectra in
+Expected: 105 tag rows from 57 spectra in `hits.tsv` (59 `fwd`, 46 `rev`), and 57 spectra in
 `hits.mzML`. Tags shorter than 4 are not matched at all (the derived minimum). The table is the
 most useful part of the log: for each length it compares the matches with the number expected
 by chance against these sequences. Length 4 matches no more often than chance (0.8x), so those
-rows say little; length-5 matches are 3.8 times more frequent than chance. To keep only the
-informative lengths, add `-min_filter_length 5` (33 rows from 12 spectra), or extend further
-(`-extension 2` reaches length 7, at 811x enrichment).
+rows say little; length-5 matches are 3.9 times more frequent than chance. To keep only the
+informative lengths, add `-min_filter_length 5` (40 rows from 13 spectra), or extend further
+(`-extension 2` reaches length 7, at 641x enrichment).
 
 `fasta_hit` is `fwd` when the tag occurs as written and `rev` when it occurs reversed (read
-off b ions). The rows with the lowest E-value are length-5 tags of rplF (`GWAQA`,
-E = 3.2e-7) and prsA (`SLGDA`).
+off b ions). The rows with the lowest E-value are length-5 tags of rplF from one spectrum
+(`DGWAQ`, E = 4.29e-11; `ADGWA` and `GWAQA`, E = 1.10928e-10), then metK (`VDTYG`).
 
 To see which protein a tag matched and where, add `-fasta_proteins 3`: three more columns,
 `db_proteins` (`VIMSS17368@61-65` for `GWAQA`: the protein and the 1-based positions of the

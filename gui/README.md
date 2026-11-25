@@ -15,52 +15,48 @@ backend has to satisfy.
 
 ## First run
 
-1. Keep **Generate tags** selected in **Setup**. This default task generates
-   sequence tags from **all input spectra**, with per-residue confidence
-   for downstream export. No FASTA is needed. To inspect existing output
-   instead, choose the second task, **Open results / inspect spectra**.
-2. Click **Choose file…** and select uncompressed mzML or MGF, or an mzPeak
-   file. Convert vendor files such as `.raw` and `.d` first. Raw DIA needs
-   conversion to pseudo-DDA spectra; see the checks below the input.
-3. Review those checks and confirm the **fragment tolerance** under
-   **Tagging**, or use **Fragment tolerance preset** beside Run. The preset
-   should match the analyser that measured the MS2
-   fragments: 20 ppm is a starting point for high-resolution MS2, 0.3 Da for
-   ion-trap MS2. A hybrid instrument's name alone may not identify its MS2
-   analyser. Instrument suggestions are applied only when you choose them.
-4. Check **Output** and the plan above **Run**. By default the tags and
-   requested reports are written beside the input; **Browse…** changes the
-   tags path. Existing outputs require confirmation before overwrite.
-5. Click **Run on <file>**. Results opens on **Tags**. Select a row and choose
-   **Open in Spectrum** to inspect its evidence, or **Export shown rows…**
-   to save a filtered table.
-6. **Export INI…** saves the current setup for the CLI; **Save…** saves a
-   reusable preset.
+1. In **Setup**, step **Task** asks **What do you want to do?** Keep **Generate tags**
+   (the default) and click **Continue with Generate tags ›**. It generates sequence tags
+   from **all input spectra**, with per-residue confidence for downstream export. No FASTA
+   is needed. To look at the output of an earlier run instead, click **Open earlier
+   results…**.
+2. In **Inputs**, click **Choose file…** and select uncompressed mzML or MGF, or an mzPeak
+   file. Convert vendor files such as `.raw` and `.d` first. Raw DIA needs conversion to
+   pseudo-DDA spectra; see **Checks before the run** below the input.
+3. Review those checks and the **Instrument** preset under **About these spectra**. It sets
+   the fragment tolerance and must match the analyser that measured the MS2 fragments:
+   20 ppm for high-resolution MS2, 0.3 Da for ion-trap MS2. A hybrid instrument's name alone
+   may not identify its MS2 analyser. A detected instrument is marked in the list and applied
+   only when you choose it; **Custom** shows the tolerance and its unit.
+4. **Settings** shows the task's main settings; every other option is under **Advanced**.
+5. In **Outputs & run**, check the products, the **Output folder** and the **Run name**. By
+   default the tags and the requested reports are written beside the input; **Change…**
+   picks another folder. Existing outputs require confirmation before overwrite.
+6. Click **Run**. Results opens on **Tags**. Select a row and choose **Open in Spectrum** to
+   inspect its evidence, or **Export shown rows…** to save a filtered table.
+7. **Export INI…** beside Run saves the current setup for the CLI; **Presets > Save as
+   preset…** (on **Settings**) saves a reusable preset.
 
-For **Stitch/ALPS reads**, choose a tag length or extension that can reach
-the export's default minimum of 8 residues. **Generate tags** initially uses
-tag length 3 and extension 0, so its tags are too short for that export.
-For example, length 3 with extension 3 allows tags of up to 9 residues;
-only tags that actually reach the export minimum will be kept. Lower the
-export minimum only if shorter reads suit the downstream tool. Read exports
-use the whole file and their own filters, not the Tags table's filters.
+For **Stitch/ALPS reads**, the tags must reach the export's default minimum of 8 residues.
+**Generate tags** starts at tag length 3 and extension 3, so a seed can grow to 9 residues;
+only tags that actually reach the export minimum are kept. Lower the export minimum only if
+shorter reads suit the downstream tool. Read exports use the whole file and their own
+filters, not the Tags table's filters.
 
-For QC, choose **Characterize a run**: it reads **all input spectra**
-and enables species, digest, label, alkylation and glyco reports, opening on
-**Results → Overview**. A species ranking is not a presence call, and “no
-call” or “not assessed” does not establish absence. For a quicker look at a
-large run, set **Spectra to read** to a share (fewer spectra vote, often too
-few for the alkylation call).
-**Batch QC vs SDRF** runs that survey for multiple files. An SDRF
-(sample and data relationship format) metadata table is optional; load one
-in **Batch** to compare its annotations with the reports. **Open results /
-inspect spectra** opens existing output without starting a new run.
+For a survey of the sample, choose **Characterize a run**: it reads **all input spectra**
+and writes the species, digest, label, alkylation and glyco reports, opening on
+**Results → Overview**. A species ranking is not a presence call, and "no call" or "not
+assessed" does not establish absence. For a quicker look at a large run, set **Spectra to
+read** to a share (fewer spectra vote, often too few for the alkylation call). **Run QC**
+reports how the run was measured. For several files, switch **Inputs** to **Batch** (or
+click **Add to batch** in **Outputs & run**); an SDRF (sample and data relationship format)
+metadata table chosen there, or loaded in the **Batch** view, is compared with the reports.
 
-A field marked **changed** differs from the CLI default, including changes
-made by the selected task. The plan compares your settings with that task
-or preset. Its **Reset** restores the task or preset; **Reset…** beside Run
-restores the CLI defaults. Use **Help** (F1) for the searchable guide,
-glossary and parameter reference.
+A field that differs from the CLI default shows that default: **set by** the task or
+preset when the value is theirs, **changed** when you changed it. The line above Settings names the task or preset the values came from and
+whether they were modified; its **Reset** restores that task or preset, and **Presets >
+Load FASTag defaults** restores the CLI defaults. Use **Help** (F1) for the searchable
+guide, glossary and parameter reference.
 
 ## Layout
 
@@ -260,7 +256,7 @@ manifest: the shell empties the file before the script runs.
 ## The window
 
 Four views, switched from the top bar: **Setup** (the input, the parameters
-and Run), **Results** (Overview, Tags, Spectrum when supported, Species, Digest, Mass gaps & recon and Glyco, full width), **Batch** (the
+and Run), **Results** (Overview, Tags, Spectrum when supported, QC, Mass shifts, Species, Shortlist, Triage, Digest and Glyco, each shown when its report exists, full width), **Batch** (the
 queue, its run bar, the failure banner, the summary table and each job's log) and **History**
 (every recorded run: input, status, duration, tags, outputs; Open, Reveal,
 Copy command, Settings into form with Undo, Re-run, Delete record). Copy command
@@ -279,7 +275,7 @@ Cancel, Show log). When a run or batch finishes while the
 window is in the background, the system shows a notification; a toast
 offers Open results.
 
-A run of **Characterize a run** or **Batch QC** lands on the **Overview**:
+A run of **Characterize a run** lands on the **Overview**; the other tasks land on their own report (Run QC on QC, Mass-shift survey on Mass shifts, Database reduction on Shortlist, Identifiability triage on Triage) or on Tags, with the Overview as a tab. The Overview shows
 key figures (MS2 spectra, spectra with tags, tags, tags with E ≤ 1, glyco
 flags), the calls FASTag made (protease from the digest report, top genus
 from the species report, label from the `label_call` rows of `-label_out`,
@@ -349,17 +345,24 @@ rewritten: both exports of the Batch view (the corrections and the batch
 summary) refuse the SDRF's own path, in the panel and in the backend (`summary_write`'s protect list, which also catches another spelling
 or a link to the same file).
 
-Setup presents tasks in this order: **Generate tags** (the default: all spectra
-with the per-residue confidence column), **Open results / inspect spectra**
-(no run), **Characterize a run** (species with extension 2, digest, label and
-alkylation and glyco reports, all spectra), then **Batch QC vs SDRF**. "Starting from" also
-offers FASTag's own defaults and your saved presets. The parameters sit in
-four step cards (Spectra, Database & taxonomy, Tagging, Reports), each with a
-one-line summary; settings that only a section's switch turns on (species,
-glyco, a FASTA, reconciliation) stay hidden until it is on. The footer above
-Run states the plan, counts what differs from the task or preset (Reset takes
-it back), copies the command line and exports an INI. Choosing a task or a
-preset replaces the form; Undo brings back what it replaced.
+Setup has four steps: **Task**, **Inputs**, **Settings** and **Outputs & run**. Step
+**Task** offers seven tasks in three groups: **Generate tags** (the default: all spectra,
+with the per-residue confidence column, extension 3), **Characterize a run** (marked
+"Start here": species with extension 2, digest, label, alkylation and glyco reports, all
+spectra), **Species**, **Mass-shift survey** and **Database reduction**, then **Run QC**
+and **Identifiability triage**. Each tile states its question, what it gives, when to use
+it and when not; **Continue with … ›** confirms it. **Inputs** takes one file or a
+**Batch**, the task's required and optional input files, and **About these spectra**
+(the **Instrument** preset and the task's sample settings). **Settings** shows the task's
+main settings, with every other option under **Advanced**; settings that only a section's
+switch turns on (species, glyco, a FASTA, reconciliation) stay hidden until it is on.
+**Outputs & run** lists the products to write, the output folder and the run name, and
+the command line. The action bar holds the plan, **Copy command line**, **Export INI…**
+and **Run**. The **Presets** menu (in the header of every step) loads a saved preset or
+**Load FASTag defaults**; on Settings it also offers **Save as preset…**. Choosing a task
+or a preset replaces the form; **Undo** brings back what it replaced, and **Reset**
+returns to the task or preset after changes. **Continue last run** loads the settings of
+the last run, **Open earlier results…** opens existing output without a run.
 
 A preset stores only what differs from the task or defaults it was saved
 over, and no paths: input files (a FASTA, a taxonomy) are left out, and a
@@ -410,7 +413,7 @@ with `-res_conf` on.
 Help is a side panel beside any view, with a search over every page, the
 troubleshooting entries, the glossary and the settings reference. **Results
 and workflows** explains Overview counts and evidence, batch summaries,
-SDRF comparisons, History actions and the Mass gaps & recon viewer, including
+SDRF comparisons, History actions and the Mass shifts viewer, including
 their missing-evidence states and limits.
 Each explanatory page has an **On this page** contents list. Search includes
 page titles, parameter defaults and limits, and the expandable CLI descriptions.
@@ -422,7 +425,7 @@ Files dropped anywhere on the window go by type: one spectra file to the
 input, two or more (or a folder) to the batch, a FASTA to `-fasta`, a
 `.taxdb` to `-taxdb`, a tags TSV to Results, a digest, label or mass-gap
 report to the Digest tab, a recon or delta table or an mzTab `-recon_id_out`
-to Mass gaps & recon (an idXML or mzid one is named with a pointer to the
+to Mass shifts (an idXML or mzid one is named with a pointer to the
 mzTab form), a glyco report to Glyco and a species report to the Species tab. Nothing is
 taken while FASTag runs. An SDRF goes to the Batch view's comparison.
 
