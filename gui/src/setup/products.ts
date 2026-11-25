@@ -298,7 +298,24 @@ export function setProduct(p: Product, on: boolean, values: V, tagsOut: string):
     next[p.param] = ''
   } else if (PARAM_BY_NAME.get(p.param)?.type === 'bool') next[p.param] = false
   else next[p.param] = ''
+  // Off, it takes back the values it set (database-5: census_score with the
+  // ranking), unless a product still on sets them or switches on by them
+  // (census stays with the table); a value changed since is the user's.
+  if (!on)
+    for (const [k, v] of Object.entries(p.also ?? {})) {
+      if (next[k] !== v) continue
+      if (PRODUCTS.some((q) => q !== p && isOn(q, next) && (q.flag === k || (q.also && k in q.also)))) continue
+      next[k] = defaultValue(k)
+    }
   return next
+}
+
+/// The form's value of @p name at the CLI default (useSession initialValues).
+function defaultValue(name: string): ParamValue {
+  const spec = PARAM_BY_NAME.get(name)
+  if (spec?.type === 'bool') return spec.default === 'true'
+  if (spec?.type === 'string-list') return Array.isArray(spec.default) ? spec.default : []
+  return String(spec?.default ?? '')
 }
 
 /// The products checked in @p values among @p params, excluding the tags table.

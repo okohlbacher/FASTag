@@ -8,7 +8,7 @@
 // While a run is in flight, a locked summary of what it uses.
 
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent, type RefObject } from 'react'
-import { BRIEF_HINT, SECTIONS, SECTION_OF, PARAM_BY_NAME, type Dependency, type Section, UNIT_PARAMS, defaultText, dependsOf, forcedValue, humanName, inertDependency, masters, recipeNote, unknownParams, unitOf, unplacedParams } from '../paramLayout'
+import { BRIEF_HINT, SECTIONS, SECTION_OF, PARAM_BY_NAME, type Dependency, type Section, UNIT_PARAMS, defaultText, dependsOf, forcedValue, humanName, inertDependency, masterSet, masters, recipeNote, unknownParams, unitOf, unplacedParams } from '../paramLayout'
 import ParamField, { type ParamValue } from '../ParamField'
 import { disclosure } from '../disclosure'
 import { baseName } from '../digestReport'
@@ -71,6 +71,19 @@ export function ruleBrief(text: string | undefined): string | undefined {
 }
 
 export const FOLDED: ReadonlySet<string> = new Set(['subsample_spectra'])
+
+/// The protein database fields: they never wait for the reports that need
+/// them (database-1), or a form whose reports are off and that has no
+/// database could choose neither. Only a database that replaces them (a
+/// Protein database over the Shipped proteome) disables one.
+const DATABASE_FIELDS: ReadonlySet<string> = new Set(['recon_fasta', 'recon_proteome'])
+
+/// What a field waits for, as ParamField shows it (disabled, with the way
+/// to turn it on); null when it is free.
+export function fieldNeeds(name: string, values: Record<string, unknown>): Dependency | null {
+  if (!DATABASE_FIELDS.has(name)) return inertDependency(name, values)
+  return dependsOf(name).find((d) => d.replaced && masters(d).some((n) => masterSet(d, n, values))) ?? null
+}
 
 /// Switches a product checkbox drives (setup/products.ts): never a field.
 export const WIRED: ReadonlySet<string> = new Set(
@@ -222,13 +235,13 @@ export default function SetupForm({
         key={`${name}:${session.formGen}`}
         spec={spec}
         value={forced ? forced.value : values[name]}
-        needs={inertDependency(name, values)}
+        needs={fieldNeeds(name, values)}
         onChange={(v) => setValue(name, v)}
         onPickFile={session.pickFor}
         brief={recipeNote(name, values) ?? opts.brief}
         hint={task.help[name] ?? BRIEF_HINT[name]}
         required={opts.required}
-        setBy={session.diff.includes(name) || (!!unitName && session.diff.includes(unitName)) ? undefined : session.originText}
+        setBy={session.edits.includes(name) || (!!unitName && session.edits.includes(unitName)) ? undefined : session.originText}
         blocked={batchBlocked(name) ?? forced?.note}
         unit={
           unitSpec && unitName
@@ -452,7 +465,7 @@ export default function SetupForm({
             : p.param === 'alkylation_out'
               ? alkylationWhy(on)
               : p.param === 'search_config_out' && on && String(values['search_engine'] ?? '') === 'comet' && !String(values['search_config_template'] ?? '').trim()
-                ? 'a Comet fragment: merge it into your comet.params, or give your template in Settings'
+                ? 'a Comet fragment: merge it into your comet.params, or give your template in Inputs'
                 : p.param === 'search_config_out' && on && (batch ? jobs.some((j) => sageCantRead(values, j.input)) : sageCantRead(values, input))
                   ? batch
                     ? 'each names its input, and Sage cannot read .raw, mzPeak or .d.zip: convert those to mzML and give that on the Sage command line'
@@ -523,11 +536,22 @@ export default function SetupForm({
 
   // A group of Advanced: its products as checkboxes, then its fields.
   const ADV = new Set(advancedParams(task, owner, values))
+  // The controls among @p names edited off where the form started: a
+  // switch a product checkbox drives (species, glyco, census) counts as
+  // that checkbox (tags-2), once.
+  const changedAmong = (names: Iterable<string>): number => {
+    const among = new Set(names)
+    const controls = session.edits.map((n) => {
+      const o = WIRED.has(n) ? ownerOf(n) : null
+      return o && o.id.startsWith('out-') ? o.id.slice('out-'.length) : n
+    })
+    return new Set(controls.filter((c) => among.has(c))).size
+  }
   const renderGroup = (sec: Section, defaultOpen: boolean): JSX.Element | null => {
     const names = sec.params.filter((n) => ADV.has(n))
     if (names.length === 0) return null
     const open = openGroups[sec.title] ?? defaultOpen
-    const changed = names.filter((n) => session.diff.includes(n)).length
+    const changed = changedAmong(names)
     const d = disclosure(open, (o) => setOpenGroups((st) => ({ ...st, [sec.title]: o })))
     const products = names.filter((n) => PRODUCT_OF.has(n))
     const fields = names.filter((n) => !PRODUCT_OF.has(n))
@@ -538,8 +562,8 @@ export default function SetupForm({
     // another option (Turn on would not help).
     const waiting = new Map<string, { dep: Dependency; names: string[] }>()
     for (const n of fields) {
-      const d = inertDependency(n, values)
-      if (!d || d.replaced || session.diff.includes(n)) continue
+      const d = fieldNeeds(n, values)
+      if (!d || d.replaced || session.edits.includes(n)) continue
       const key = masters(d).join(',')
       const w = waiting.get(key)
       if (w) w.names.push(n)
@@ -651,11 +675,11 @@ export default function SetupForm({
   // one lives in Outputs).
   const ownShown = ownGroups.some((s) => s.params.some((n) => ADV.has(n)))
   const otherGroups = SECTIONS.filter((s) => s.home !== task.id && s.home !== 'global' && s.home !== 'common' && !leads.has(s.title))
-  const advChanged = session.diff.filter((n) => ADV.has(n)).length
+  const advChanged = changedAmong(ADV)
   const advD = disclosure(session.advancedOpen, session.setAdvancedOpen)
   const otherOpen = openGroups['Other analyses'] ?? false
   const otherD = disclosure(otherOpen, (o) => setOpenGroups((st) => ({ ...st, 'Other analyses': o })))
-  const otherChanged = otherGroups.flatMap((s) => s.params).filter((n) => ADV.has(n) && session.diff.includes(n)).length
+  const otherChanged = changedAmong(otherGroups.flatMap((s) => s.params).filter((n) => ADV.has(n)))
 
   const instrument = shownInstrument(values, session.instrument)
   const custom = session.instrument === 'custom' || !instrument
@@ -1475,15 +1499,29 @@ function CommandPreview({ session, run, batch }: { session: Session; run: RunSta
   const { values, input, out } = session
   const paramsFor = useRef(run.paramsFor)
   paramsFor.current = run.paramsFor
+  // A batch shows the command line of its first file (shell-2): each file
+  // runs it with its own input and outputs (useRun runBatch).
+  const first = batch ? run.jobs[0] : undefined
   useEffect(() => {
-    if (batch || !input) {
+    if (batch ? !first : !input) {
       setLine(null)
       return
     }
     let gone = false
     const t = setTimeout(() => {
+      const call = paramsFor.current()
+      let sent = call
+      if (first) {
+        const per = perJobOutputs(values, first.out)
+        const params: Record<string, unknown> = { ...((call['params'] ?? {}) as Record<string, unknown>) }
+        for (const k of Object.keys(params)) if (k in per) {
+          if (String(per[k] ?? '') === '') delete params[k]
+          else params[k] = per[k]
+        }
+        sent = { ...call, in: first.input, out: first.out, params }
+      }
       window.fastag
-        .commandLine(paramsFor.current())
+        .commandLine(sent)
         .then((argv) => !gone && setLine(shellLine(argv)))
         .catch(() => !gone && setLine(null))
     }, 250)
@@ -1491,20 +1529,23 @@ function CommandPreview({ session, run, batch }: { session: Session; run: RunSta
       gone = true
       clearTimeout(t)
     }
-  }, [values, input, out, batch])
-  if (batch) return <p className="hint">Each file of the batch runs this command line with its own input and outputs; the Batch view logs each one.</p>
-  if (!input) return null
+  }, [values, input, out, batch, first?.input, first?.out])
+  if (batch && !first) return <p className="hint">Each file of the batch runs the same settings with its own input and outputs; add files in Inputs to see the command line.</p>
+  if (!batch && !input) return null
   return (
-    <details className="command-preview">
-      <summary>
-        <span className="chev" aria-hidden="true">
-          <IconChevron />
-        </span>
-        Command line
-      </summary>
-      <pre className="mono cmd" tabIndex={0} aria-label="The command line Run starts">
-        {line ?? '…'}
-      </pre>
-    </details>
+    <>
+      {batch && <p className="hint">Each file of the batch runs this command line with its own input and outputs; the Batch view logs each one.</p>}
+      <details className="command-preview">
+        <summary>
+          <span className="chev" aria-hidden="true">
+            <IconChevron />
+          </span>
+          {first ? `Command line of the first file, ${baseName(first.input)}` : 'Command line'}
+        </summary>
+        <pre className="mono cmd" tabIndex={0} aria-label="The command line Run starts">
+          {line ?? '…'}
+        </pre>
+      </details>
+    </>
   )
 }
