@@ -95,6 +95,9 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
   const deflt = `${defaultText(spec)}${unit ? ` ${defaultText(unit.spec)}` : ''}`
   // A Settings hint (brief) of a value the workflow set off the CLI default.
   const defaultNote = !!brief && changed && !!setBy && !blocked && !needs
+  // The line "Default … · changed" (or "set by …"): every changed field but
+  // one whose brief already names the default the workflow set.
+  const showChanged = changed && !defaultNote
   // An invalid value says what is wrong with it in place of the description;
   // an inert field keeps its description and adds what would switch it on.
   const help = invalid ? (
@@ -138,8 +141,10 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
         )}
       </p>
       {/* On a line of its own, not run on from the hint (which the grid
-          clamps to two lines). */}
-      {changed && !brief && (
+          clamps to two lines). Every edited field says so, a Settings field
+          with a brief too (survey-1); the brief's own note covers a value
+          the workflow set. */}
+      {showChanged && (
         <p id={`${helpId}-c`} className="help changed">
           Default {deflt} · {setBy ? <>set by {setBy}</> : <span className="mark">changed</span>}
         </p>
@@ -147,7 +152,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
     </>
   )
   // The hint, and the changed line when it shows.
-  const describedBy = !invalid && changed && !brief ? `${helpId} ${helpId}-c` : helpId
+  const describedBy = !invalid && showChanged ? `${helpId} ${helpId}-c` : helpId
   const cls = `field${off ? ' off' : ''}${invalid ? ' invalid' : ''}`
 
   if (spec.type === 'bool') {

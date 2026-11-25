@@ -20,7 +20,7 @@ import {
 import type { ParamValue } from '../ParamField'
 import { baseName } from '../digestReport'
 import { applyInstrument, INSTRUMENTS, speciesFixes } from './presets'
-import { renameSearchConfig } from './products'
+import { PRODUCTS, fileName, hasDatabase, renameSearchConfig } from './products'
 import { defaultSpeciesOut, dirName, rebaseOutputs, stripExt } from '../app/paths'
 import { cliText, sameValue } from '../app/format'
 import { focusLater } from '../app/focus'
@@ -300,7 +300,11 @@ export function useSession(start: Origin = DEFAULTS, opts: { confirmed?: boolean
     const p = normalizePreset(st.presets[name])
     if (!p) return
     // A recipe field the preset does not store ran at the recipe's value.
-    replaceForm({ kind: 'preset', name, base: p.base }, fillRecipe(presetValues(p, ''), new Set(Object.keys(p.diff))))
+    // Its engine names the configuration file it does not store
+    // (database-8: a Comet preset writes .params, as choosing Comet does).
+    let pv = presetValues(p, '')
+    if ('search_engine' in p.diff && !('search_config_out' in p.diff)) pv = renameSearchConfig(pv, p.diff['search_engine'])
+    replaceForm({ kind: 'preset', name, base: p.base }, fillRecipe(pv, new Set(Object.keys(p.diff))))
     setTaskConfirmed(true)
     const t = taskOf({ kind: 'preset', name, base: p.base })
     if (t) setTile(t.id)
@@ -368,8 +372,16 @@ export function useSession(start: Origin = DEFAULTS, opts: { confirmed?: boolean
     setOut(next)
     if (next) setValues((v) => ({ ...v, ...rebaseOutputs(v, next) }))
   }
-  // Outputs' folder and run name, from the tags output.
-  const outDir = out ? dirName(out) : ''
+  // The folder of the last tags output (database-2): a run name cleared and
+  // typed again goes back to the folder chosen, not to the input's. A new
+  // input or a run taken over sets it with their output.
+  const [keptDir, setKeptDir] = useState('')
+  useEffect(() => {
+    if (out) setKeptDir(dirName(out))
+  }, [out])
+  // Outputs' folder and run name, from the tags output; while the run name
+  // is empty the folder is still the one chosen.
+  const outDir = out ? dirName(out) : input ? keptDir : ''
   const runName = out ? baseName(out).replace(/\.tags\.tsv$/, '').replace(/\.tsv$/, '') : ''
 
   // A built-in instrument preset sets the tolerance and its unit.
@@ -404,6 +416,12 @@ export function useSession(start: Origin = DEFAULTS, opts: { confirmed?: boolean
       else if (typeof x === 'number') v[name] = String(x)
       else if (Array.isArray(x) && x.every((i) => typeof i === 'string')) v[name] = x as string[]
     }
+    // A workflow whose database reports wait for a database (Mass-shift
+    // survey, dbOptional) ran them off when it had none: they come back
+    // waiting, as the workflow starts (database-1), so choosing a database
+    // brings them back.
+    if (task?.dbOptional && !PRODUCTS.some((p) => p.db && hasDatabase(p, v)))
+      for (const p of PRODUCTS) if (p.db && String(ov[p.param] ?? '') !== '' && String(v[p.param] ?? '') === '') v[p.param] = ov[p.param]
     setInput(runInput)
     setOut(runOut)
     setOrigin(o)
@@ -443,8 +461,11 @@ export function useSession(start: Origin = DEFAULTS, opts: { confirmed?: boolean
     const files = [out]
     if (speciesOn) files.push(String(sendable['species_out'] || '') || defaultSpeciesOut(out))
     if (sendable['glyco'] === true) files.push(String(sendable['glyco_out'] || '') || `${stripExt(out)}.glyco.tsv`)
+    // The identifiability table and its summary, under -census (database-9).
+    for (const p of PRODUCTS)
+      if (p.flag === 'census' && sendable['census'] === true) files.push(String(sendable[p.param] || '') || fileName(p, sendable, out))
     for (const name of RENDERED) {
-      if (name === 'species_out' || name === 'glyco_out' || PARAM_BY_NAME.get(name)?.type !== 'output-file') continue
+      if (name === 'species_out' || name === 'glyco_out' || name === 'census_out' || name === 'census_summary_out' || PARAM_BY_NAME.get(name)?.type !== 'output-file') continue
       const v = String(sendable[name] || '')
       if (v && !inertBecause(name, sendable)) files.push(v)
     }
@@ -515,8 +536,13 @@ export function useSession(start: Origin = DEFAULTS, opts: { confirmed?: boolean
     resetToOrigin,
     undo,
     canUndo: undoSnapshot !== null,
-    // What differs from where the form started (the footer).
-    diff: diffNames(originValues, values),
+    // What differs from where the form started (the footer, "(modified)"):
+    // input paths are not settings of a task or preset (a preset stores
+    // none, tags-4), so a FASTA chosen leaves the form unmodified.
+    diff: diffNames(originValues, values).filter((n) => PARAM_BY_NAME.get(n)?.type !== 'input-file'),
+    // Every field edited off where the form started, input paths too
+    // (Advanced's "n changed").
+    edits: diffNames(originValues, values),
     // The values the form started from, which a run's command line is
     // measured against (paramLayout sentValues).
     originValues,

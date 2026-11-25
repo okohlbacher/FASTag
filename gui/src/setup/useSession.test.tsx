@@ -148,4 +148,27 @@ describe('useSession', () => {
     // Its own value set: only the changed tag length differs from the workflow.
     expect(result.current.diff).toEqual(['tag_length'])
   })
+
+  it('keeps the chosen output folder while the run name is cleared and typed again (database-2)', () => {
+    installMockBridge()
+    const { result } = renderHook(() => useSession())
+    act(() => result.current.setInput('/data/run01.mzML'))
+    act(() => result.current.setOut('/data/run01.tags.tsv'))
+    act(() => result.current.moveOut('/elsewhere/run01.tags.tsv'))
+    expect(result.current.outDir).toBe('/elsewhere/')
+    act(() => result.current.moveOut(''))
+    expect(result.current.runName).toBe('')
+    expect(result.current.outDir).toBe('/elsewhere/')
+    act(() => result.current.moveOut(`${result.current.outDir}sampleA.tags.tsv`))
+    expect(result.current.out).toBe('/elsewhere/sampleA.tags.tsv')
+  })
+
+  it('an input path is no modification of the task (tags-4)', () => {
+    installMockBridge()
+    const { result } = renderHook(() => useSession({ kind: 'builtin', id: 'export-tags' }))
+    act(() => result.current.setValue('fasta', '/data/ecoli.fasta'))
+    expect(result.current.diff).toEqual([])
+    expect(result.current.edits).toEqual(['fasta'])
+  })
+
 })

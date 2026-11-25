@@ -112,7 +112,8 @@ describe('round 10, 8: the needs sentence names what its buttons turn on', () =>
     expect(g.querySelector('.needs-text')!.textContent).toMatch(/^8 more settings need Reduced FASTA\./)
     expect([...g.querySelectorAll('button.secondary')].map((b) => b.textContent)).toEqual(['Turn on Reduced FASTA'])
     for (const n of document.querySelectorAll('.group-needs')) expect(n.textContent).not.toMatch(/see \?|one of \d+ reports/)
-    expect(document.querySelector('[data-group="Placement on the database"] .group-needs')!.textContent).toMatch(/need Tag placements, Protein shortlist, Reduced FASTA or 2 more\./)
+    // The Protein database is never folded (database-1): one setting waits.
+    expect(document.querySelector('[data-group="Placement on the database"] .group-needs')!.textContent).toMatch(/^One more setting needs Tag placements, Protein shortlist, Reduced FASTA or 2 more\./)
   })
 })
 
