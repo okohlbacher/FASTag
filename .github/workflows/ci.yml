@@ -1535,6 +1535,22 @@ jobs:
             [ "$a" = "$ARCH" ] || { echo "::error::$m is '${a:-unreadable}', expected $ARCH"; exit 1; }
             echo "$m: $a"
           done
+          # The shipped app itself starts (on Intel for the first time in CI) and
+          # runs its start-up probe (fastag.rs self_test, FASTAG_SELFTEST_OUT):
+          # the GUI's resolution, environment and spawn path run the bundled
+          # CLI from the mounted, signed image; exit 0 only if it ran. perl's
+          # alarm is the timeout (no coreutils timeout on the runner).
+          exe="${apps[0]}/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${apps[0]}/Contents/Info.plist")"
+          st="$RUNNER_TEMP/selftest.json"; rm -f "$st"
+          set +e
+          FASTAG_SELFTEST_OUT="$st" perl -e 'alarm 180; exec @ARGV or die "exec: $!"' "$exe" > "$RUNNER_TEMP/selftest.log" 2>&1
+          rc=$?
+          set -e
+          echo "app self-test: exit $rc"; cat "$st" 2>/dev/null || { echo '(no self-test output)'; cat "$RUNNER_TEMP/selftest.log"; }
+          if [ "$rc" -ne 0 ] || ! grep -q '"ok": true' "$st"; then
+            echo "::error::the app in the dmg did not start or could not run its bundled CLI (exit $rc)"; exit 1
+          fi
+          echo "- ${{ matrix.name }}: the app in the dmg starts and its self-test runs the bundled CLI" >> "$GITHUB_STEP_SUMMARY"
           if [ "$SIGNED" = "true" ]; then
             codesign --verify --deep --strict --verbose=2 "${apps[0]}"
             # The .app inside the dmg carries no stapled ticket of its own (only the dmg is
