@@ -39,7 +39,12 @@ export function NotCheckedHelp({ text }: { text: string }): JSX.Element {
         aria-label="Why the file was not checked"
         aria-expanded={open}
         aria-controls={open ? id : undefined}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          // WebKit does not focus a clicked button: focused here, so Escape
+          // reaches the wrapper's handler however it was opened.
+          btn.current?.focus()
+          setOpen((o) => !o)
+        }}
       >
         ?
       </button>

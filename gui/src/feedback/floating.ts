@@ -28,6 +28,9 @@ export const MIN_W = 320
 export const MIN_H = 200
 /// The title bar's height when it cannot be measured (jsdom).
 export const BAR_H = 44
+/// The app bar's height (index.css --topbar-h): the docked panel starts
+/// below it, so the bar and a run's Cancel in it stay reachable.
+export const APP_BAR_H = 48
 /// A key moves the panel this far (Shift: BIG_STEP).
 export const STEP = 16
 export const BIG_STEP = 64
@@ -40,7 +43,7 @@ export const viewport = (): Viewport => ({ w: window.innerWidth, h: window.inner
 export function defaultRect(layout: Layout, v: Viewport): Rect {
   if (layout === 'compact') {
     const w = Math.min(420, v.w - 2 * MARGIN)
-    const h = Math.min(640, v.h - 2 * MARGIN)
+    const h = Math.max(Math.min(MIN_H, v.h), Math.min(640, v.h - APP_BAR_H - 2 * MARGIN))
     return clampRect({ x: v.w - w - MARGIN, y: v.h - h - MARGIN, w, h }, v)
   }
   const w = Math.min(1180, v.w - 2 * MARGIN)

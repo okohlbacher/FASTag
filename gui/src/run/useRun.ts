@@ -10,7 +10,8 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, type Dispatch, typ
 import type { LogLine, ResolvedOutputs, RunRecord, RunResult, SpeciesReport } from '../types'
 import { recordOutputs } from '../shell/HistoryView'
 import { newJobId, runJob, type Job as RunJob, type JobAction } from '../runJob'
-import { conflicts, sentValues } from '../paramLayout'
+import { conflicts, inertBecause, isChanged, PARAM_BY_NAME, RENDERED, sentValues } from '../paramLayout'
+import { cliText } from '../app/format'
 import type { ParamValue } from '../ParamField'
 import { baseName, value, type Report } from '../digestReport'
 import { perJobOutputs, REPORT_PARAMS } from '../app/paths'
@@ -1182,6 +1183,10 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     // input: a Re-run of A while Setup holds B runs A.
     activeInput: running && active ? active.input : null,
     activeOut: running && active ? active.out : null,
+    // What Setup shows while a single run goes (shell-1): the request that
+    // was sent (a Re-run's recorded call, an Overview action's values), not
+    // the form, which may have moved on.
+    inFlight: running && active && !active.batch && active.params ? callView(active.input, active.out, active.params, active.resolvedOutputs) : null,
     batchRunning,
     batchEnd: state.batchEnd,
     busy: running || batchRunning,
@@ -1262,4 +1267,37 @@ export function sameCall(a: Record<string, unknown> | undefined, b: Record<strin
   const keys = new Set([...Object.keys(pa), ...Object.keys(pb)])
   for (const k of keys) if (JSON.stringify(pa[k]) !== JSON.stringify(pb[k])) return false
   return true
+}
+
+/// The input, the files written and the changed parameters of a run call, as
+/// Setup's busy view lists them. The outputs are the backend's once it
+/// resolved them, before that -out and every output path the call names.
+export function callView(
+  input: string,
+  out: string,
+  call: Record<string, unknown>,
+  resolved?: ResolvedOutputs
+): { input: string; out: string; writingFiles: string[]; changedParams: string[] } {
+  const params = (call['params'] ?? {}) as Record<string, unknown>
+  const norm = (n: string, v: unknown): ParamValue => {
+    if (PARAM_BY_NAME.get(n)?.type === 'bool') return v === true || v === 'true'
+    if (Array.isArray(v)) return v.map(String)
+    return String(v ?? '')
+  }
+  const sent: Record<string, ParamValue> = {}
+  for (const [n, v] of Object.entries(params)) sent[n] = norm(n, v)
+  const files: string[] = []
+  if (resolved) {
+    if (resolved.out) files.push(resolved.out)
+    for (const [k, v] of Object.entries(resolved)) if (k !== 'out' && typeof v === 'string' && v) files.push(v)
+  } else {
+    files.push(out)
+    for (const n of RENDERED) {
+      if (PARAM_BY_NAME.get(n)?.type !== 'output-file') continue
+      const v = sent[n]
+      if (typeof v === 'string' && v && !inertBecause(n, sent)) files.push(v)
+    }
+  }
+  const changedParams = RENDERED.filter((n) => n in sent && !inertBecause(n, sent) && isChanged(n, sent[n])).map((n) => cliText(n, sent[n]))
+  return { input, out, writingFiles: [...new Set(files.filter(Boolean).map(baseName))], changedParams }
 }
