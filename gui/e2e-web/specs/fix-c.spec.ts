@@ -45,3 +45,72 @@ test('while a History Re-run goes, Setup shows what that run uses, not the form 
   await expect(changed).toContainText(['-tag_length 5'])
   await pill(page).getByRole('button', { name: 'Cancel' }).click()
 })
+
+async function search(page: Page, q: string): Promise<Locator> {
+  await page.locator('body').press('ControlOrMeta+k')
+  const dialog = page.getByRole('dialog', { name: 'Search parameters' })
+  await expect(dialog.getByRole('combobox')).toBeFocused()
+  await dialog.getByRole('combobox').fill(q)
+  return dialog
+}
+const focusedId = (page: Page): Promise<string> => page.evaluate(() => document.activeElement?.id ?? '')
+
+// database-4 (a)
+test('Enter in the parameter search opens the first hit, wherever the pointer was left', async ({ page }) => {
+  await openApp(page, 'workflows')
+  await chooseTask(page, 'Mass-shift survey')
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  // The pointer stays on the step just clicked, as a user's would.
+  await toStep(page, 'Outputs & run')
+  const dialog = await search(page, 'acquisition_check')
+  await expect(dialog.getByRole('option')).toHaveCount(2)
+  await page.waitForTimeout(300)
+  await expect(dialog.getByRole('option').first()).toHaveAttribute('aria-selected', 'true')
+  await page.keyboard.press('Enter')
+  await expect(page.locator('#p-acquisition_check')).toBeFocused()
+})
+
+// database-4 (a): a pointer that travels does move the selection.
+test('a pointer moved over the hits after the list opened picks the hit Enter takes', async ({ page }) => {
+  await openApp(page, 'workflows')
+  await chooseTask(page, 'Mass-shift survey')
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  const dialog = await search(page, 'acquisition_check')
+  const second = dialog.getByRole('option').nth(1)
+  const box = (await second.boundingBox())!
+  await page.mouse.move(box.x + 10, box.y + box.height / 2)
+  await page.mouse.move(box.x + 30, box.y + box.height / 2, { steps: 3 })
+  await expect(second).toHaveAttribute('aria-selected', 'true')
+})
+
+// database-4 (b)
+for (const [q, name] of [['Triage E-value', 'census_triage_evalue'], ['ID q-value', 'census_ids_fdr']] as const) {
+  test(`without Identifications, the parameter search for ${q} opens Identifications in Inputs`, async ({ page }) => {
+    await openApp(page, 'workflows')
+    await chooseTask(page, 'Identifiability triage')
+    await page.getByRole('button', { name: 'Choose file…' }).click()
+    await toStep(page, 'Settings')
+    await page.mouse.move(2, 400)
+    const dialog = await search(page, q)
+    await expect(dialog.getByRole('option', { selected: true }).locator('code.cli')).toHaveText(name)
+    await page.keyboard.press('Enter')
+    await expect(dialog).toHaveCount(0)
+    await expect(page.locator('#step-2')).toBeVisible()
+    await expect.poll(() => focusedId(page)).toBe('p-census_ids')
+  })
+}
+
+// database-4, the uncounted case: Spectra to read, count, from step 4.
+test('the parameter search for Spectra to read, count from Outputs & run lands on its control in Settings', async ({ page }) => {
+  await openApp(page, 'workflows')
+  await chooseTask(page, 'Mass-shift survey')
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  await toStep(page, 'Outputs & run')
+  await page.mouse.move(2, 400)
+  const dialog = await search(page, 'subsample_spectra')
+  await expect(dialog.getByRole('option', { selected: true }).locator('code.cli')).toHaveText('subsample_spectra')
+  await page.keyboard.press('Enter')
+  await expect(dialog).toHaveCount(0)
+  await expect(page.locator('#step-3')).toBeVisible()
+  await expect.poll(() => focusedId(page)).toMatch(/^p-subsample/)
+})

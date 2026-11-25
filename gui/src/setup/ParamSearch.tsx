@@ -16,6 +16,12 @@ export default function ParamSearch({ onChoose, onClose }: Props): JSX.Element {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const activeRef = useRef<HTMLLIElement>(null)
+  // Where the pointer was last seen over the list: a hit comes under a
+  // resting pointer as the list opens or changes, and the browser reports
+  // that as an enter (or a move without travel). Only a pointer that travels
+  // moves the selection, so Enter takes the first hit unless the user moved
+  // the selection by keyboard or by pointer since the list opened.
+  const pointer = useRef<{ x: number; y: number } | null>(null)
   const hits = useMemo(() => searchParams(q), [q])
   useEffect(() => {
     // The native modal keeps keyboard focus inside and the form inert.
@@ -86,7 +92,11 @@ export default function ParamSearch({ onChoose, onClose }: Props): JSX.Element {
               role="option"
               aria-selected={i === active}
               className={i === active ? 'active' : undefined}
-              onMouseEnter={() => setActive(i)}
+              onMouseMove={(e) => {
+                const at = pointer.current
+                pointer.current = { x: e.screenX, y: e.screenY }
+                if (at && (at.x !== e.screenX || at.y !== e.screenY) && i !== active) setActive(i)
+              }}
               onMouseDown={(e) => {
                 e.preventDefault()
                 onChoose(h)

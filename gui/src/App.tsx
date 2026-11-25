@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import type { BinaryInfo } from './types'
-import { inertDependency, type Conflict } from './paramLayout'
+import { inertDependency, masters, type Conflict } from './paramLayout'
 import HelpView from './help/HelpView'
 import { closeHelp, openHelp, useHelp } from './help/link'
 import ParamSearch from './setup/ParamSearch'
@@ -513,7 +513,22 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
     // An optional input of step 2 not opened yet: opened first.
     const primary = INPUTS[hit.name]?.partOf ?? hit.name
     const owner = session.task ? (taskById(session.task) ?? null) : null
-    if (taskInputs(owner, values, batchMode ? 'batch' : 'one', session.revealed).addable.includes(primary)) session.revealInput(primary)
+    const addable = taskInputs(owner, values, batchMode ? 'batch' : 'one', session.revealed).addable
+    if (addable.includes(primary)) session.revealInput(primary)
+    // A field that waits for an input of step 2 (ID q-value waits for
+    // Identifications): that input, opened, on Inputs.
+    const waitsFor = inertDependency(hit.name, values)
+    const inputMaster = waitsFor ? masters(waitsFor).find((n) => n in INPUTS) : undefined
+    if (inputMaster) {
+      if (addable.includes(inputMaster)) session.revealInput(inputMaster)
+      session.setStep(2)
+      setTimeout(() => {
+        const el = document.getElementById(`p-${inputMaster}`)
+        el?.scrollIntoView?.({ block: 'center' })
+        el?.focus()
+      })
+      return
+    }
     // A field under Advanced: the disclosure, its group and, for another
     // workflow's group, Other analyses open (doc/GUI-WORKFLOWS.md 2.4).
     if (hit.section) {
@@ -537,6 +552,10 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
         const sel = document.getElementById(owner.id)
         if (sel && !(sel as HTMLSelectElement).disabled) {
           sel.dispatchEvent(new Event('fastag:reveal-count'))
+          // From another step (Spectra to read, count from Outputs & run):
+          // the step that holds the control first.
+          const at = Number(sel.closest<HTMLElement>('[data-step]')?.dataset.step ?? 0)
+          if (at >= 1 && at <= 4) session.setStep(at as Step)
           setTimeout(() => {
             const c = document.getElementById(`p-${hit.name}`) ?? sel
             c.scrollIntoView?.({ block: 'center' })
