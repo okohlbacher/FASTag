@@ -71,11 +71,11 @@ grid; see the Decision at the end of this section.
 | Workflow | Values |
 |---|---|
 | all run workflows | `threads 0` (half the logical cores, FASTag's effective default: it puts 0 on argv; the manifest lists 1, inherited), `progress true` |
-| W1 | `res_conf true` |
+| W1 | `res_conf true`, `extension 3` (a seed of 3 grows to 9 residues, so the assembly reads of 8+ residues are not empty) |
 | W2 | `qc_out` |
 | W3 | `recon_out`, `delta_out`, `delta_spectra_out`, `delta_counts_out`, `extension 3` |
-| W4 | `species true`, `species_out`, `extension 2` (validated in the paper: seed 3 + 2 x 2 = k 7) |
-| W5 | `shortlist_out`, `fasta_out`, `search_config_out`, `extension 3`, plus the shortlist recipe `shortlist_gapped true`, `recon_min_length 6`, `shortlist_max_evalue 10`, `recon_missed_cleavages 2` (doc/SHORTLIST.md). The recipe is **not validated**: with MSFragger and the tryptic shortlist it passed its second held-out test and failed the third. From 1.15.4 the CLI applies it by default only under `-search_engine msfragger` with `-shortlist_protease trypsin`; the GUI sets it for every engine and protease as its default recipe, and the workflow help says so. |
+| W4 | `species true`, `extension 2` (validated in the paper: seed 3 + 2 x 2 = k 7) |
+| W5 | `shortlist_out`, `fasta_out`, `search_config_out`, plus the shortlist recipe of doc/SHORTLIST.md: `tag_length 4`, `extension 6`, `shortlist_min_spectra 1`, `shortlist_gapped true`, `recon_min_length 6`, `shortlist_max_evalue 10`, `recon_missed_cleavages 2` (from 1.16.2; 1.16.1 and earlier sent `extension 3` at tag length 3). The recipe is **not validated**: with MSFragger and the tryptic shortlist it passed its second held-out test and failed the third. The GUI sets it for every engine and protease as its default recipe, and the workflow help says so. |
 | W6 | `census true`, `census_score true`, `census_sorted_out` |
 | W7 | `digest_out`, `label_out`, `alkylation_out`, `glyco true`, `species true`, `extension 2`; all spectra (no `subsample_fraction`). From 1.16 the alkylation report is on and every spectrum is read: the report needs no database (its call is read off the tags), and on all spectra at extension 2 enough cysteines vote (PXD000001: methylthio, 52 of 69 votes), where 10% of the spectra (the earlier default) gave 8 votes and no call. Before 1.16 it placed on the shipped human proteome, which needs tags of 8+ residues. |
 
@@ -101,12 +101,12 @@ where needed.
 | W | Field (param) | One-line help |
 |---|---|---|
 | W1 | Seed length (`tag_length`) | Residues in a seed tag. 3 suits most runs. |
-| W1 | Extension (`extension`) | Residues added per end. Set 3 or more to export long tags (8+ residues) for Stitch or ALPS. |
+| W1 | Extension (`extension`) | Residues added per end; 3 lets a seed of 3 grow to 9, long enough for Stitch or ALPS reads (8+ residues). |
 | W1 | E-value cutoff (`max_evalue`) | Keep tags at or below this E-value. 0 keeps all. |
 | W1 | Tags per spectrum (`max_tags`) | At most this many tags per spectrum. 0 = no limit. |
 | W1 | Per-residue confidence (`res_conf`) | Adds a 0 to 100 confidence per residue, used by assembly export. |
 | W2 | Spectra to read (`subsample_fraction`) | A select: All spectra, 10%, 25%, Custom. Counts cover only the spectra read. (`acquisition_check`, a safety switch, is under Advanced: round 2.) |
-| W3 | Protein database (`recon_fasta`), required | FASTA the tags are placed on. Mass shifts are measured against it. |
+| W3 | Protein database (`recon_fasta`), optional | FASTA the tags are placed on; mass shifts are measured against it. Or a shipped proteome (`recon_proteome`). Without either the run writes the tags only, with the shift reports off. |
 | W3 | Extension (`extension`) | Residues added per tag end. Longer tags place more uniquely. |
 | W3 | Missed cleavages (`recon_missed_cleavages`) | Missed tryptic cleavages allowed in a placement window (0 to 10). |
 | W4 | Report rank (`species_rank`) | Taxonomic level of the report: genus, family, … |
@@ -193,8 +193,9 @@ does not duplicate any of these.
 > result tabs), the 1200 px content column and, in Setup and Batch, a sticky
 > action bar with one filled button. Help is the app bar's Help button (F1),
 > which opens the page of the screen shown; the per-field (?) popovers stay,
-> the page-level "Learn more" and "How to read…" links of the layers below
-> are gone. See doc/GUI-SETUP-WIZARD.md section 1a.
+> and the page-level "Learn more" links of the layers below are gone. The
+> "How to read…" links stay on the QC, Shortlist and Triage pages, where they
+> open the Help page of their report. See doc/GUI-SETUP-WIZARD.md section 1a.
 
 ```
 [Header: Setup | Run | Results | Batch | History      Open… | ? Help]
@@ -230,8 +231,8 @@ Rules:
     | W2 | Run QC report |
     | W3 | Reconciliation and mass shifts |
     | W4 | Species detection |
-    | W5 | doc/SHORTLIST.md |
-    | W6 | Census |
+    | W5 | Database reduction |
+    | W6 | Identifiability triage |
     | W7 | Digest, label and mass-gap reports |
   - Advanced fields show the description inline under the label, one line,
     truncated, with the full text in (?).
@@ -365,8 +366,9 @@ every results tab.
 7. Outputs shows a folder, a run name and checkboxes with derived file
    names. There is no per-output path field. In W3, unchecking recon.tsv is
    impossible while delta.tsv is checked, and the row says why.
-8. W3 and W5 mark "Protein database" as required. Run is disabled with the
-   reason until it is set.
+8. W5 marks "Protein database" as required; Run is disabled with the reason
+   until it is set. In W3 the database is optional: without one the shift
+   reports are off and the run writes the tags only.
 9. Batch mode shows Add files/folder, Output folder and SDRF (optional).
    There is no single-file Output stem or "Or choose one file…".
 10. No screen text names a CLI option as an instruction ("-census", "FASTag
