@@ -1852,7 +1852,6 @@ jobs:
       - name: Backend unit tests (Windows)
         working-directory: gui/src-tauri
         shell: pwsh
-        continue-on-error: true
         run: |
           $ErrorActionPreference = 'Stop'
           cargo test --lib
