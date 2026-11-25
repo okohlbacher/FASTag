@@ -181,7 +181,8 @@ export default function OverviewPanel({ overview: o, input, busy, onAction, acti
               <tr key={s.setting}>
                 <th scope="row">{settingWords(s.setting)}</th>
                 <td className="mono">{s.value}</td>
-                <td>
+                {/* survey-3: the note wraps (tables keep cells on one line). */}
+                <td className="sug-note" style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
                   <span className={`evidence ev-${s.evidence}`}>{EVIDENCE[s.evidence]}</span> {s.note}
                 </td>
               </tr>
