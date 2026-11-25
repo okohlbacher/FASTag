@@ -1775,6 +1775,10 @@ jobs:
   # build-macos, and on a miss builds OpenMS and saves it; nothing else. A
   # hit costs a lookup. GitHub evicts a cache unused for 7 days, so a quiet
   # main can still leave a tag cold.
+  # A push to main shares the concurrency group CI-refs/heads/main with
+  # cancel-in-progress, so the next push cancels a cold OpenMS build here
+  # before it saves. A dispatch on main has its own group: dispatch ci.yml on
+  # main before tagging to warm the cache (release checklist).
   openms-cache-macos-x64:
     name: OpenMS cache (macos-x64)
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
