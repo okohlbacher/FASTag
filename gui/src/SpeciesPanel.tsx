@@ -197,7 +197,7 @@ export default function SpeciesPanel({
             {top.rank === 'species'
               ? 'Species names are not reliable: a reduced reference set and short tags cannot separate close relatives. Interpret the ranking at genus level.'
               : `${top.rank ? `${top.rank}-level ranking` : 'Ranking at an unstated rank'} — a reduced reference set and short tags cannot resolve species.`}
-            {' '}Ranked evidence does not establish presence.{hasCalls && ' See the separate CLI call column below.'}
+            {' '}Ranked evidence does not establish presence.{hasCalls && ' See the separate CLI call column below; that decoy presence call is experimental and not calibrated.'}
           </div>
         </div>
         {contributed != null && (
@@ -224,7 +224,7 @@ export default function SpeciesPanel({
             <tr>
               <th scope="col">Taxon</th>
               <th scope="col">Rank</th>
-              {hasCalls && <th scope="col" title="The status reported by the CLI’s optional species call; separate from the evidence ranking">CLI call</th>}
+              {hasCalls && <th scope="col" title="The status reported by the CLI’s optional species call (decoy presence call); experimental and not calibrated, separate from the evidence ranking">CLI call</th>}
               <th scope="col" className="rel-col">Relative to top taxon</th>
               <th scope="col" className="num">Observed</th>
               {deconvolved && <th scope="col" className="num">Adjusted</th>}

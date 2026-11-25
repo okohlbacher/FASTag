@@ -103,7 +103,7 @@ button.icon-btn:hover:not(:disabled) { background: none; border: none; opacity: 
 /* One visible keyboard focus ring for every control, in both themes. */
 :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 
-input[type='text'], input:not([type]), select, textarea {
+input[type='text'], input[type='search'], input[type='number'], input[type='url'], input:not([type]), select, textarea {
   height: var(--control-h);
   padding: 0 10px;
   background: var(--card);
@@ -113,6 +113,7 @@ input[type='text'], input:not([type]), select, textarea {
   font: inherit;
   min-width: 0;
 }
+input[type='search'] { appearance: none; -webkit-appearance: none; }
 select { padding: 0 var(--space-2); }
 select.small, input.small { height: 28px; }
 textarea { height: auto; padding: 6px 10px; resize: vertical; font-family: var(--font-mono); font-size: var(--text-xs); }
@@ -236,7 +237,10 @@ button.pill-show {
 button.pill-show:hover:not(:disabled) { background: none; border: none; text-decoration: underline; }
 .pill-show > span { white-space: nowrap; }
 .pill-file { font-weight: 600; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.pill-file { flex: 0 1 auto; }
+.pill-file { flex: none; }
+/* shell-7: the file name is never cut (WebKit cut run01.mzML at 960 px and
+   on Batch and History at 1200 px); the ETA gives way instead. */
+.pill-eta { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 /* The phase gives way first; the file name is cut only when it alone is too long. */
 .pill-what { flex: 0 1000 auto; overflow: hidden; text-overflow: ellipsis; min-width: 0; color: var(--muted-foreground); }
 .pill-pct, .pill-eta, .pill-batch { font-variant-numeric: tabular-nums; }
@@ -434,6 +438,19 @@ table.history-table td:nth-child(1), table.history-table td:nth-child(3) { white
   /* The start time wraps anyway; Input and Outputs get the room. */
   table.history-table th:nth-child(1) { width: 7rem; }
   table.history-table th:nth-child(3) { width: 6.5rem; }
+}
+/* suite-4: a pane as narrow as History beside Help at 960 px. Status and Started narrow, and Outputs (the longest extensions,
+   .tags.species.tsv) gets more of the rest than Input, so every stem keeps
+   a few letters and every extension stays whole. */
+@container history (max-width: 640px) {
+  table.history-table th, table.history-table td { padding-left: var(--space-2); padding-right: var(--space-2); }
+  table.history-table th:nth-child(1) { width: 6rem; }
+  table.history-table th:nth-child(2) { width: 6.5rem; }
+  table.history-table th:nth-child(3) { width: 5.75rem; }
+}
+/* Narrower still (960 px with Help): Open and More stack. */
+@container history (max-width: 560px) {
+  table.history-table th:nth-child(7) { width: 4.75rem; }
 }
 /* A wide pane: the start time on one line. */
 @container history (min-width: 900px) {
@@ -698,7 +715,7 @@ summary.disclosure:hover { background: var(--panel); }
 .sec-title { flex: 1; }
 .defaults { font-size: var(--text-xs); color: var(--muted-foreground); font-weight: 400; }
 .chev { display: inline-block; transition: transform 0.15s ease; color: var(--muted-foreground); }
-.chev.open { transform: rotate(90deg); }
+.chev.open, details[open] > summary > .chev { transform: rotate(90deg); }
 .sec-body { padding: 0 var(--space-3) var(--space-3); display: flex; flex-direction: column; gap: 14px; }
 .blurb { margin: 0; font-size: var(--text-xs); color: var(--muted-foreground); }
 /* Separates a section's master switch from the knobs it governs. */
@@ -1274,6 +1291,7 @@ dialog.psearch-backdrop::backdrop { background: transparent; }
 .psearch li { padding: 6px var(--space-2); border-radius: 6px; cursor: pointer; display: flex; flex-wrap: wrap; gap: 0 var(--space-2); align-items: baseline; }
 .psearch li.active { background: var(--primary-soft); outline: 1px solid var(--primary); }
 .psearch li .where { flex-basis: 100%; color: var(--muted-foreground); font-size: var(--text-xs); }
+.psearch li.active .where, button.task-tile.selected .task-tile-q { color: var(--muted-on-soft); }
 kbd { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--muted-foreground); }
 .instrument { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); margin-bottom: var(--space-2); }
 .instrument label { font-size: var(--text-xs); color: var(--muted-foreground); }
@@ -1611,6 +1629,11 @@ dl.qc-strip .stat dd { margin: 0; font-size: var(--text-md); font-weight: 600; }
 [data-step="4"] li.product .product-note { min-width: 0; }
 [data-step="4"] li.product.wide { grid-column: 1 / -1; }
 li.product.wide .product-note { flex-basis: 100%; padding-left: calc(13px + var(--space-2)); }
+/* Its note takes a line of its own under the row: the file's Change… stays
+   beside the file name, as on the other rows. */
+li.product.wide > .product-note { order: 1; }
+li.product.wide > .product-note ~ * { order: 2; }
+li.product.wide > .product-note ~ button[aria-label^='Change the file'] { order: 0; }
 @media (max-width: 900px) { [data-step="4"] ul.products { grid-template-columns: minmax(0, 1fr); } }
 /* Outputs: the folder and the run name side by side. */
 .out-rows { display: flex; flex-wrap: wrap; gap: 6px var(--space-4); }
@@ -1645,3 +1668,5 @@ li.product.wide .product-note { flex-basis: 100%; padding-left: calc(13px + var(
 /* Advanced: a disclosure in body size, not a second page title. */
 .view-setup details.advanced > summary.card-head h3 { font-size: var(--text-sm); font-weight: 600; }
 .page-context strong { color: var(--foreground); font-weight: 600; }
+/* survey-3: the note of a suggested setting wraps (table cells stay on one line). */
+td.sug-note { white-space: normal; overflow-wrap: anywhere; }
