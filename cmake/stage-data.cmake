@@ -23,8 +23,11 @@
 # INDEX. A complete fetch is what tools/fetch_taxonomy_index.py publishes: its
 # completion marker .fastag-fetched names that very manifest (data release and
 # sha256) and each of its files with the pinned sha256 and size, and each file
-# is there with that size (a linked file also with that sha256, hashed on each
-# run: its target can change). A folder without the marker (an interrupted or
+# is there with that size. A linked file's target can change after the fetch:
+# it must also have the modification time the marker recorded for it (the
+# fetch hashed it; it is not hashed again on every build, a 1.1 GB read). The
+# size is the target's (file(SIZE) of a Windows symlink is the link's, 0).
+# A folder without the marker (an interrupted or
 # failed fetch, a copy made by hand) is not used. None is: SRC alone, as
 # without INDEX, so a removed cache is unstaged again.
 #
@@ -81,15 +84,22 @@ function(_fastag_fetch_complete folder manifest out)
     if(NOT EXISTS "${_f}" OR IS_DIRECTORY "${_f}")
       return()
     endif()
-    file(SIZE "${_f}" _size)
+    # A linked file (fetch --from without --copy) is the file it links to:
+    # its size and time stamp are the target's. file(SIZE) does not follow a
+    # symlink on Windows (it reports the link itself, 0 bytes).
+    set(_real "${_f}")
+    if(IS_SYMLINK "${_f}")
+      file(REAL_PATH "${_f}" _real)
+    endif()
+    file(SIZE "${_real}" _size)
     if(NOT "file ${_name} ${_size} ${_sha}" IN_LIST _lines OR (NOT _nob AND NOT _size EQUAL _bytes))
       return()
     endif()
-    # A linked file (fetch --from without --copy) is the file it links to,
-    # which can change after the fetch at the same size: hashed again.
+    # The target can change after the fetch at the same size: it must have
+    # the modification time the fetch recorded when it hashed it.
     if(IS_SYMLINK "${_f}")
-      file(SHA256 "${_f}" _live)
-      if(NOT _live STREQUAL _sha)
+      file(TIMESTAMP "${_real}" _mtime "%s" UTC)
+      if(NOT "link ${_name} ${_mtime}" IN_LIST _lines)
         return()
       endif()
     endif()

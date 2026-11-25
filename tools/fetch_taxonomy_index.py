@@ -46,9 +46,12 @@ so an interrupted or failed fetch is never staged.
                                                   complete fetch of the manifest
 
 A linked file (--from <folder|file> without --copy) is the file it links to,
-which can change after the fetch: every reader (this script's --check, CMake,
-the debug desktop app) hashes a linked file again before it uses it, and a
-source whose file resolves into the folder being replaced is copied, not
+which can change after the fetch. It is hashed once, by the fetch, and the
+marker records its target's size and modification time (whole seconds); every
+reader (this script's --check, CMake, the debug desktop app) checks that size
+and time before it uses it, instead of hashing 1.1 GB again on each build or
+run, so a target rewritten since the fetch is not used until it is fetched
+again. A source whose file resolves into the folder being replaced is copied, not
 linked (the link would dangle, or point at itself, once the folder is
 replaced). The folder replaced must be one this script could have written:
 a real folder holding anything but the fetch's own files is the user's and
@@ -109,48 +112,63 @@ def file_sha256_bytes(b):
     return hashlib.sha256(b).hexdigest()
 
 
+def mtime_s(p):
+    """The modification time of @p p (through a link), in whole seconds since
+    the epoch: the resolution CMake's file(TIMESTAMP ... "%s") reads."""
+    return os.stat(p).st_mtime_ns // 1000000000
+
+
 def marker_text(mpath, release, files, folder):
-    """The completion marker: the pinned manifest and every checked file."""
+    """The completion marker: the pinned manifest and every checked file; of
+    a linked file also the time stamp of its target ("link <name> <mtime>"),
+    which the readers compare in place of hashing it again."""
     lines = ["# Written by tools/fetch_taxonomy_index.py after every file below was checked;",
              "# a folder without it (or with another manifest) is no fetched index.",
              "manifest %s %s" % (release, sha256(mpath))]
     for n in sorted(files):
         p = folder / n
         lines.append("file %s %d %s" % (n, p.stat().st_size, files[n]["sha256"]))
+        if p.is_symlink():
+            lines.append("link %s %d" % (n, mtime_s(p)))
     return "\n".join(lines) + "\n"
 
 
 def read_marker(folder):
-    """(release, manifest sha256, {name: (bytes, sha256)}) of @p folder's marker, or None."""
+    """(release, manifest sha256, {name: (bytes, sha256)}, {name: link target
+    mtime}) of @p folder's marker, or None."""
     m = folder / MARKER
     if m.is_symlink() or not m.is_file():
         return None
     release = msha = None
-    files = {}
+    files, links = {}, {}
     for line in m.read_text(encoding="utf-8").splitlines():
         f = line.split()
         if len(f) == 3 and f[0] == "manifest":
             release, msha = f[1], f[2]
         elif len(f) == 4 and f[0] == "file" and f[2].isdigit():
             files[f[1]] = (int(f[2]), f[3])
+        elif len(f) == 3 and f[0] == "link" and f[2].lstrip("-").isdigit():
+            links[f[1]] = int(f[2])
     if not release or not msha:
         return None
-    return release, msha, files
+    return release, msha, files, links
 
 
 def fetched_complete(folder, mpath):
     """@p folder holds a complete fetch of the manifest @p mpath: its marker
     names that very manifest (sha256), lists each of the manifest's files with
     its pinned sha256, and each is a regular file of that size. The sha256 of
-    a copied file is checked by the fetch, before the marker is written; a
-    linked file (a symlink to the --from source) is hashed again here, since
-    its target can change after the fetch at the same size (codex6 review n3)."""
+    each file is checked by the fetch, before the marker is written. A linked
+    file (a symlink to the --from source) can change after the fetch at the
+    same size (codex6 review n3): its target must also have the modification
+    time the marker recorded, so a rewrite since the fetch is caught without
+    hashing the 1.1 GB index on every use."""
     folder, mpath = Path(folder), Path(mpath)
     mk = read_marker(folder)
     if mk is None:
         return False
     man = json.loads(mpath.read_text(encoding="utf-8"))
-    release, msha, listed = mk
+    release, msha, listed, links = mk
     if release != man["data_release"] or msha != sha256(mpath):
         return False
     for n, w in man["files"].items():
@@ -161,7 +179,7 @@ def fetched_complete(folder, mpath):
         p = folder / n
         if not p.is_file() or p.stat().st_size != listed[n][0]:
             return False
-        if p.is_symlink() and sha256(p) != w["sha256"]:
+        if p.is_symlink() and links.get(n) != mtime_s(p):
             return False
     return True
 

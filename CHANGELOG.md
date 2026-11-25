@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.16.1 (unreleased)
+
+- **Taxonomy index: a linked file is checked by size and time stamp on use, not hashed again.**
+  `tools/fetch_taxonomy_index.py --from <folder|file>` without `--copy` links the pinned files; 1.16.0 hashed a
+  linked `tax_k7.taxdb` (1.1 GB) again on every use: each `cmake --build` (`INDEX_SEARCH`), each `--check` and each
+  CLI launch of the debug desktop app. The fetch still hashes every file once before it writes the completion
+  marker, and now also records each linked file's target modification time there (`link <name> <seconds>`); CMake,
+  `--check` and the debug app compare the target's size and time stamp with the marker instead. A target rewritten
+  after the fetch (a new time stamp) is not used until it is fetched again; an in-place rewrite of the same size
+  within the fetch's second is the accepted gap. A linked fetch made by 1.16.0 has no `link` lines and is no longer
+  staged: run the fetch again (it finds the files checked and rewrites the marker). Copied files are unchanged.
+- **Windows: a linked index fetch was never staged.** `cmake/stage-data.cmake` read a linked file's size with
+  `file(SIZE)`, which on Windows reports the symlink itself (0 bytes), so a fetch with `--from` and no `--copy` never
+  matched its marker (shipped_data_test (h)). The size and time stamp are now those of the link's target
+  (`file(REAL_PATH)`).
+- **Windows test fixes (CI of 1.16.0).** digest_cli_test compared the `FASTAG_DIGEST_DIR` messages with the MSYS
+  spelling of the temporary folder (`/tmp/...`) where the binary echoes the native one (`C:/Users/RUNNER~1/...`):
+  the folder is now given in that form (`cygpath -m`, as the other CLI tests do). subsume_cli_test and
+  fasta_proteins_cli_test cut or matched the last column of `-out`, which Windows writes with CRLF (awk keeps the CR
+  in the last field): their TSVs are compared with LF line endings. gui_cli_test (g) compared the `-data_paths`
+  JSON (`C:\Users\RUNNER~1\...`) with `c:/Users/...` strings: both sides are now resolved (8.3 short names to
+  long ones, symlinks) and case-folded before they are compared. The desktop app's
+  `the_backend_views_of_the_fixture_match_the_golden` compared `ecoli.views.json` byte for byte, which a Windows
+  checkout (`core.autocrlf`) gives CRLF; it failed on Windows since 1.12 (hidden in the informational suite) and
+  turned the 1.16.0 required browser step red. It compares line endings aside (the views of the CRLF fixture are
+  the same). No change to the CLI or the app.
+
 ## 1.16.0 (2026-11-24)
 
 - **Alkylation report: the tags alone never call a reagent whose cysteine has the mass of two residues.**

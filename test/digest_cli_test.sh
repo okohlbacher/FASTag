@@ -23,6 +23,10 @@ export FASTAG_DIGEST_DIR="$DATA"
 unset FASTAG_FULL_PRECISION
 
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/fastag-digest-test.XXXXXX") || exit 1
+# Windows (MSYS): the native binary sees C:/..., not /tmp/... (MSYS converts a
+# path in the environment on the way in): the messages that echo a folder are
+# compared in that form.
+command -v cygpath >/dev/null 2>&1 && TMP=$(cygpath -m "$TMP")
 trap 'rm -rf "$TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 # same EXPECTED ACTUAL MESSAGE, line endings aside (Windows writes CRLF)

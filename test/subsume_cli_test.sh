@@ -48,11 +48,16 @@ TMP=$(mktemp -d "${TMPDIR:-/tmp}/fastag-subsume-test.XXXXXX") || exit 1
 command -v cygpath >/dev/null 2>&1 && TMP=$(cygpath -m "$TMP")
 trap 'rm -rf "$TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
+# lf FILE: FILE with its line endings made LF in place. On Windows FASTag
+# writes its text outputs with CRLF; awk keeps the CR in the last field, so
+# a column cut or compared there (path_mz, -terminus) would differ by it.
+lf() { tr -d '\r' < "$1" > "$1.lf" && mv "$1.lf" "$1" || fail "cannot read $1"; }
 
 run() {  # <name> <input> [args]
   local name=$1 in=$2; shift 2
   FASTAG_PATH_PEAKS=1 "$BIN" -in "$in" -out "$TMP/$name.tsv" "$@" > "$TMP/$name.out" 2> "$TMP/$name.err" \
     || { cat "$TMP/$name.err" >&2; fail "FASTag on $name exited non-zero"; }
+  lf "$TMP/$name.tsv"
 }
 # The containment rule on path_mz (pk) and the tag (sq), for awk:
 # liesIn(pa, sa, pb, sb): row a's peaks a contiguous run of row b's, and on
@@ -145,6 +150,7 @@ run e_on4 "$SRC" "${L[@]}" -threads 4
 cmp -s "$TMP/e_on.tsv" "$TMP/e_on4.tsv" || fail "threads 1 and 4 write different rows"
 # Without the test column the rows are the same, less it.
 "$BIN" -in "$SRC" -out "$TMP/e_plain.tsv" "${L[@]}" > /dev/null 2>&1 || fail "FASTag without FASTAG_PATH_PEAKS"
+lf "$TMP/e_plain.tsv"
 awk -F'\t' -v OFS='\t' '{ NF--; print }' "$TMP/e_on.tsv" | cmp -s - "$TMP/e_plain.tsv" \
   || fail "FASTAG_PATH_PEAKS changes more than its column"
 
@@ -198,6 +204,7 @@ if [ -n "$MGF" ]; then
   for s in on off; do
     FASTAG_PATH_PEAKS=1 "$BIN" -stream "${L[@]}" -fragment_tolerance 0.5 -fragment_tolerance_unit Da -subsume_tags $s \
       < "$TMP/blocks.txt" > "$TMP/st_$s.raw" 2> /dev/null || fail "-stream -subsume_tags $s exited non-zero"
+    lf "$TMP/st_$s.raw"
     grep -v '^#' "$TMP/st_$s.raw" > "$TMP/st_$s.tsv"
     [ "$(grep -c '^#end ' "$TMP/st_$s.raw")" = "$(grep -c '^BEGIN IONS' "$MGF")" ] || fail "-stream $s: not one #end per block"
     [ "$(awk '/^#end / { s += $3 } END { print s + 0 }' "$TMP/st_$s.raw")" = "$(($(wc -l < "$TMP/st_$s.tsv") - 1))" ] \
