@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.16.1 (unreleased)
+## 1.16.1 (2026-11-25)
 
 - **Taxonomy index: a linked file is checked by size and time stamp on use, not hashed again.**
   `tools/fetch_taxonomy_index.py --from <folder|file>` without `--copy` links the pinned files; 1.16.0 hashed a
