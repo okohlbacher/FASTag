@@ -1376,7 +1376,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     label: 'Search engine',
     depends: [SEARCH_OFF],
     help: {
-      text: 'The search engine the settings are written for: Sage, Comet or MSFragger (experimental; needs decoys in the database). The shortlist recipe (gapped placements, E-value 10, shortest placed tag 6, 2 missed cleavages) is not validated: with MSFragger it passed the second held-out test and failed the third. With MSFragger and trypsin FASTag applies it to every setting you leave unchanged; the Database reduction workflow sets it for every engine, Sage and Comet included. MSFragger mass calibration (calibrate_mass 2) failed its held-out test and is not exported.'
+      text: 'The search engine the settings are written for: Sage, Comet or MSFragger (experimental; needs decoys in the database). The shortlist recipe (tag length 4, extension 6, at least 1 spectrum per protein, gapped placements, E-value 10, shortest placed tag 6, 2 missed cleavages) is not validated: with MSFragger it passed the second held-out test and failed the third. FASTag applies it to every setting you leave unchanged in a tryptic shortlist run, with any engine; the Database reduction workflow sends it for every engine and protease, Sage and Comet included. MSFragger mass calibration (calibrate_mass 2) failed its held-out test and is not exported.'
     }
   },
   search_isotope_errors: {

@@ -82,7 +82,7 @@ describe('the workflows', () => {
   })
   it('the database-reduction workflow sets the shortlist recipe (not validated)', () => {
     const v = baseValues('builtin:db-reduction')
-    expect([v.shortlist_gapped, v.recon_min_length, v.shortlist_max_evalue, v.recon_missed_cleavages, v.extension]).toEqual([true, '6', '10', '2', '3'])
+    expect([v.shortlist_gapped, v.recon_min_length, v.shortlist_max_evalue, v.recon_missed_cleavages, v.extension, v.tag_length, v.shortlist_min_spectra]).toEqual([true, '6', '10', '2', '6', '4', '1'])
   })
 })
 
