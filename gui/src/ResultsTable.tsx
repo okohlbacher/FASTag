@@ -960,6 +960,8 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum, tit
 
   // The active row's spectrum in the Spectrum tab (P4).
   const spectrumCol = columns.indexOf('spectrum')
+  // tags-10: no spectrum icon on a scan when the CLI cannot show spectra.
+  const specIcon = spectrum != null && spectrum.state !== 'no'
   const openSpectrum = (at?: number): void => {
     const pos = at ?? currentPos()
     if (pos == null || !spectrum) return
@@ -1072,7 +1074,8 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum, tit
           shown.map((j) => {
             const c = row[j] ?? ''
             const name = columns[j] ?? ''
-            const hitTitle = name === 'fasta_hit' ? dbHitTitle(c, dbCellsOf(columns, row)) : c
+            // tags-10: with a CLI without -dump_spectrum the scan is plain text and its tooltip says why.
+            const hitTitle = name === 'fasta_hit' ? dbHitTitle(c, dbCellsOf(columns, row)) : name === 'spectrum' && spectrum?.state === 'no' && c !== '' ? `${c}\n${SPECTRUM_NEEDS}.` : c
             return (
               <div className={`rt-cell${numeric.has(name) ? ' n' : ''}${SEQ_COLUMNS.has(name) ? ' seq' : ''}`} role="gridcell" key={j} title={hitTitle} aria-label={hitTitle}>
                 {name === 'evalue' ? (
@@ -1084,7 +1087,7 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum, tit
                 ) : name === 'spectrum' ? (
                   // The scan number tells rows apart; the native ID is the tooltip.
                   <>
-                    {spectrum && c !== '' && (
+                    {specIcon && c !== '' && (
                       <button
                         type="button"
                         className="rt-spec"
@@ -1102,7 +1105,7 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum, tit
                         <IconSpectrum />
                       </button>
                     )}
-                    {fitMiddle(spectrumHint(c) || c, width(name) - (spectrum ? SPEC_ICON_W : 0))}
+                    {fitMiddle(spectrumHint(c) || c, width(name) - (specIcon ? SPEC_ICON_W : 0))}
                   </>
                 ) : (
                   fitMiddle(c, width(name), charW(name))
@@ -1123,11 +1126,14 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum, tit
   // A filter or sort that drops the active row takes its buttons away: focus
   // on one of them goes back to the table, not to the page.
   const rowGone = rowPos == null
+  // tags-1: row actions take their place before a row is chosen.
+  const unchosen = rowPos == null ? ({ visibility: 'hidden' } as const) : undefined
   useEffect(() => {
     if (!rowGone || !rowFocus.current) return
     rowFocus.current = false
     const a = document.activeElement
-    if (!a || a === document.body) scrollerRef.current?.focus()
+    // The buttons stay in the page, hidden (tags-1): focus on one goes back too.
+    if (!a || a === document.body || (a instanceof HTMLElement && a.closest('[role="group"][aria-label="Active row"]'))) scrollerRef.current?.focus()
   }, [rowGone])
   return (
     <div className="rt">
@@ -1160,24 +1166,29 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum, tit
         {/* The active row's actions, only once a row is chosen: a calm
             toolbar by default. Left of the spacer, so they push nothing.
             A CLI without -dump_spectrum still says so with no row. */}
-        {(rowPos != null || spectrum?.state === 'no') && (
+        {/* tags-1: the group keeps its place while no row is chosen (hidden,
+            out of the tab order and the accessibility tree), so choosing a
+            row never re-wraps the bar and moves the rows under the pointer. */}
+        {(meta != null || spectrum?.state === 'no') && (
           <span
             className="rt-group"
             role="group"
             aria-label="Active row"
+            style={rowPos == null && spectrum?.state !== 'no' ? { visibility: 'hidden' } : undefined}
             onFocus={() => (rowFocus.current = true)}
             onBlur={(e) => {
               if (!e.currentTarget.contains(e.relatedTarget as Node | null)) rowFocus.current = false
             }}
           >
-            {rowPos != null && (
+            {(rowPos != null || meta != null) && (
               <>
-                <button type="button" className="secondary" title="Copy the active row's shown cells, tab-separated (⌘C)" onClick={copyRow}>
+                <button type="button" className="secondary" style={unchosen} title="Copy the active row's shown cells, tab-separated (⌘C)" onClick={copyRow}>
                   Copy row
                 </button>
                 <button
                   type="button"
                   className="secondary"
+                  style={unchosen}
                   title={usiCol >= 0 ? "Copy the active row's USI (⇧⌘C)" : 'This file has no USI column: turn on USI column under Outputs and run again'}
                   onClick={copyUsi}
                 >
