@@ -10,13 +10,15 @@ import type { Session } from '../setup/useSession'
 import type { RunState } from '../run/useRun'
 import { SECTIONS } from '../paramLayout'
 import { planDrop } from './dropRoute'
+import { INPUTS } from '../setup/inputs'
+import { baseName } from '../digestReport'
 
 export interface DropInputs {
   busy: boolean
   // Queued batch jobs: spectra then join the queue.
   jobs: number
   setInputPath(p: string): void
-  session: Pick<Session, 'setValues' | 'setOpenGroups'>
+  session: Pick<Session, 'setValues' | 'setOpenGroups' | 'revealInput'>
   run: Pick<RunState, 'addBatchPaths' | 'openDropped'>
   setView(v: View): void
   // A dropped SDRF is loaded for the Batch view's comparison (P4).
@@ -41,9 +43,18 @@ export function useDrops(d: DropInputs): { dragOver: boolean; dropNote: string |
     }
     // One selection for the whole drop (useRun openDropped).
     if (plan.results || plan.reports.length || plan.species) void d.run.openDropped({ results: plan.results, reports: plan.reports, species: plan.species })
+    // A FASTA or an index fills a field of Inputs, which may be another
+    // step or an optional input not shown yet: opened, and said where.
+    const placed: string[] = []
+    for (const [n, v] of Object.entries(plan.values ?? {})) {
+      const spec = INPUTS[n]
+      if (!spec || spec.place !== 'step2' || typeof v !== 'string' || !v) continue
+      d.session.revealInput(n)
+      placed.push(`${baseName(v)} went to ${spec.label} in Inputs.`)
+    }
     if (plan.sdrf) void d.loadSdrf(plan.sdrf)
     if (plan.view) d.setView(plan.view)
-    setDropNote(plan.notes.length ? plan.notes.join(' ') : null)
+    setDropNote(plan.notes.length || placed.length ? [...placed, ...plan.notes].join(' ') : null)
   }
   const applyRef = useRef(apply)
   applyRef.current = apply

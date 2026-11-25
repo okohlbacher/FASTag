@@ -156,3 +156,20 @@ test('Escape closes a (?) popover opened with the mouse: a field\'s, and "Why th
   await page.keyboard.press('Escape')
   await expect(why).toHaveCount(0)
 })
+
+// shell-8
+test('a FASTA and an index dropped while Settings is shown: opened in Inputs and said where they went', async ({ page }) => {
+  await openApp(page, 'default')
+  await toStep(page, 'Inputs')
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  await toStep(page, 'Settings')
+  await page.evaluate(() => {
+    const c = (window as unknown as { __fastagE2E: { drop(x: unknown): void } }).__fastagE2E
+    c.drop({ fasta: '/db/human.fasta', taxdb: '/db/mine.taxdb' })
+  })
+  const note = page.getByRole('alert')
+  await expect(note).toContainText('human.fasta went to Filter database in Inputs.')
+  await expect(note).toContainText('mine.taxdb went to Your taxonomy in Inputs.')
+  await toStep(page, 'Inputs')
+  await expect(page.locator('#p-fasta')).toHaveValue('/db/human.fasta')
+})
