@@ -17,15 +17,28 @@ export const SHIPPED_TAXA: Readonly<Record<number, string>> = {
   83333: 'ecoli'
 }
 
+/// The genera of those taxa: the Species workflow reports at rank genus by
+/// default (database-3), and each of these genera has one shipped proteome.
+export const SHIPPED_GENERA: Readonly<Record<number, string>> = {
+  9605: 'human',
+  10088: 'mouse',
+  4930: 'yeast',
+  561: 'ecoli'
+}
+
 /// The default line, when no species report of this file is open.
 export const PROTEOME_HELP = "The organism's shipped proteome, when you have no FASTA of your own. Not sure of the organism? Species names it, with no database."
 
 /// The shipped proteome a species report of the file points to: its first
 /// taxon at rank species (the CLI's order), unless the call says it is not
-/// there. null when the report has none.
+/// there; a report at rank genus (the Species workflow's default) gives its
+/// first genus. null when the report has neither.
 export function topSpecies(sp: SpeciesReport | null): { name: string; proteome: string | null } | null {
-  const top = sp?.taxa.find((t) => t.rank === 'species' && t.call !== 'not_detected')
-  return top ? { name: top.name, proteome: SHIPPED_TAXA[top.taxid] ?? null } : null
+  const live = (sp?.taxa ?? []).filter((t) => t.call !== 'not_detected')
+  const top = live.find((t) => t.rank === 'species')
+  if (top) return { name: top.name, proteome: SHIPPED_TAXA[top.taxid] ?? null }
+  const genus = live.find((t) => t.rank === 'genus')
+  return genus ? { name: genus.name, proteome: SHIPPED_GENERA[genus.taxid] ?? null } : null
 }
 
 /// The line under Shipped proteome: @p sp is a species report of the file
