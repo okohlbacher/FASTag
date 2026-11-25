@@ -1369,7 +1369,7 @@ jobs:
   #     install, the app's own start-up probe, the bundled FASTag.exe --help,
   #     -write_ini and a tagging run from the installed layout;
   #   - the release zip's FASTag.bat against that CLI;
-  #   - gui/e2e-tauri/windows.test.mjs through tauri-driver: Export tags on
+  #   - gui/e2e-tauri/windows.test.mjs through tauri-driver: Generate tags on
   #     the mzML and MGF fixtures (tags TSV identical to the CLI's own run),
   #     the Tags table, the spectrum inspector, Characterize with its Overview
   #     and reports, and a refused run quoting FASTag's reason. Screenshots
