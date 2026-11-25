@@ -145,8 +145,8 @@ export const START: HelpPage = {
           </dd>
           <dt>Does my protein occur?</dt>
           <dd>
-            Choose <strong>Generate tags</strong>, open <strong>Advanced</strong> and, under <strong>Keep only tags found
-            in a database</strong>, choose a <L to="param-fasta">FASTA file</L> with your protein. Set the{' '}
+            Choose <strong>Generate tags</strong> and, in Inputs, choose <strong>Filter database</strong> under{' '}
+            <strong>Add optional input</strong>, then a <L to="param-fasta">FASTA file</L> with your protein. Set the{' '}
             <L to="param-extension">Extension</L> in Settings so that tag length + 2 × extension reaches the length the
             database needs: about 4 residues for one protein, 7 or 8 for a proteome. With the default tag length 3,
             extension 1 suffices for one protein and 2 or 3 for a proteome. The run is refused if no tag can reach
@@ -350,8 +350,8 @@ export const START: HelpPage = {
           </p>
           <p>
             Sharing is a separate step. It shows exactly what would be sent, field by field: the title, kind,
-            diagnostics (on by default), and only if you tick them the screenshot and the scrubbed log of recent
-            errors. <strong>Open issue draft</strong> opens a GitHub issue form (with the title, report id and kind)
+            diagnostics and the screenshot (both on by default; untick either to leave it out), and, only if
+            you tick it, the scrubbed log of recent errors. <strong>Open issue draft</strong> opens a GitHub issue form (with the title, report id and kind)
             and shows the report&apos;s <code>.feedback.zip</code> to attach; <strong>Copy diagnostics</strong> copies
             the same data. A GitHub issue is public and hard to delete: never share screenshots or text that
             identify a person, a patient or an unpublished sample.
@@ -619,7 +619,7 @@ export const RESULTS: HelpPage = {
             <tr><td>Min. conf., Mean conf.</td><td>The weakest and the average observed-step score, 0 to 1 (<L to="results-conf">residue confidence</L>).</td></tr>
             <tr><td>Database hit</td><td>Without a database filter: Not checked (-), the tags were not matched against a database. With one, only matching tags are written: In database (fwd, as written; rev, reversed), or Entrapment (efwd, erev: found only in the entrapment database). With a database the app asks FASTag for up to 3 proteins per tag, and the cell names the first one as accession/gene@first–last residue (for example P0A6F5/groL@123–131), with "+n more" when the tag occurs in more proteins; the tooltip lists them all. The columns Proteins (position), Gene and Proteins (n) hold them all and can be shown under Columns. In the Spectrum tab, tags that occur in one protein only are drawn under that protein's residues, read from the database of the run that wrote the tags while it is still the file that run read. A protein whose identifier the database gives to more than one entry is named with its positions but not aligned.</td></tr>
             <tr><td>Database q-value</td><td>q_db, only with an <G to="gloss-entrapment">entrapment database</G> (<L to="results-nofdr">see below</L>).</td></tr>
-            <tr><td>ProForma, Residue conf., USI</td><td>Optional columns (<L to="param-proforma">ProForma</L>, <L to="param-res_conf">per-residue confidence</L>, <L to="param-usi_collection">USI</L>), checked in Outputs &amp; run of Generate tags.</td></tr>
+            <tr><td>ProForma, Residue conf., USI</td><td>Optional columns: <L to="param-proforma">ProForma</L> and <L to="param-usi_collection">USI</L> are checked in Outputs &amp; run of Generate tags; <L to="param-res_conf">Per-residue confidence</L> is set in Settings, under Tagging.</td></tr>
             <tr><td>Series, Terminus</td><td>Optional columns (<L to="param-terminus">series and terminus</L>): the series (b, y, c or z) of the one reading of a tag that reaches a peptide terminus in a way measured to hold (- when none or both do, or above 25 ppm or 0.02 Da), and every terminus found (for example C+K; - when neither reading reaches one).</td></tr>
           </tbody>
         </table>

@@ -33,7 +33,8 @@ export const WORKFLOWS: HelpPage = {
             configure a search engine or change Setup. Check them before using them elsewhere.
           </p>
           <p>
-            An <strong>Add … and run again</strong> button starts a new analysis with the missing report enabled.
+            A tile whose figure needs a report the run did not write can offer an <strong>Add … and run
+            again</strong> button; it starts a new analysis with that report enabled.
             Adding a FASTA for mass gaps can also raise the extension so tags can reach the database&apos;s required
             length. Review overwrite questions. For detail, open <L to="species">Species</L>,{' '}
             <L to="digest">Digest</L> or <L to="results">Tags</L>.
@@ -177,8 +178,8 @@ export const WORKFLOWS: HelpPage = {
             MSFragger, FASTag appends reversed <code>rev_</code> decoys to the reduced FASTA.
           </p>
           <p>
-            The workflow sets the shortlist recipe of doc/SHORTLIST.md (gapped placements, E-value 10, shortest placed
-            tag 6 residues, 2 missed cleavages) as its default recipe. It is <strong>not validated</strong>: with
+            The workflow sets the shortlist recipe of doc/SHORTLIST.md (tag length 4, extension 6, at least 1 spectrum per
+            shortlisted protein, gapped placements, E-value 10, shortest placed tag 6 residues, 2 missed cleavages) as its default recipe. It is <strong>not validated</strong>: with
             MSFragger and the tryptic shortlist it passed its second held-out test and failed the third (8 new runs:
             one run kept 53% of the full search, another had an entrapment FDP of 2.1%). From FASTag 1.15.4 the CLI
             applies it by default only with MSFragger and the trypsin shortlist; the GUI also sets it for Sage, Comet
@@ -228,8 +229,9 @@ export const WORKFLOWS: HelpPage = {
         <>
           <p>
             <L to="gloss-reconciliation">Reconciliation</L> places tags in database peptides and reports the mass
-            left over. In <strong>Mass shifts</strong>, choose <strong>Choose a FASTA and run again</strong>,
-            or enable the reports with <strong>Write these reports and run again</strong>. These actions enable
+            left over. After a run without a protein database there is no <strong>Mass shifts</strong> tab: add
+            a protein FASTA in Inputs and run again. Where the tab is shown without these reports, it offers{' '}
+            <strong>Choose a FASTA and run again</strong> or <strong>Write these reports and run again</strong>. These actions enable
             the reconciliation table, mass-shift histogram and mass-gap report, and raise the extension, if it
             was lower, to what the seeds need to reach the shortest tag placed (8 residues unless set: 3 at seed
             length 3). You can instead open a recon, delta or mass-gap report from an earlier run.
