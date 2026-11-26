@@ -94,8 +94,8 @@ export default function ParamSearch({ onChoose, onClose }: Props): JSX.Element {
               className={i === active ? 'active' : undefined}
               onMouseMove={(e) => {
                 const at = pointer.current
-                pointer.current = { x: e.screenX, y: e.screenY }
-                if (at && (at.x !== e.screenX || at.y !== e.screenY) && i !== active) setActive(i)
+                pointer.current = { x: e.clientX, y: e.clientY }
+                if (at && (at.x !== e.clientX || at.y !== e.clientY) && i !== active) setActive(i)
               }}
               onMouseDown={(e) => {
                 e.preventDefault()
