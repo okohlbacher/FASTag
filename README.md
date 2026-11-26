@@ -141,16 +141,12 @@ without it):
 | platform | desktop app | command line |
 |---|---|---|
 | macOS, Apple silicon | [`FASTag-<version>-gui-macos-arm64.dmg`](https://github.com/okohlbacher/FASTag/releases/latest) | [`FASTag-<version>-macos-arm64.dmg`](https://github.com/okohlbacher/FASTag/releases/latest) |
-| macOS, Intel | [`FASTag-<version>-gui-macos-x64.dmg`](https://github.com/okohlbacher/FASTag/releases/latest) | [`FASTag-<version>-macos-x64.dmg`](https://github.com/okohlbacher/FASTag/releases/latest) |
 | Windows x64 | [`FASTag-<version>-gui-windows-x64-setup.exe`](https://github.com/okohlbacher/FASTag/releases/latest) | [`FASTag-<version>-windows-x64.zip`](https://github.com/okohlbacher/FASTag/releases/latest) |
 | Linux x64 | [`fastag-gui_<version>_amd64.deb`](https://github.com/okohlbacher/FASTag/releases/latest) · [`FASTag-<version>-gui-linux-x64.tar.gz`](https://github.com/okohlbacher/FASTag/releases/latest) | [`FASTag-<version>-linux-x64.tar.gz`](https://github.com/okohlbacher/FASTag/releases/latest) |
 | Linux arm64 | [`fastag-gui_<version>_arm64.deb`](https://github.com/okohlbacher/FASTag/releases/latest) · [`FASTag-<version>-gui-linux-arm64.tar.gz`](https://github.com/okohlbacher/FASTag/releases/latest) | [`FASTag-<version>-linux-arm64.tar.gz`](https://github.com/okohlbacher/FASTag/releases/latest) |
 
-Intel Macs are built again from 1.15.0 on (1.8.0 to 1.14.x were Apple silicon
-only; [1.6.1](https://github.com/okohlbacher/FASTag/releases/tag/v1.6.1) is the
-last earlier Intel release). They depend on GitHub's Intel macOS runners, which
-GitHub retires in 2027: the last Intel build will be a release before August
-2027.
+Intel Macs are no longer built from 1.16.2 on: [1.16.1](https://github.com/okohlbacher/FASTag/releases/tag/v1.16.1)
+is the last Intel release.
 On macOS both are also on [Homebrew](https://github.com/okohlbacher/homebrew-fastag):
 `brew install --cask okohlbacher/fastag/fastag` (desktop app) or
 `brew install --cask okohlbacher/fastag/fastag-cli` (command line, `FASTag` on your PATH).

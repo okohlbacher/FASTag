@@ -169,8 +169,6 @@ jobs:
       # The build matrix (job `build`). JSON here rather than YAML there,
       # because a YAML matrix cannot drop an `include` entry by event.
       - id: legs
-        env:
-          WITH_X64: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
         run: |
           set -euo pipefail
           # linux-x64 / linux-arm64: gcc 14 against a glibc 2.28 sysroot.
@@ -191,27 +189,10 @@ jobs:
             {"name":"linux-arm64","runner":"ubuntu-24.04-arm","compilers":"gxx_linux-aarch64=14.* sysroot_linux-aarch64=2.28.*","toolchain":"gcc14-glibc2.28","extra":"patchelf"},
             {"name":"macos-arm64","runner":"macos-15","arch":"arm64","compilers":"clangxx_osx-arm64=19.* llvm-openmp=19.*","toolchain":"clang19","extra":""}
           ]'
-          # macos-x64: Intel macOS, back from 1.15.0 (dropped in 1.8.0 with
-          # the move to an OpenMS built from source). Native, not a
-          # cross-build: every pin in .github/env/openms.yml has an osx-64
-          # build on conda-forge, and only a native leg runs the same tests,
-          # smoke runs and mounted-dmg check as arm64. ON v* TAGS AND MANUAL
-          # DISPATCHES ONLY (gui_dry_run included): about 28 Intel-runner
-          # minutes and 11 minutes of wall time a run that pull requests and
-          # pushes do not pay; an Intel-only break shows up in the release
-          # candidate's dry run, so dispatch one before tagging.
-          #
-          # macos-26-intel, GitHub's newest x64 image (GA 2026-02-26). GitHub
-          # ends x86_64 macOS with the macOS 15 image in Fall 2027
-          # (runner-images: August 2027) and has announced no end for this
-          # one. REMOVE THIS LEG BEFORE AUGUST 2027 (and the two macos-x64
-          # names in release-complete): a label no runner serves wedges the
-          # queue (see concurrency above).
-          if [ "$WITH_X64" = true ]; then
-            legs=$(jq -c '. + [{"name":"macos-x64","runner":"macos-26-intel","arch":"x86_64","compilers":"clangxx_osx-64=19.* llvm-openmp=19.*","toolchain":"clang19","extra":""}]' <<<"$legs")
-          else
-            legs=$(jq -c . <<<"$legs")
-          fi
+          # macos-x64 (Intel) was dropped in 1.16.2: GitHub's Intel runners were the
+          # slowest leg, lost their runner twice, and end in 2027. 1.16.1 is the
+          # last Intel release.
+          legs=$(jq -c . <<<"$legs")
           # Two jobs (build, build-macos), so the Linux GUI jobs need only the
           # Linux legs and never wait for a macOS runner.
           {
@@ -249,9 +230,7 @@ jobs:
     # before the first real signed release.
     timeout-minutes: 330
     # The legs come from job `version` (outputs.legs), where the list and the
-    # reasons for each runner are written down: macos-x64 is in it only on a
-    # v* tag and on a manual dispatch, so a pull request or a push to main
-    # never waits for an Intel runner and never shows a skipped Intel job.
+    # reasons for each runner are written down.
     #
     # This job runs the Linux legs; build-macos runs the macOS ones with the
     # same steps (the YAML alias build-steps), so gui-linux and gui-linux-arm64
@@ -262,15 +241,13 @@ jobs:
         include: ${{ fromJSON(needs.version.outputs.linux_legs) }}
 
     steps: &build-steps
-      - &build-checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
       # The same libraries OpenMS was built against (.github/env/openms.yml),
       # the same compilers, plus what packaging needs.
-      - &build-toolchain
-        name: Install the toolchain and dependencies
+      - name: Install the toolchain and dependencies
         uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
         with:
           environment-file: .github/env/openms.yml
@@ -281,18 +258,14 @@ jobs:
       # OpenMS: restored from the cache, or built from source and saved at once,
       # so a later FASTag failure in this job cannot keep the build from the
       # cache (actions/cache would save only from a successful job).
-      - &openms-restore
-        name: Restore OpenMS
+      - name: Restore OpenMS
         id: openms-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: openms-install
-          # openms-cache-macos-x64 only asks whether the cache is there.
-          lookup-only: ${{ matrix.cache_only == true }}
           key: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
 
-      - &openms-checkout
-        name: Check out OpenMS at the pinned commit
+      - name: Check out OpenMS at the pinned commit
         if: steps.openms-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
@@ -315,8 +288,7 @@ jobs:
       # The .NET SDK the Thermo bridge's managed half is built with (only
       # when OpenMS is built; the runtime the CLI uses is installed below on
       # every run).
-      - &openms-dotnet
-        name: Install the .NET SDK (OpenMS Thermo bridge)
+      - name: Install the .NET SDK (OpenMS Thermo bridge)
         if: steps.openms-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
@@ -325,8 +297,7 @@ jobs:
           bash "$RUNNER_TEMP/dotnet-install.sh" --version "$DOTNET_SDK_VERSION" --install-dir "$RUNNER_TEMP/dotnet-sdk" --no-path
           "$RUNNER_TEMP/dotnet-sdk/dotnet" --info | head -20
 
-      - &openms-build
-        name: Build and install OpenMS
+      - name: Build and install OpenMS
         if: steps.openms-cache.outputs.cache-hit != 'true'
         shell: bash -el {0}
         run: |
@@ -362,8 +333,7 @@ jobs:
           cmake --build openms-build --parallel "$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)"
           cmake --install openms-build
 
-      - &openms-save
-        name: Save OpenMS
+      - name: Save OpenMS
         if: steps.openms-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
@@ -1767,37 +1737,6 @@ jobs:
         include: ${{ fromJSON(needs.version.outputs.macos_legs) }}
     steps: *build-steps
 
-  # The OpenMS cache of the macOS Intel leg, filled from main. The leg runs
-  # only on v* tags and dispatches, and a tag run can read a cache saved by
-  # the default branch but not one saved by another tag: without this job
-  # every Intel tag build compiled OpenMS from source (up to 4 h). On a push
-  # to main (or a dispatch on main) it looks the key up, the very key of
-  # build-macos, and on a miss builds OpenMS and saves it; nothing else. A
-  # hit costs a lookup. GitHub evicts a cache unused for 7 days, so a quiet
-  # main can still leave a tag cold.
-  # A push to main shares the concurrency group CI-refs/heads/main with
-  # cancel-in-progress, so the next push cancels a cold OpenMS build here
-  # before it saves. A dispatch on main has its own group: dispatch ci.yml on
-  # main before tagging to warm the cache (release checklist).
-  openms-cache-macos-x64:
-    name: OpenMS cache (macos-x64)
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    runs-on: macos-26-intel
-    timeout-minutes: 300
-    strategy:
-      matrix:
-        include:
-          # Must stay equal to the macos-x64 leg of job version.
-          - {name: macos-x64, runner: macos-26-intel, arch: x86_64, compilers: "clangxx_osx-64=19.* llvm-openmp=19.*", toolchain: clang19, extra: "", cache_only: true}
-    steps:
-      - *build-checkout
-      - *build-toolchain
-      - *openms-restore
-      - *openms-checkout
-      - *openms-dotnet
-      - *openms-build
-      - *openms-save
-
   # ----------------------------------------------------------- GUI checks
   # Independent on purpose: no `needs:` -- waiting for OpenMS to test
   # TypeScript would make nobody run it. webkit2gtk/rsvg are what the tauri
@@ -2975,7 +2914,6 @@ jobs:
           # from 1.15.0; the AppImages are best-effort and not asserted.
           want="FASTag-$V-linux-x64.tar.gz FASTag-$V-linux-arm64.tar.gz \
                 FASTag-$V-macos-arm64.dmg FASTag-$V-gui-macos-arm64.dmg \
-                FASTag-$V-macos-x64.dmg FASTag-$V-gui-macos-x64.dmg \
                 fastag-gui_${V}_amd64.deb FASTag-$V-gui-linux-x64.tar.gz \
                 fastag-gui_${V}_arm64.deb FASTag-$V-gui-linux-arm64.tar.gz \
                 FASTag-$V-taxonomy-k7.tar.gz FASTag-$V-taxonomy-k7.tar.gz.sha256 \

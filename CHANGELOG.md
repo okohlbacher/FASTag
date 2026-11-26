@@ -37,8 +37,9 @@ on the Overview, and release checks that now count. The CLI's tags and reports a
 - **Packages and CI.** The Linux tarballs and the AppImage no longer carry macOS `._` files, and a check rejects
   any package that does. The macOS app and the installed `.deb` start in CI (the app's start-up self-test). The
   Windows backend tests and the Linux real-CLI desktop specs count (both were informational and hid failures).
-  macOS Intel tag builds read an OpenMS cache saved from `main`; the Linux desktop packages no longer wait for the
-  macOS builds.
+  The Linux desktop packages no longer wait for the macOS builds.
+- **macOS Intel is no longer built.** 1.16.1 is the last release with `*-macos-x64.dmg` and
+  `*-gui-macos-x64.dmg`; the Homebrew casks install on Apple silicon only.
 
 ## 1.16.1 (2026-11-25)
 
