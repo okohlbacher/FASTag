@@ -8,10 +8,10 @@ You need the FASTag command line (README, Install). Check the version:
 
 ```bash
 FASTag --help | grep Version
-# Version: 1.15.0 (OpenMS 3.7.0-pre-HEAD-2026-11-02)
+# Version: 1.16.2 (OpenMS 3.7.0-pre-HEAD-2026-11-02); RawFileReader ...
 ```
 
-The numbers below were produced with FASTag 1.15.0. Another version can give other counts.
+The numbers below were produced with FASTag 1.16.2. Another version can give other counts.
 
 ## Part 1: a small *E. coli* run
 
@@ -31,11 +31,28 @@ there; every run below takes well under a second.
 
 FASTag's default fragment tolerance is **20 ppm**, for high-resolution MS2 (Orbitrap,
 timsTOF, Astral). This run's MS2 spectra were recorded in the ion trap, which resolves far
-less, so the tolerance has to be set in Da. See what the default does first:
+less. FASTag reads the analyser of each MS2 spectrum from the file (here the Thermo filter
+string, `ITMS + c NSI d w Full ms2 ...`) and tags ion-trap spectra at 0.5 Da
+(`-tolerance_by_analyzer`, on by default; `-fragment_tolerance_itms`), so no tolerance needs
+to be given:
 
 ```bash
-FASTag -in examples/Ecoli_MS2_small.mzML -out tags_20ppm.tsv
+FASTag -in examples/Ecoli_MS2_small.mzML -out tags.tsv
 ```
+
+```
+Tolerance by analyzer: ion-trap MS2 at 0.5 Da, complement window 0.179418 Da (measured; ...); other MS2 at 20 ppm. ...
+139 MS2 spectra, 5913 tags
+Tolerance by analyzer: 139 ion-trap MS2 tagged at 0.5 Da, 0 other MS2 at 20 ppm
+FASTag took 0.13 s (wall), ...
+```
+
+The ion-trap tolerance applies to the tags only: the placement and mass-shift reports
+(step 3) use `-fragment_tolerance`. A spectrum whose analyser the file does not name is
+tagged at `-fragment_tolerance` too; for ion-trap data without that information, give
+`-fragment_tolerance 0.3 -fragment_tolerance_unit Da` yourself. FASTag then notices a
+mismatch from the peak spacing. With `-tolerance_by_analyzer off`, this run is tagged at
+20 ppm and warns:
 
 ```
 No two peaks anywhere in this file are closer than 0.600342 Th, yet the fragment tolerance is
@@ -45,30 +62,16 @@ high-resolution tolerance looks like, ... If the MS2 is ion trap, try -fragment_
 139 MS2 spectra, 2028 tags
 ```
 
-FASTag cannot know the analyser, but it notices that the peak spacing does not fit the
-tolerance. (The desktop app shows the same warning and offers "Re-run with 0.3 Da".) Run
-again with the ion-trap tolerance:
-
-```bash
-FASTag -in examples/Ecoli_MS2_small.mzML -out tags.tsv \
-       -fragment_tolerance 0.3 -fragment_tolerance_unit Da
-```
-
-```
-139 MS2 spectra, 5937 tags
-FASTag took 0.04 s (wall), ...
-```
-
-Expected: `tags.tsv` has 5,937 rows plus a header, from all 139 spectra (at most 50 tags per
-spectrum, `-max_tags`). Wall time on an Apple M4 Max was 0.04 s (about 0.1 s including
+Expected: `tags.tsv` has 5,913 rows plus a header, from all 139 spectra (at most 50 tags per
+spectrum, `-max_tags`). Wall time on an Apple M4 Max was 0.13 s (0.17 s including
 start-up). The first rows:
 
 ```
-spectrum                                        tag  length charge nterm_mass cterm_mass extended gapped evalue     min_conf mean_conf fasta_hit
-controllerType=0 controllerNumber=1 scan=11461  CVA  3      1      321.2195   563.2563   0        0      0.0248664  0.618    0.768     -
-controllerType=0 controllerNumber=1 scan=11461  VAE  3      1      481.2719   434.1920   0        0      0.0560095  0.639    0.775     -
-controllerType=0 controllerNumber=1 scan=11461  VAD  3      1      481.2681   448.2114   0        0      0.0644321  0.607    0.765     -
-controllerType=0 controllerNumber=1 scan=11461  SVA  3      1      394.1951   563.2793   0        0      0.11226    0.413    0.700     -
+spectrum                                        tag  length charge nterm_mass cterm_mass extended gapped evalue      min_conf mean_conf fasta_hit
+controllerType=0 controllerNumber=1 scan=11461  VAD  3      1      481.2681   448.2114   0        0      0.00480136  0.636    0.807     -
+controllerType=0 controllerNumber=1 scan=11461  SVA  3      1      394.1951   563.2793   0        0      0.00787212  0.594    0.793     -
+controllerType=0 controllerNumber=1 scan=11461  CVA  3      1      321.2195   563.2563   0        0      0.00901202  0.685    0.823     -
+controllerType=0 controllerNumber=1 scan=11461  VAE  3      1      481.2719   434.1920   0        0      0.0213065   0.686    0.824     -
 ```
 
 (The file is tab-separated; it is aligned here for reading.)
@@ -96,7 +99,6 @@ the tags (`-extension 1` gives tags of up to 5 residues; README, Usage, explains
 
 ```bash
 FASTag -in examples/Ecoli_MS2_small.mzML -out hits.tsv \
-       -fragment_tolerance 0.3 -fragment_tolerance_unit Da \
        -fasta examples/Ecoli_MS2_small.fasta -extension 1 -out_spectra hits.mzML
 ```
 
@@ -130,22 +132,26 @@ match), `db_genes` (the `GN=` of the FASTA header, `-` here because this FASTA h
 ### Step 3: where do the tags lie in the proteins?
 
 `-recon_out` places each reported tag on tryptic peptides of the database and checks both
-flanking masses; `-census` adds one row per spectrum saying what became of it.
+flanking masses; `-census` adds one row per spectrum saying what became of it. The flanks are
+checked at `-fragment_tolerance`, which the per-analyser rule of step 1 does not change, so
+give this ion-trap run its tolerance in Da (at the 20 ppm default, flanks that are off by
+0.01 Da no longer fit, and only 5 spectra are placed with both flanks):
 
 ```bash
 FASTag -in examples/Ecoli_MS2_small.mzML -out place.tsv \
-       -fragment_tolerance 0.3 -fragment_tolerance_unit Da \
+       -fragment_tolerance 0.5 -fragment_tolerance_unit Da \
        -fasta examples/Ecoli_MS2_small.fasta -extension 1 \
        -recon_out place.recon.tsv -census
 ```
 
 ```
-Census: 139 MS2 spectra read, 54 with a reported tag (6 placed), 0 no_tags -> place.census.tsv, ...
+Census: 139 MS2 spectra read, 57 with a reported tag (7 placed), 0 no_tags -> place.census.tsv, ...
 ```
 
-Expected: `place.recon.tsv` has 102 placement rows from 6 spectra; `place.census.tsv` has 139
-rows: 6 `placed`, 48 `tagged` (a tag passed the filter but its flanks fit no peptide) and 85
-`filtered` (no tag matched the proteins). The first rows of the placement report:
+The tags are the same as in step 2. Expected: `place.recon.tsv` has 129 placement rows from
+7 spectra; `place.census.tsv` has 139 rows: 7 `placed`, 50 `tagged` (a tag passed the filter
+but its flanks fit no peptide) and 82 `filtered` (no tag matched the proteins). The first rows
+of the placement report:
 
 ```
 spectrum                                       tag    protein     peptide                         pos reversed nterm_match cterm_match delta_mass region delta_interp
@@ -155,8 +161,8 @@ controllerType=0 controllerNumber=1 scan=11482 GAQAW  VIMSS17368  HADNTLTFGPRDGY
 ```
 
 A row with both `nterm_match` and `cterm_match` 1 places the whole spectrum on that peptide:
-the tag and both flanking masses fit. Here the 6 placed spectra fall on three peptides, one
-per protein: `DGYADGWAQAGTAR` (rplF, 2 spectra), `IIVDTYGGMAR` (metK, 2) and
+the tag and both flanking masses fit. Here the 7 placed spectra fall on three peptides, one
+per protein: `DGYADGWAQAGTAR` (rplF, 3 spectra), `IIVDTYGGMAR` (metK, 2) and
 `LYTSLGDAAVGR` (prsA, 2). When one flank does not fit, `delta_mass` is the mass difference on
 that side, `region` the residues it lies in, and `delta_interp` a candidate explanation
 (`mod:...`, `sub:...` or `?`). Large differences such as -1660.9 Da mean only that the tag sits
@@ -169,11 +175,13 @@ FASTag could read and how much of it your proteins explain.
 
 ### Next steps
 
-- High-resolution data: keep the 20 ppm default (`-fragment_tolerance 20`).
+- High-resolution data: keep the 20 ppm default (`-fragment_tolerance 20`). A run that mixes
+  ion-trap and Orbitrap MS2 needs no setting for its tags: each spectrum gets its analyser's
+  tolerance.
 - A proteome-sized database needs longer tags: `-extension 3` (README, Usage), as in Part 2.
 - `-species` names the organisms in a run (needs the taxonomy index; README, Species detection).
-- `-shortlist_out` and `-fasta_out` reduce a database for a search engine (README, Protein
-  shortlist and search hand-off).
+- `-shortlist_out` and `-fasta_out` reduce a database for a search engine, with the shortlist
+  recipe of doc/SHORTLIST.md as their defaults (README, Protein shortlist and search hand-off).
 
 ## Part 2: PXD000001
 
@@ -218,12 +226,13 @@ FASTag -in PXD000001.mzML -out pxd1.tsv \
 Modification 'TMT6plex (N-term)' is terminal; it is absorbed into the reported flanking masses and not annotated per-residue.
 Modifications: Methylthio (C, fixed), TMT6plex (K, fixed)
 Acquisition check: DDA (...)
+Tolerance by analyzer: ion-trap MS2 at 0.5 Da, ...; other MS2 at 20 ppm. The probe draw found 0 ion-trap MS2.
 6103 MS2 spectra, 215527 tags
 ```
 
 Expected: 6,103 MS2 spectra (of 7,534 spectra in the file), 215,527 tags from 5,590 spectra.
-On a 224-core Linux node with `-threads 8` and the file in the page cache this took 0.4 s and
-84 MB.
+No spectrum is ion-trap, so every one is tagged at 20 ppm. On an Apple M4 Max with 8 threads
+(`-threads 8`, the default there) this took 0.29 s and 116 MB.
 
 ### Check the tags against the published search
 
@@ -263,26 +272,33 @@ FASTag -in PXD000001.mzML -out pxd1.hits.tsv \
 ```
 
 ```
-Recon index: 4499 proteins, 1455924 residues, 11 isobaric rules; min tag length 7 (derived)
-Census: 6103 MS2 spectra read, 2747 with a reported tag (2221 placed), 512 no_tags -> ...
+Shortlist recipe defaults (doc/SHORTLIST.md): -tag_length 4, -shortlist_min_spectra 1, -recon_min_length 6, -recon_missed_cleavages 2, -shortlist_gapped on, -shortlist_max_evalue 10; an option given on the command line or in an INI wins.
+Recon index: 4499 proteins, 1455924 residues, 11 isobaric rules; min tag length 6 (shortlist recipe default)
+Filter: 4499 sequences, 1455924 residues; minimum tag length 7 (derived); 11 isobaric rules
+Census: 6103 MS2 spectra read, 3103 with a reported tag (2397 placed), 973 no_tags -> ...
 Shortlist protease check: Trypsin fits the tag ends best.
-Shortlist: 189 of 331 proteins with evidence kept, not FDR-controlled -> pxd1.shortlist.tsv
-6103 MS2 spectra, 222468 tags -> 15938 after filtering
+Shortlist: 476 of 476 proteins with evidence kept, not FDR-controlled -> pxd1.shortlist.tsv
+6103 MS2 spectra, 211060 tags -> 12739 after filtering
   len         tags      matched    by chance enrichment
     ...
-    7        30495         7214          593      12.2x
-    8        17788         4179           24     176.0x
-    9        18003         4545            2    2779.0x
+    7        66762         9389         1298       7.2x
+    8        25830         4673           34     135.6x
+    9        14259         2903            1    2241.1x
+   10        13714         2944            0   34736.0x
 ```
 
-Expected: against 4,499 proteins only tags of 7 residues or more are matched; 15,938 tag rows
-from 2,747 spectra pass, 2,221 spectra are placed on a peptide (`pxd1.recon.tsv`, 24,722
-placements), and the shortlist keeps 189 of the 331 proteins with tag evidence (at least 2
-spectra each). The run took 1.8 s and 213 MB on the same node. The shortlist is a search-space
-reduction, not protein identification (README, Protein shortlist and search hand-off).
+`-shortlist_out` switches on the shortlist recipe (doc/SHORTLIST.md): seed tags of 4
+residues, placed tags from 6, gapped placements counted, and a protein kept from one
+spectrum; the `-extension 3` given here replaces the recipe's extension 6. Expected: against
+4,499 proteins only tags of 7 residues or more are matched; 12,739 tag rows from 3,103
+spectra pass, 2,397 spectra are placed on a peptide (`pxd1.recon.tsv`, 43,321 placements),
+and the shortlist keeps all 476 proteins with tag evidence. The run took 1.7 s and 393 MB on
+the same machine. The shortlist is a search-space reduction, not protein identification
+(README, Protein shortlist and search hand-off).
 
 ## Desktop app
 
 The same Part 1 run in the desktop app, with screenshots: [MANUAL.md](MANUAL.md). In the app,
-**File > Open Example Data** selects `Ecoli_MS2_small.mzML`; choose the **Ion trap CID 0.3 Da**
-preset and run.
+**File > Open Example Data** selects `Ecoli_MS2_small.mzML`. The app tags its ion-trap spectra
+at 0.5 Da with any **Instrument** preset; choose **Ion trap CID 0.3 Da**, which also gives the
+placement and mass-shift reports a Da tolerance, and run.

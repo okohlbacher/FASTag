@@ -272,7 +272,7 @@ export const FAQ: FaqEntry[] = [
       <>The <L to="gloss-e-value">E-value</L> cutoff (<C>max_evalue</C>) is low, or the file holds no MS2 spectra.</>
     ],
     fixes: [
-      <>Set the tolerance to the instrument: 20 ppm for Orbitrap, Astral and TOF data, 0.3 Da for an ion trap. See <L to="param-fragment_tolerance">Fragment tolerance</L>.</>,
+      <>Set the tolerance to the instrument: 20 ppm for Orbitrap, Astral and TOF data, 0.3 Da for an ion trap. Ion-trap spectra that the file marks as such are tagged at 0.5 Da without it (Advanced › Fragment tolerance by analyzer). See <L to="param-fragment_tolerance">Fragment tolerance</L>.</>,
       <>Centroid profile spectra first (for example with OpenMS PeakPickerHiRes or msconvert), or convert the run to mzPeak, which FASTag centroids as it reads.</>,
       <>Run once without a sequence database to see how many tags there are at all.</>
     ]
@@ -282,7 +282,7 @@ export const FAQ: FaqEntry[] = [
     group: 'Few or no tags',
     question: 'The log warns "No two peaks anywhere in this file are closer than …"',
     symptoms: <>A warning in the log that names a distance between peaks and the fragment tolerance.</>,
-    causes: [<>The peaks of this file lie much further apart than the tolerance. That is what low-resolution (ion-trap) spectra look like when read with a high-resolution tolerance.</>],
+    causes: [<>The peaks of this file lie much further apart than the tolerance. That is what low-resolution (ion-trap) spectra look like when read with a high-resolution tolerance. With Fragment tolerance by analyzer on (the default), ion-trap spectra that the file marks as such are tagged at 0.5 Da, so the warning points at spectra whose analyser the file does not name.</>],
     fixes: [<>If the MS2 spectra come from an ion trap, set the fragment tolerance to 0.3 Da. The input checks may identify the instrument and suggest an Instrument preset. Confirm the analyser that measured MS2 before applying it: an instrument with more than one analyser does not always say which one was used.</>]
   },
   {

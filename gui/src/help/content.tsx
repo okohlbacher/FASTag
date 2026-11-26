@@ -92,7 +92,9 @@ export const START: HelpPage = {
             <li>
               Check the instrument suggestion and the checks below the input. Under About these spectra (step 2), choose the
               <strong> Instrument</strong>, which sets the <L to="param-fragment_tolerance">fragment tolerance</L>: 20 <G to="gloss-ppm">ppm</G> is a starting
-              point for high-resolution MS2; 0.3 Da is a starting point for ion-trap MS2. Use the analyser that
+              point for high-resolution MS2; 0.3 Da is a starting point for ion-trap MS2. Spectra the file marks as
+              ion-trap are tagged at 0.5 Da whatever the preset (Advanced › Fragment tolerance by analyzer); the
+              preset sets the tolerance of all other spectra and of the reports. Use the analyser that
               measured the fragments, not just the instrument name. Apply a suggested preset only when it fits
               your acquisition.
             </li>
@@ -474,7 +476,9 @@ export const TAGS: HelpPage = {
           </p>
           <p>
             Use the analyser that measured MS2 to choose the setting: 20 ppm is a starting point for high-resolution
-            Orbitrap, Astral or TOF spectra; 0.3 Da for ion-trap spectra. Too narrow a window loses real steps;
+            Orbitrap, Astral or TOF spectra; 0.3 Da for ion-trap spectra. Ion-trap spectra that the file marks as
+            such are tagged at the ion-trap tolerance (0.5 Da) whatever this setting, which then applies to the
+            other spectra and to the placement and mass-shift reports. Too narrow a window loses real steps;
             too wide a window admits more chance matches. Changing the unit to ppm cannot make low-resolution
             data high-resolution. With a Da tolerance, the default digest and label rules make no call.
           </p>

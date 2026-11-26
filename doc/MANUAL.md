@@ -26,17 +26,23 @@ Setup goes through four steps: **Task**, **Inputs**, **Settings** and **Outputs 
    report the run's quality or rank spectra by how identifiable they are. Click
    **Continue with Generate tags ›**.
 2. **Inputs**: **Checks before the run** reads the file's metadata. Here the instrument is an LTQ
-   Orbitrap XL, which can read MS2 in either analyser; the file does not say which, so the app does
-   not guess and warns that the MS2 may be ion-trap.
-3. The **Instrument** preset under **About these spectra** sets the fragment tolerance and must
-   match the analyser that read the MS2: about 20 ppm for Orbitrap, Astral or TOF MS2, 0.3 Da for
-   ion-trap MS2. This file is ion-trap MS2: choose **Ion trap CID 0.3 Da**.
+   Orbitrap XL, which can read MS2 in either analyser; its instrument configuration does not say
+   which, so the app does not guess and warns that the MS2 may be ion-trap.
+3. The **Instrument** preset under **About these spectra** sets the fragment tolerance. MS2
+   spectra that the file marks as ion-trap (in the Thermo filter string, `ITMS`, or in the
+   spectrum's instrument configuration) are tagged at 0.5 Da whatever the preset (Advanced ›
+   **Fragment tolerance by analyzer**, on by default). The preset's tolerance applies to all
+   other spectra and to the placement and mass-shift reports, so it must match the analyser that
+   read the MS2: about 20 ppm for Orbitrap, Astral or TOF MS2, 0.3 Da for ion-trap MS2. This
+   file's spectra are marked `ITMS`, so its tags are read at 0.5 Da with any preset; choose
+   **Ion trap CID 0.3 Da**, which also clears the warning and gives the reports of the other
+   tasks a Da tolerance.
 4. **Settings** keeps the task's values (tag length 3, extension 3).
 5. **Outputs & run**: by default the tags TSV is written beside the input, named after the run.
 6. Click **Run**.
 
-If the tolerance was wrong, **Checks after the run** says so from the peak spacing it saw and offers
-a re-run with the right setting:
+If the tolerance was wrong for spectra the file does not mark as ion-trap, **Checks after the run**
+says so from the peak spacing it saw and offers a re-run with the right setting:
 
 ![Checks after a run at the wrong tolerance](images/manual-02-checks-after-run.png)
 
