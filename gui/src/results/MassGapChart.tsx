@@ -235,7 +235,7 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
 
   const zero = drawn.find((d) => Math.abs(d.bin.gap) <= shiftedAt && d.cut)
   const summary =
-    `${fmt(sorted.reduce((n, b) => n + b.spectra, 0))} placed spectra in ${fmt(sorted.length)} gap peaks; ` +
+    `${fmt(sorted.reduce((n, b) => n + b.spectra, 0))} placed ${sorted.reduce((n, b) => n + b.spectra, 0) === 1 ? 'spectrum' : 'spectra'} in ${fmt(sorted.length)} gap ${sorted.length === 1 ? 'peak' : 'peaks'}; ` +
     `shown ${da(lo, 0)} to ${da(hi, 0)} Da` +
     (zero ? `; the zero bin (${fmt(zero.bin.spectra)}) is cut at ${fmt(yTop)}` : '') +
     (outside ? `; ${fmt(outside)} peaks (${fmt(outsideSpectra)} spectra) lie outside` : '')

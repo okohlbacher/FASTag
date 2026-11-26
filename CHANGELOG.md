@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.16.2 (2026-11-25)
+
+Fixes from the user-interface tests of 1.16.1, a new database-reduction recipe in the desktop app, Run QC tiles
+on the Overview, and release checks that now count. The CLI's tags and reports are unchanged.
+
+- **Desktop app, Setup.**
+  - A chosen output folder stays when the run name is cleared and typed again (it went back to the input's folder).
+  - Mass-shift survey: the database fields are no longer locked by the reports that need them; a run without a
+    database, restored from History, can be given one.
+  - Unchecking "Spectra ranked by identifiability" also removes `-census_score`.
+  - The line under Shipped proteome names the organism after a Species run at genus rank (the default).
+  - An input file no longer marks a task or preset "(modified)"; Reset and a just-saved preset behave again.
+  - "Advanced (n changed)" counts the Species, Glycopeptide and Identifiability reports switched on.
+  - Every edited field shows "changed" with the default it left, basic and Advanced fields alike.
+  - Database reduction sends the shortlist recipe of doc/SHORTLIST.md: `-tag_length 4 -extension 6
+    -shortlist_min_spectra 1` in addition to the gapped placements, E-value 10, shortest placed tag 6 and 2 missed
+    cleavages it sent before (held-out PASS on PXD045390). Its texts say so.
+  - Batch mode shows the first file's command line; Comet's note points to Inputs for its template, and a Comet
+    preset loads with a `.params` configuration name; the files written by a triage run are listed in full.
+- **Desktop app, running and Results.**
+  - While a run goes, including a History re-run or an Overview "run again", Setup shows the request that was sent.
+  - A double-click on a Tags row opens that row's spectrum (the table moved between the two clicks).
+  - Parameter search: Enter opens the first hit wherever the pointer rests; a parameter that waits for an input
+    opens Inputs with that input.
+  - The Overview gets Isobaric kit and Redundancy tiles from the QC report; they open the QC tab.
+  - The decoy presence call is marked experimental on the Overview and the Species tab.
+  - A dropped FASTA or index opens its input and says where it went; Escape closes a (?) popover opened with the
+    mouse (WebKit); the Feedback panel no longer covers the app bar at 960×600.
+  - Wording, contrast and layout: report headings, singular counts, wrapping evidence notes, the run-status pill,
+    History beside Help, field styling, the Command line chevron.
+- **Help and documents.** The Help on sharing a feedback screenshot (included by default) and the "Does my protein
+  occur?" recipe are corrected; the manual, the READMEs and the tutorial describe the 1.16 window and the output
+  of 1.16.
+- **CLI.** Database reduction no longer warns of a target-decoy database with an empty decoy prefix.
+- **Packages and CI.** The Linux tarballs and the AppImage no longer carry macOS `._` files, and a check rejects
+  any package that does. The macOS app and the installed `.deb` start in CI (the app's start-up self-test). The
+  Windows backend tests and the Linux real-CLI desktop specs count (both were informational and hid failures).
+  The Linux desktop packages no longer wait for the macOS builds.
+- **macOS Intel is no longer built.** 1.16.1 is the last release with `*-macos-x64.dmg` and
+  `*-gui-macos-x64.dmg`; the Homebrew casks install on Apple silicon only.
+
 ## 1.16.1 (2026-11-25)
 
 - **Taxonomy index: a linked file is checked by size and time stamp on use, not hashed again.**

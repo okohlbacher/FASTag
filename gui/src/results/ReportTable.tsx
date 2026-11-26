@@ -113,6 +113,9 @@ const FORMATS: Record<string, Format> = {
   pre_best_evalue: { label: 'Best E-value before filtering', text: evalueText, num: true },
   evalue: { label: 'E-value', text: evalueText, num: true },
   best_len: { label: 'Best tag length' },
+  // database-10: in words, as MANUAL 3 names them.
+  max_len: { label: 'Longest tag' },
+  res_cover: { label: 'Residues covered' },
   pre_best_len: { label: 'Best tag length before filtering' },
   best_min_conf: { label: 'Lowest residue confidence' },
   best_mean_conf: { label: 'Mean residue confidence' },
@@ -906,6 +909,9 @@ export interface ReportTableProps {
   params?: Record<string, unknown> | null
   summaryPath?: string | null
   summaryGen?: number
+  /// The heading of a generic report; without one, its file name as written
+  /// (database-12: never "Run01.delta spectra.tsv").
+  title?: string
 }
 
 const REPORT_TITLE: Partial<Record<ReportKind, string>> = {
@@ -919,11 +925,11 @@ const REPORT_HELP: Partial<Record<ReportKind, { to: string; label: string }>> = 
   triage: { to: 'workflow-triage', label: 'How to read the ranking' }
 }
 
-export default function ReportTable({ kind, path, gen, files = [], openSpectrum, params, summaryPath, summaryGen }: ReportTableProps): JSX.Element {
+export default function ReportTable({ kind, title: given, path, gen, files = [], openSpectrum, params, summaryPath, summaryGen }: ReportTableProps): JSX.Element {
   const { tsv, error } = useReport(path, gen)
   // A census without a score is no ranking (TriageView says the same).
   const census = kind === 'triage' && !!tsv && !tsv.columns.includes('ident_score')
-  const title = census ? 'Spectra, one row each (no identifiability score)' : (REPORT_TITLE[kind] ?? headText(baseName(path)))
+  const title = census ? 'Spectra, one row each (no identifiability score)' : (given ?? REPORT_TITLE[kind] ?? baseName(path))
   const help = census ? { to: 'workflow-triage', label: 'How to read this table' } : REPORT_HELP[kind]
   return (
     <div className={`report-view report-${kind}`}>

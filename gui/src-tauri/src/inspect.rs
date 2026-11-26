@@ -345,6 +345,12 @@ pub async fn probe_input(app: AppHandle, input: String, fasta: Option<String>) -
 mod tests {
     use super::*;
 
+    /// @p p ("/d/a.mzML") as an absolute path on this platform: "C:/d/a.mzML" on Windows,
+    /// where a path without a drive is not absolute.
+    fn abs(p: &str) -> String {
+        if cfg!(windows) { format!("C:{p}") } else { p.to_string() }
+    }
+
     // The real --helphelp of the integration/1.12 build (0e4b0c5) on node
     // data: src/fixtures/cli-1.12/helphelp.txt.
     const HELPHELP_112: &str = include_str!("../../src/fixtures/cli-1.12/helphelp.txt");
@@ -372,19 +378,19 @@ mod tests {
     #[test]
     fn probe_args_need_the_flag_and_absolute_paths() {
         let without = parse_options(HELPHELP_112);
-        assert!(probe_args(&without, "/d/a.mzML", None).unwrap_err().contains("no -probe_input"));
+        assert!(probe_args(&without, &abs("/d/a.mzML"), None).unwrap_err().contains("no -probe_input"));
         let with: Vec<String> = ["probe_input", "fasta"].iter().map(|s| s.to_string()).collect();
-        assert_eq!(probe_args(&with, "/d/a.mzML", None).unwrap(), vec!["-probe_input", "/d/a.mzML"]);
+        assert_eq!(probe_args(&with, &abs("/d/a.mzML"), None).unwrap(), vec!["-probe_input", &abs("/d/a.mzML")]);
         assert_eq!(
-            probe_args(&with, "/d/a.mzML", Some("/d/h.fasta")).unwrap(),
-            vec!["-probe_input", "/d/a.mzML", "-fasta", "/d/h.fasta"]
+            probe_args(&with, &abs("/d/a.mzML"), Some(&abs("/d/h.fasta"))).unwrap(),
+            vec!["-probe_input", &abs("/d/a.mzML"), "-fasta", &abs("/d/h.fasta")]
         );
         assert!(probe_args(&with, "a.mzML", None).is_err());
         assert!(probe_args(&with, "-force", None).is_err());
-        assert!(probe_args(&with, "/d/a.mzML", Some("-x")).is_err());
+        assert!(probe_args(&with, &abs("/d/a.mzML"), Some("-x")).is_err());
         // A CLI whose probe takes no -fasta: the FASTA is left out.
         let only: Vec<String> = vec!["probe_input".into()];
-        assert_eq!(probe_args(&only, "/d/a.mzML", Some("/d/h.fasta")).unwrap(), vec!["-probe_input", "/d/a.mzML"]);
+        assert_eq!(probe_args(&only, &abs("/d/a.mzML"), Some(&abs("/d/h.fasta"))).unwrap(), vec!["-probe_input", &abs("/d/a.mzML")]);
     }
 
     #[cfg(unix)]

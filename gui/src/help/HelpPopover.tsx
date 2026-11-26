@@ -138,7 +138,12 @@ export default function HelpPopover({ name, label, description, deflt, more, tip
         aria-expanded={open}
         aria-controls={open ? id : undefined}
         data-param-help={name}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          // WebKit does not focus a clicked button: focused here, so Escape
+          // reaches the wrapper's handler however it was opened.
+          btn.current?.focus()
+          setOpen((o) => !o)
+        }}
       >
         ?
       </button>

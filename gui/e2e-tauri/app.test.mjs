@@ -199,6 +199,8 @@ test('run: Choose file, Run, and the table shows what the CLI wrote', { timeout:
 // The CLI processes of a run: the stub (a shell script) or the bundled CLI.
 const CLI_PATTERN = MODE === 'stub' ? 'testing/stub-fastag/FASTag' : 'resources/fastag/bin/FASTag'
 const cliAlive = () => spawnSync('pgrep', ['-f', '--', CLI_PATTERN]).status === 0
+// The command lines of the running CLI processes, for a failure message.
+const cliProcs = () => spawnSync('pgrep', ['-af', '--', CLI_PATTERN], { encoding: 'utf8' }).stdout.trim() || '(none)'
 
 /** Open Advanced and its Performance group and set -threads to @p n through the form. */
 async function setThreads(s, n) {
@@ -230,9 +232,15 @@ test('cancel: a Cancel mid-run ends the CLI and leaves no truncated output', { t
     }
     const out = tagsOf(input)
     try {
+      // Nothing of an earlier app may survive it (a leftover here is an app defect).
+      assert.ok(!cliAlive(), `a ${CLI_PATTERN} process is left over before the input is chosen: ${cliProcs()}`)
       await chooseInput(s, input)
       if (MODE === 'real') await setThreads(s, 1)
-      assert.ok(!cliAlive(), `a ${CLI_PATTERN} process is running before the run`)
+      // Choosing the input starts the inspector's probe (-probe_input), a CLI
+      // process of its own; on the real CLI and the repeated fixture it is still
+      // reading when Settings is reached (ci-1, 1.16.1). Wait for it to end, so
+      // the CLI seen at the Cancel is the run's.
+      await until(`the input probe to end (${CLI_PATTERN})`, () => !cliAlive(), 120000, 100)
       await runOn(s, input)
       const cancel = await s.button('Cancel', 60000)
       // The CLI has opened -out (FASTag.cpp opens it before the first

@@ -283,7 +283,7 @@ export const FAQ: FaqEntry[] = [
     question: 'The log warns "No two peaks anywhere in this file are closer than …"',
     symptoms: <>A warning in the log that names a distance between peaks and the fragment tolerance.</>,
     causes: [<>The peaks of this file lie much further apart than the tolerance. That is what low-resolution (ion-trap) spectra look like when read with a high-resolution tolerance.</>],
-    fixes: [<>If the MS2 spectra come from an ion trap, set the fragment tolerance to 0.3 Da. The input checks may identify the instrument and suggest a Fragment tolerance preset. Confirm the analyser that measured MS2 before applying it: an instrument with more than one analyser does not always say which one was used.</>]
+    fixes: [<>If the MS2 spectra come from an ion trap, set the fragment tolerance to 0.3 Da. The input checks may identify the instrument and suggest an Instrument preset. Confirm the analyser that measured MS2 before applying it: an instrument with more than one analyser does not always say which one was used.</>]
   },
   {
     id: 'faq-stale-index',

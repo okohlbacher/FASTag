@@ -56,8 +56,9 @@ describe('Mass-shift survey without a protein database (feedback 422372a2)', () 
     expect(proteomeHint(sp(9913, 'Bos taurus'), '')).toBe(
       'Species detection names Bos taurus first in this file; no shipped proteome fits: give its FASTA as Protein database.'
     )
-    // A taxon the call says is not there names nothing.
-    expect(topSpecies(sp(9606, 'Homo sapiens', 'not_detected'))).toBeNull()
+    // A species the call says is not there is passed over for its genus
+    // (database-3: a genus report names the organism too).
+    expect(topSpecies(sp(9606, 'Homo sapiens', 'not_detected'))).toEqual({ name: 'Homo', proteome: 'human' })
   })
 
   it('Run is not blocked; the shift reports say they need a protein database; Human puts them in the run', async () => {

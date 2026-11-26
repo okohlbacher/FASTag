@@ -121,6 +121,7 @@ describe('D9 tokens', () => {
       expect(contrast(value(t, '--flag-text'), value(t, '--flag-bg'))).toBeGreaterThanOrEqual(4.5)
       expect(contrast(value(t, '--ok'), value(t, '--ok-bg'))).toBeGreaterThanOrEqual(4.5)
       expect(contrast(value(t, '--primary-foreground'), value(t, '--primary')), `${name} on accent`).toBeGreaterThanOrEqual(4.5)
+      expect(contrast(value(t, '--muted-on-soft'), value(t, '--primary-soft')), `${name} muted on accent tint`).toBeGreaterThanOrEqual(4.5)
     }
   })
 

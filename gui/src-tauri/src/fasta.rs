@@ -872,11 +872,14 @@ MAAKDVKFGN\nDARVKMLRGV\r\nNVLADAVKVT LGPKGRNVVL*\n\
     #[test]
     fn the_databases_a_run_reads_are_recorded_by_identity() {
         let p = file("allowed", FASTA);
-        let argv: Vec<String> = ["/bin/FASTag", "-in", "a.mzML", "-fasta", "db.fasta", "-entrapment_fasta", "/x/e.fasta", "-out", "o.tsv"]
+        // An absolute path on every platform ("/x/e.fasta" has no drive, so it is relative on Windows).
+        let e = std::env::temp_dir().join("fastag-fasta-missing").join("e.fasta");
+        let es = e.to_string_lossy().into_owned();
+        let argv: Vec<String> = ["/bin/FASTag", "-in", "a.mzML", "-fasta", "db.fasta", "-entrapment_fasta", es.as_str(), "-out", "o.tsv"]
             .map(String::from)
             .to_vec();
         let dbs = databases_of(&argv, p.parent());
-        assert_eq!(dbs, vec![("fasta".to_string(), p.clone()), ("entrapment_fasta".to_string(), PathBuf::from("/x/e.fasta"))]);
+        assert_eq!(dbs, vec![("fasta".to_string(), p.clone()), ("entrapment_fasta".to_string(), e.clone())]);
         // The missing one is left out; the other is canonical.
         let ids = identities_of(&argv, p.parent());
         assert_eq!(ids.len(), 1);

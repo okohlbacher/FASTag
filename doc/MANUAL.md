@@ -16,18 +16,24 @@ installer, Linux `.deb`, tarball or AppImage).
 write to and selects it as input. Any mzML, mzPeak or MGF file works the same way through
 **Choose file…** or by dropping it on the window.
 
-![Setup with the example run selected](images/manual-01-setup.png)
+![Setup, step Inputs, with the example run selected](images/manual-01-setup.png)
 
-1. **What do you want to do?** Keep **Generate tags**: tags for all spectra. The other tasks open
-   earlier results, survey a run (species, digestion, labels) or check a batch against an SDRF file.
-2. **Checks before the run** reads the file's metadata. Here the instrument is an LTQ Orbitrap XL,
-   which can read MS2 in either analyser; the file does not say which, so the app does not guess and
-   warns that the MS2 may be ion-trap.
-3. **Fragment tolerance preset** must match the analyser that read the MS2: about 20 ppm for
-   Orbitrap, Astral or TOF MS2, 0.3 Da for ion-trap MS2. This file is ion-trap MS2: choose
-   **Ion trap CID 0.3 Da**.
-4. **Output**: by default the tags TSV is written beside the input.
-5. Click **Run on Ecoli_MS2_small.mzML**.
+Setup goes through four steps: **Task**, **Inputs**, **Settings** and **Outputs & run**.
+
+1. **Task** asks **What do you want to do?** Keep **Generate tags**: tags for all spectra, with a
+   confidence per residue. The other six tasks characterize a run (protease, labels, alkylation,
+   glycopeptides, species), rank its species, survey its mass shifts, reduce a search database,
+   report the run's quality or rank spectra by how identifiable they are. Click
+   **Continue with Generate tags ›**.
+2. **Inputs**: **Checks before the run** reads the file's metadata. Here the instrument is an LTQ
+   Orbitrap XL, which can read MS2 in either analyser; the file does not say which, so the app does
+   not guess and warns that the MS2 may be ion-trap.
+3. The **Instrument** preset under **About these spectra** sets the fragment tolerance and must
+   match the analyser that read the MS2: about 20 ppm for Orbitrap, Astral or TOF MS2, 0.3 Da for
+   ion-trap MS2. This file is ion-trap MS2: choose **Ion trap CID 0.3 Da**.
+4. **Settings** keeps the task's values (tag length 3, extension 3).
+5. **Outputs & run**: by default the tags TSV is written beside the input, named after the run.
+6. Click **Run**.
 
 If the tolerance was wrong, **Checks after the run** says so from the peak spacing it saw and offers
 a re-run with the right setting:

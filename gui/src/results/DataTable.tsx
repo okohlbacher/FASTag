@@ -184,7 +184,7 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
     <div className="dtable">
       <div className="dt-bar">
         <span className="dt-count" aria-live="polite">
-          {n === total ? `${n.toLocaleString('en-US')} rows` : `${n.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} rows`}
+          {n === total ? `${n.toLocaleString('en-US')} ${total === 1 ? 'row' : 'rows'}` : `${n.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} ${total === 1 ? 'row' : 'rows'}`}
           {n > PAGE && ` · showing ${(start + 1).toLocaleString('en-US')}–${Math.min(n, start + PAGE).toLocaleString('en-US')}`}
         </span>
         {onOpen && n > 0 && (

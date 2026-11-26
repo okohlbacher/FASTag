@@ -52,6 +52,9 @@
   --primary-text: #2559c2;
   --primary-hover: #2457bd;
   --primary-soft: #e8eefc;
+  /* Muted text on the accent tint (selected tile, active search hit):
+     --muted-foreground is 4.48:1 there, this is 4.98:1. */
+  --muted-on-soft: #5f6672;
   --primary-weak: #7090e0;
   --ok-bg: #eaf6ee;
   --destructive-text: #b42318;
@@ -117,6 +120,7 @@
     --primary-text: #5c9dff;
     --primary-hover: #8ab8ff;
     --primary-soft: #1d2b4d;
+    --muted-on-soft: var(--muted-foreground);
     --primary-weak: #4f6fb5;
     --ok-bg: #123222;
     --destructive-text: #f2666a;
@@ -156,6 +160,7 @@
   --primary-text: #5c9dff;
   --primary-hover: #8ab8ff;
   --primary-soft: #1d2b4d;
+  --muted-on-soft: var(--muted-foreground);
   --primary-weak: #4f6fb5;
   --ok-bg: #123222;
   --destructive-text: #f2666a;

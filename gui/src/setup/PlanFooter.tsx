@@ -94,7 +94,19 @@ export default function PlanFooter({ session, run }: { session: Session; run: Ru
         </p>
       </div>
       <div className="row tight plan-actions">
-        <button type="button" className="secondary small" onClick={copy} disabled={!input || run.jobs.length > 0 || session.mode === 'batch'}>
+        <button
+          type="button"
+          className="secondary small"
+          onClick={copy}
+          disabled={!input || run.jobs.length > 0 || session.mode === 'batch'}
+          title={
+            run.jobs.length > 0 || session.mode === 'batch'
+              ? 'Each file of a batch has its own command line: Outputs & run shows the first one, the Batch view logs each.'
+              : !input
+                ? 'Choose an input file first.'
+                : undefined
+          }
+        >
           {copied === 'yes' ? 'Copied' : 'Copy command line'}
         </button>
         <button type="button" className="secondary small" onClick={exportIni} title="Write these settings as an INI file the FASTag command line reads">

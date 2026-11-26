@@ -181,7 +181,7 @@ export default function OverviewPanel({ overview: o, input, busy, onAction, acti
               <tr key={s.setting}>
                 <th scope="row">{settingWords(s.setting)}</th>
                 <td className="mono">{s.value}</td>
-                <td>
+                <td className="sug-note">
                   <span className={`evidence ev-${s.evidence}`}>{EVIDENCE[s.evidence]}</span> {s.note}
                 </td>
               </tr>

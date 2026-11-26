@@ -987,7 +987,7 @@ dependencies = [
 
 [[package]]
 name = "fastag"
-version = "1.16.1"
+version = "1.16.2"
 dependencies = [
  "block2",
  "cairo-rs",

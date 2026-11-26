@@ -141,16 +141,12 @@ without it):
 | platform | desktop app | command line |
 |---|---|---|
 | macOS, Apple silicon | [`FASTag-<version>-gui-macos-arm64.dmg`](https://github.com/okohlbacher/FASTag/releases/latest) | [`FASTag-<version>-macos-arm64.dmg`](https://github.com/okohlbacher/FASTag/releases/latest) |
-| macOS, Intel | [`FASTag-<version>-gui-macos-x64.dmg`](https://github.com/okohlbacher/FASTag/releases/latest) | [`FASTag-<version>-macos-x64.dmg`](https://github.com/okohlbacher/FASTag/releases/latest) |
 | Windows x64 | [`FASTag-<version>-gui-windows-x64-setup.exe`](https://github.com/okohlbacher/FASTag/releases/latest) | [`FASTag-<version>-windows-x64.zip`](https://github.com/okohlbacher/FASTag/releases/latest) |
 | Linux x64 | [`fastag-gui_<version>_amd64.deb`](https://github.com/okohlbacher/FASTag/releases/latest) · [`FASTag-<version>-gui-linux-x64.tar.gz`](https://github.com/okohlbacher/FASTag/releases/latest) | [`FASTag-<version>-linux-x64.tar.gz`](https://github.com/okohlbacher/FASTag/releases/latest) |
 | Linux arm64 | [`fastag-gui_<version>_arm64.deb`](https://github.com/okohlbacher/FASTag/releases/latest) · [`FASTag-<version>-gui-linux-arm64.tar.gz`](https://github.com/okohlbacher/FASTag/releases/latest) | [`FASTag-<version>-linux-arm64.tar.gz`](https://github.com/okohlbacher/FASTag/releases/latest) |
 
-Intel Macs are built again from 1.15.0 on (1.8.0 to 1.14.x were Apple silicon
-only; [1.6.1](https://github.com/okohlbacher/FASTag/releases/tag/v1.6.1) is the
-last earlier Intel release). They depend on GitHub's Intel macOS runners, which
-GitHub retires in 2027: the last Intel build will be a release before August
-2027.
+Intel Macs are no longer built from 1.16.2 on: [1.16.1](https://github.com/okohlbacher/FASTag/releases/tag/v1.16.1)
+is the last Intel release.
 On macOS both are also on [Homebrew](https://github.com/okohlbacher/homebrew-fastag):
 `brew install --cask okohlbacher/fastag/fastag` (desktop app) or
 `brew install --cask okohlbacher/fastag/fastag-cli` (command line, `FASTag` on your PATH).
@@ -285,7 +281,7 @@ shows the `-digest_out`, `-label_out` and `-massgap_out` reports: the protease
 call or no-call with its reason, sequence logos P4..P1 | P1'..P4' of the
 observed tag ends and of the called and runner-up models (in bits against the
 background in use), the label counts, a histogram of the mass gaps and the mass-gap peaks. A
-**Mass gaps & recon** tab draws the `-delta_out` (or `-massgap_out`) gap peaks with about 60
+**Mass shifts** tab draws the `-delta_out` (or `-massgap_out`) gap peaks with about 60
 common Unimod deltas marked and the CLI's explained peaks labelled (hover or the arrow keys
 for each value, or the same values as a table), warns when too few spectra are placed for
 any conclusion, and shows the `-recon_out` placements, the gap peaks and an mzTab
@@ -295,13 +291,13 @@ placed too few spectra with an extension below 3 it offers the run with extensio
 `-delta_out` opened without its run's `-massgap_out` beside it is matched with an assumed
 0.5 Da window, and the chart says so. Tables up to 128 MB open in the app; larger ones
 open only in a spreadsheet. A **Glyco** tab lists the `-glyco_out` spectra, flagged ones first by their
-oxonium intensity. Setup starts
-with **Generate tags**, generating tags from **all input spectra** with
-per-residue confidence. **Open results / inspect spectra** is second;
-**Characterize a run** and **Batch QC vs SDRF** follow for assessment.
-Choose a file, check the MS2
-fragment tolerance and output path, then Run; the settings sit
-in four step cards, presets store only what differs from their task, and
+oxonium intensity. Setup goes through four steps (Task, Inputs, Settings,
+Outputs & run) and starts with **Generate tags**, generating tags from **all input
+spectra** with per-residue confidence. Six more tasks follow: **Characterize a run**,
+**Species**, **Mass-shift survey**, **Database reduction**, **Run QC** and
+**Identifiability triage**. Choose a file, check the **Instrument** preset (the MS2
+fragment tolerance) and the output, then **Run**; presets store only what differs from
+their task, and
 **Export INI…** writes the same parameters for `FASTag -ini`. The
 window has four views, switched from the top bar or with Cmd/Ctrl+1..4:
 **Setup**, **Results**, **Batch** and **History** (every recorded run, with

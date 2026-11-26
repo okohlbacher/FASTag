@@ -35,10 +35,29 @@ describe('the Overview of Run QC', () => {
     expect(tile(o, 'qc-tagged')!.value).toBe('18.7% (26)')
     expect(tile(o, 'qc-charge')!.value).toBe('2+ (69.8%)')
     const shown = shownTiles(o, { qc_out: '/d/a.qc.tsv' })
-    expect(shown.figures.map((t) => t.id)).toEqual(['spectra', 'instrument', 'tags', 'qc-tagged', 'qc-charge'])
+    expect(shown.figures.map((t) => t.id)).toEqual(['spectra', 'instrument', 'tags', 'qc-tagged', 'qc-charge', 'qc-kit', 'qc-redundancy'])
     expect(o.measured).toBe(false)
     // The acquisition line is short; its reasoning is a detail.
     for (const c of o.checks) expect(c.text.length).toBeLessThan(140)
+  })
+})
+
+describe('Run QC tiles on the Overview (PLAN-qc-clarity step 4)', () => {
+  it('the isobaric kit and the redundancy as the QC page says them', () => {
+    const o = buildOverview({ ...base, params: { qc_out: '/d/a.qc.tsv' }, qc: qcTsv })
+    expect(tile(o, 'qc-kit')).toMatchObject({ label: 'Isobaric kit', value: 'none found', tone: 'nocall' })
+    expect(tile(o, 'qc-redundancy')!.value).toMatch(/^\d+\.\d%$/)
+    expect(tile(o, 'qc-redundancy')!.note).toMatch(/QC report/)
+  })
+  it('a kit call of qc_version 3 is a call', () => {
+    const v3 = qcTsv.replace(/\nqc\treporter_compatible_kits[^\n]*/, '\nqc\treporter_kit\ttmt6plex\t100\tThe kit.\nqc\treporter_kit_candidates\ttmt6plex\t-\tCandidates.')
+    expect(tile(buildOverview({ ...base, params: { qc_out: '/d/a.qc.tsv' }, qc: v3 }), 'qc-kit')).toMatchObject({ value: 'TMT 6-plex', tone: 'call' })
+  })
+  it('a report without reporter or redundancy rows has neither tile', () => {
+    const bare = qcTsv.split('\n').filter((l) => !/\t(reporter_|redundancy_)/.test(l)).join('\n')
+    const o = buildOverview({ ...base, params: { qc_out: '/d/a.qc.tsv' }, qc: bare })
+    expect(tile(o, 'qc-kit')).toBeUndefined()
+    expect(tile(o, 'qc-redundancy')).toBeUndefined()
   })
 })
 

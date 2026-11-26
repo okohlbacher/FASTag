@@ -369,6 +369,12 @@ pub async fn spectrum_peaks(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// @p p ("/d/a.mzML") as an absolute path on this platform: "C:/d/a.mzML" on Windows,
+    /// where a path without a drive is not absolute.
+    fn abs(p: &str) -> String {
+        if cfg!(windows) { format!("C:{p}") } else { p.to_string() }
+    }
     use std::path::PathBuf;
 
     // Real --helphelp output (gui/src/fixtures/cli/v112-ecoli-dump/README):
@@ -409,9 +415,9 @@ mod tests {
                 "max_peaks": 300, "tag_length": 4, "threads": 2, "no_deisotope": true}"#,
         )
         .unwrap();
-        let a = dump_args("/data/run01.mzML", SCAN, Some(&params)).unwrap();
+        let a = dump_args(&abs("/data/run01.mzML"), SCAN, Some(&params)).unwrap();
         let has = |o: &str| a.iter().position(|x| x == o);
-        assert_eq!(&a[0..2], ["-in", "/data/run01.mzML"]);
+        assert_eq!(&a[0..2], ["-in", abs("/data/run01.mzML").as_str()]);
         let t = has("-fragment_tolerance").expect("the run's tolerance");
         assert_eq!(a[t + 1], "0.3");
         assert!(has("-out").is_none() && has("-progress").is_none(), "{a:?}");
@@ -430,7 +436,7 @@ mod tests {
         let f = has("-fixed_modifications").expect("cleared list");
         assert_eq!(a[f + 1], "");
         // No params: the CLI's defaults.
-        assert_eq!(dump_args("/d/a.mgf", "index=3", None).unwrap(), ["-in", "/d/a.mgf", "-dump_spectrum", "index=3"]);
+        assert_eq!(dump_args(&abs("/d/a.mgf"), "index=3", None).unwrap(), ["-in", abs("/d/a.mgf").as_str(), "-dump_spectrum", "index=3"]);
     }
 
     #[test]

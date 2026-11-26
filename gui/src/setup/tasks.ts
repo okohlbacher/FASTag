@@ -210,17 +210,20 @@ export const TASKS: readonly Task[] = [
     group: 'sample',
     blurb: 'A protein shortlist, a reduced FASTA and a Sage, Comet or MSFragger configuration for your search.',
     products: 'shortlist',
-    // The shortlist recipe of doc/SHORTLIST.md. It is not validated: it
-    // passed its second held-out test and failed the third. From 1.15.4 the
-    // CLI applies it by default only with -search_engine msfragger and the
-    // tryptic shortlist; the GUI sets it for every engine and protease, as
-    // its default recipe, and says so (help/workflows.tsx).
+    // The shortlist recipe of doc/SHORTLIST.md, whole (database-6): -tag_length
+    // 4 -extension 6 -shortlist_min_spectra 1 with the gapped placements,
+    // E-value 10, shortest placed tag 6 and 2 missed cleavages. It is not
+    // validated: it passed its second held-out test and failed the third.
+    // From 1.15.4 the CLI applies it by default to every tryptic shortlist
+    // run; the GUI sends it for every engine and protease, and says so.
     values: {
       ...ALL,
       shortlist_out: 'shortlist.tsv',
       fasta_out: 'reduced.fasta',
       search_config_out: 'search.json',
-      extension: '3',
+      tag_length: '4',
+      extension: '6',
+      shortlist_min_spectra: '1',
       shortlist_gapped: true,
       recon_min_length: '6',
       shortlist_max_evalue: '10',
@@ -242,7 +245,7 @@ export const TASKS: readonly Task[] = [
     },
     outputs: ['out', 'shortlist_out', 'fasta_out', 'search_config_out'],
     settingsNote:
-      'The shortlist recipe this workflow sets (gapped placements, E-value 10, shortest placed tag 6, 2 missed cleavages) is not validated: it failed its third held-out test with MSFragger and has no held-out test with Sage, Comet or another protease. Its values are under Advanced: Shortlist, advanced (E-value, gapped), Placement, advanced (shortest tag) and Placement on the database (missed cleavages).',
+      'The shortlist recipe this workflow sets (tag length 4, extension 6, at least 1 spectrum per protein, gapped placements, E-value 10, shortest placed tag 6, 2 missed cleavages) is not validated: it failed its third held-out test with MSFragger and has no held-out test with Sage, Comet or another protease. Its values are under Advanced: Tagging (tag length, extension), Shortlist, advanced (spectra per protein, E-value, gapped), Placement, advanced (shortest tag) and Placement on the database (missed cleavages).',
     docs: { to: 'workflow-db-reduction', label: 'Database reduction' }
   },
   {
