@@ -1,0 +1,3 @@
+orbitrap: conclusive=True E1=PASS E2=FAIL E3=FAIL
+timstof: conclusive=True E1=FAIL E2=PASS E3=FAIL
+pooled: conclusive=True E1=PASS E2=FAIL E3=FAIL
