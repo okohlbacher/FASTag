@@ -840,7 +840,8 @@ namespace FASTag::Digest
       const std::uint64_t n = L.heavy_ends + L.light_ends;
       const std::string routes = L.route == "y" ? "the y route" : "the y and b routes";
       r.add("silac2", L.name + ".route", L.route, "-",
-            L.route == "y" ? L.name + " is counted on the y route only: its end mass is also " + spell(L.alias) + " (" + Lt + " likewise)."
+            L.route == "y" ? L.name + " and " + Lt + " are counted on the y route only: " + spell(L.alias) + " has the end mass of " + H +
+                                 " or " + Lt + " within " + num(s.window) + " Da."
                            : L.name + " and " + Lt + " are counted on the y and b routes.");
       r.add("silac2", L.name + ".count", u(L.heavy_ends), u(n),
             u(L.heavy_ends) + " " + H + " and " + u(L.light_ends) + " " + Lt + " tag ends on " + routes + ".");
@@ -857,7 +858,7 @@ namespace FASTag::Digest
       else if (L.reason == "low_resolution") cd = L.name + " is not assessable: the fragment tolerance is in Da.";
       else if (L.reason == "few_ends") cd = L.name + " is not assessable: " + u(n) + " ends are fewer than " + smin + ".";
       else
-        cd = L.name + " is not assessable: " + u(n) + " y-route ends are fewer than " + smin + ", and its b-route ends are " +
+        cd = L.name + " is not assessable: " + u(n) + " y-route ends are fewer than " + smin + ", and its b-route ends can be " +
              spell(L.alias) + " as well.";
       r.add("silac2", L.name + ".call", L.call, u(n), cd);
       r.add("silac2", L.name + ".reason", L.reason.empty() ? "-" : L.reason, "-",
