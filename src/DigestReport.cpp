@@ -661,6 +661,226 @@ namespace FASTag::Digest
     return out;
   }
 
+  // ---- 1.17 silac2 (-label_format 2) ------------------------------------
+
+  std::array<double, 2> wilson(std::uint64_t k, std::uint64_t n, double z)
+  {
+    if (n == 0) return {0.0, 1.0};
+    const double nn = static_cast<double>(n), p = static_cast<double>(k) / nn, z2 = z * z;
+    const double den = 1.0 + z2 / nn;
+    const double centre = (p + z2 / (2.0 * nn)) / den;
+    const double half = z * std::sqrt(p * (1.0 - p) / nn + z2 / (4.0 * nn * nn)) / den;
+    // k = 0 and k = n bound the interval at 0 and 1 exactly (the formula
+    // leaves a rounding residue there).
+    return {k == 0 ? 0.0 : std::max(0.0, centre - half), k == n ? 1.0 : std::min(1.0, centre + half)};
+  }
+
+  namespace
+  {
+    int silac2Index(const std::string& name)
+    {
+      const auto& keys = silac2Keys();
+      for (int k = 0; k < NUM_SILAC2_KEYS; ++k)
+        if (name == keys[static_cast<std::size_t>(k)].name) return k;
+      return -1;
+    }
+
+    /// The alias dipeptides of a key at @p window, joined by "+" in
+    /// dipeptideAliases() order without repeats ("" when none).
+    std::string aliasNames(double mass, double window)
+    {
+      std::string out;
+      for (const DipeptideAlias& d : dipeptideAliases(mass, window))
+        if (("+" + out + "+").find("+" + d.name + "+") == std::string::npos) out += (out.empty() ? "" : "+") + d.name;
+      return out;
+    }
+
+    /// "A+L" for "AL": a dipeptide name as the two residues it sums.
+    std::string spell(const std::string& dip)
+    {
+      std::string out;
+      std::size_t s = 0;
+      while (s <= dip.size())
+      {
+        const std::size_t t = dip.find('+', s);
+        const std::string d = dip.substr(s, t == std::string::npos ? std::string::npos : t - s);
+        if (!out.empty()) out += " and ";
+        out += d.size() == 2 ? std::string{d[0], '+', d[1]} : d;
+        if (t == std::string::npos) break;
+        s = t + 1;
+      }
+      return out;
+    }
+  }
+
+  Silac2Call silac2Call(const TerminusCounter& tc, const DigestSettings& s)
+  {
+    Silac2Call c;
+    const auto& keys = silac2Keys();
+    const int K = silac2Index("K"), K4 = silac2Index("K+4"), K8 = silac2Index("K+8");
+    const int R = silac2Index("R"), R6 = silac2Index("R+6"), R10 = silac2Index("R+10");
+    auto y = [&](int k) { return tc.s2_y[static_cast<std::size_t>(k)]; };
+    auto b = [&](int k) { return tc.s2_b[static_cast<std::size_t>(k)]; };
+    c.y_k = y(K) + y(K4) + y(K8);
+    c.y_r = y(R) + y(R6) + y(R10);
+    const std::uint64_t smin = static_cast<std::uint64_t>(std::max(0, s.silac_min));
+    c.y_gate = c.y_k >= smin && c.y_r >= smin;
+    // y.tot: the C-terminal flank near any residue key of residueKeys() (its
+    // c_near), plus K+4 and R+6, which residueKeys() does not hold.
+    std::uint64_t ykr = 0;
+    const auto& rk = residueKeys();
+    for (int k = 0; k < NUM_KEYS; ++k)
+    {
+      c.y_tot += tc.c_near[static_cast<std::size_t>(k)];
+      if (rk[static_cast<std::size_t>(k)].name[0] == 'K' || rk[static_cast<std::size_t>(k)].name[0] == 'R')
+        ykr += tc.c_near[static_cast<std::size_t>(k)];
+    }
+    c.y_tot += y(K4) + y(R6);
+    ykr += y(K4) + y(R6);
+    c.y_kr = c.y_tot ? static_cast<double>(ykr) / static_cast<double>(c.y_tot) : 0.0;
+
+    const std::array<std::array<int, 2>, NUM_SILAC2_LABELS> pairs{{{K4, K}, {R6, R}, {K8, K}, {R10, R}}};
+    const std::array<const char*, NUM_SILAC2_LABELS> names{{"Lys4", "Arg6", "Lys8", "Arg10"}};
+    for (std::size_t i = 0; i < NUM_SILAC2_LABELS; ++i)
+    {
+      Silac2Label& L = c.labels[i];
+      L.name = names[i];
+      L.heavy = pairs[i][0];
+      L.light = pairs[i][1];
+      // An alias of the heavy or the light key takes the b route away from both.
+      std::string alias = aliasNames(keys[static_cast<std::size_t>(L.heavy)].mass, s.window);
+      for (const DipeptideAlias& d : dipeptideAliases(keys[static_cast<std::size_t>(L.light)].mass, s.window))
+        if (("+" + alias + "+").find("+" + d.name + "+") == std::string::npos) alias += (alias.empty() ? "" : "+") + d.name;
+      L.alias = alias;
+      L.route = alias.empty() ? "y+b" : "y";
+      L.heavy_ends = y(L.heavy) + (alias.empty() ? b(L.heavy) : 0);
+      L.light_ends = y(L.light) + (alias.empty() ? b(L.light) : 0);
+      const std::uint64_t n = L.heavy_ends + L.light_ends;
+      L.share = n ? static_cast<double>(L.heavy_ends) / static_cast<double>(n) : 0.0;
+      L.ci = wilson(L.heavy_ends, n);
+      if (s.low_resolution) { L.call = "not_assessable"; L.reason = "low_resolution"; }
+      else if (n < smin)
+      {
+        L.call = "not_assessable";
+        std::string r = alias;
+        for (char& ch : r) if (ch == '+') ch = '_';
+        L.reason = alias.empty() ? "few_ends" : "alias_" + r;
+      }
+      else L.call = L.share >= HEAVY_MIN ? "present" : "not_detected";
+    }
+
+    if (s.low_resolution) { c.reason = "low_resolution"; return c; }
+    std::string present;
+    bool all_nd = true;
+    std::string first_na;
+    for (const Silac2Label& L : c.labels)
+    {
+      if (L.call == "present") present += (present.empty() ? "" : "+") + L.name;
+      if (L.call != "not_detected") all_nd = false;
+      if (L.call == "not_assessable" && first_na.empty()) first_na = L.reason;
+    }
+    if (!present.empty()) { c.called = true; c.silac = present; }
+    else if (!c.y_gate) c.reason = "no_y1_ends";
+    else if (all_nd) { c.called = true; c.silac = "none"; }
+    else c.reason = first_na;
+    return c;
+  }
+
+  std::vector<Row> silac2Rows(const Silac2Call& c, const TerminusCounter& tc, const DigestSettings& s)
+  {
+    std::vector<Row> out;
+    Rows r{out};
+    const auto& keys = silac2Keys();
+    const std::string w = num(s.window);
+    r.add("route", "format", "2", "-",
+          "Label report format 2: the y and b routes of each tag end, its dipeptide aliases and one call per SILAC label follow.");
+    for (std::size_t k = 0; k < NUM_SILAC2_KEYS; ++k)
+    {
+      const std::string K = keys[k].name;
+      const double m = keys[k].mass;
+      r.add("route", K + ".y", u(tc.s2_y[k]), u(tc.tags),
+            u(tc.s2_y[k]) + " tag ends have a C-terminal flank of " + f(m, 4) + " Da (" + K + "; cterm_mass, the tag reaches y1).");
+      r.add("route", K + ".b", u(tc.s2_b[k]), u(tc.tags),
+            u(tc.s2_b[k]) + " tag ends have an N-terminal flank of " + f(m + H2O_MASS, 4) + " Da (" + K +
+                " + H2O; nterm_mass, a reversed b-ion read).");
+      const std::string al = aliasNames(m, s.window);
+      std::string ad;
+      if (al.empty()) ad = "No two residues give the end mass of " + K + " within " + w + " Da.";
+      else
+      {
+        ad = "Within " + w + " Da the end mass of " + K + " is also that of ";
+        bool first = true;
+        for (const DipeptideAlias& d : dipeptideAliases(m, s.window))
+        {
+          ad += std::string(first ? "" : ", or ") + spell(d.name) + (d.less_h2o ? " less H2O (" : " (") + f(d.end_mass, 4) + " Da" +
+                (d.less_h2o ? ", a b2 ion read as y1 or a peptide N-terminus" : ", two residues in the flank") + ")";
+          first = false;
+        }
+        ad += ".";
+      }
+      r.add("route", K + ".alias", al.empty() ? "-" : al, "-", ad);
+      r.add("route", K + ".y_alias", u(tc.s2_y_alias[k]), u(tc.s2_y[k]),
+            u(tc.s2_y_alias[k]) + " of the " + u(tc.s2_y[k]) + " y-route " + K + " ends are also within " + w + " Da of a dipeptide end mass.");
+      r.add("route", K + ".b_alias", u(tc.s2_b_alias[k]), u(tc.s2_b[k]),
+            u(tc.s2_b_alias[k]) + " of the " + u(tc.s2_b[k]) + " b-route " + K + " ends are also within " + w + " Da of a dipeptide end mass.");
+    }
+    const std::string smin = std::to_string(s.silac_min);
+    r.add("route", "y.K.tags", u(c.y_k), "-", u(c.y_k) + " y-route tag ends are K, Lys4 or Lys8.");
+    r.add("route", "y.R.tags", u(c.y_r), "-", u(c.y_r) + " y-route tag ends are R, Arg6 or Arg10.");
+    r.add("route", "y.gate", c.y_gate ? "yes" : "no", "-",
+          u(c.y_k) + " K and " + u(c.y_r) + " R y-route tag ends against a minimum of " + smin + " each.");
+    r.add("route", "y.tot", u(c.y_tot), "-", u(c.y_tot) + " y-route tag ends match a residue key, labelled ones included.");
+    r.add("route", "y.kr", c.y_gate ? num(c.y_kr) : "-", u(c.y_tot),
+          c.y_gate ? "A share of " + g(c.y_kr, 3) + " of the y-route tag ends are K or R, labelled ones included."
+                   : "There is no y-route K/R share: fewer than " + smin + " y-route K or R ends (no_y1_ends).");
+
+    for (const Silac2Label& L : c.labels)
+    {
+      const std::string H = keys[static_cast<std::size_t>(L.heavy)].name, Lt = keys[static_cast<std::size_t>(L.light)].name;
+      const std::uint64_t n = L.heavy_ends + L.light_ends;
+      const std::string routes = L.route == "y" ? "the y route" : "the y and b routes";
+      r.add("silac2", L.name + ".route", L.route, "-",
+            L.route == "y" ? L.name + " is counted on the y route only: its end mass is also " + spell(L.alias) + " (" + Lt + " likewise)."
+                           : L.name + " and " + Lt + " are counted on the y and b routes.");
+      r.add("silac2", L.name + ".count", u(L.heavy_ends), u(n),
+            u(L.heavy_ends) + " " + H + " and " + u(L.light_ends) + " " + Lt + " tag ends on " + routes + ".");
+      r.add("silac2", L.name + ".share", n ? num(L.share) : "-", u(n),
+            n ? L.name + " is a share of " + g(L.share, 3) + " of the " + u(n) + " " + Lt + " and " + H + " ends on " + routes + "."
+              : "No " + Lt + " or " + H + " end on " + routes + ".");
+      r.add("silac2", L.name + ".ci_low", n ? num(L.ci[0]) : "-", u(n),
+            n ? "The Wilson 95% interval of the " + L.name + " share starts at " + g(L.ci[0], 3) + "." : "There is no share.");
+      r.add("silac2", L.name + ".ci_high", n ? num(L.ci[1]) : "-", u(n),
+            n ? "The Wilson 95% interval of the " + L.name + " share ends at " + g(L.ci[1], 3) + "." : "There is no share.");
+      std::string cd;
+      if (L.call == "present") cd = L.name + " is present: its share reaches " + g(HEAVY_MIN, 3) + " on " + u(n) + " ends.";
+      else if (L.call == "not_detected") cd = L.name + " is not detected: its share is below " + g(HEAVY_MIN, 3) + " on " + u(n) + " ends.";
+      else if (L.reason == "low_resolution") cd = L.name + " is not assessable: the fragment tolerance is in Da.";
+      else if (L.reason == "few_ends") cd = L.name + " is not assessable: " + u(n) + " ends are fewer than " + smin + ".";
+      else
+        cd = L.name + " is not assessable: " + u(n) + " y-route ends are fewer than " + smin + ", and its b-route ends are " +
+             spell(L.alias) + " as well.";
+      r.add("silac2", L.name + ".call", L.call, u(n), cd);
+      r.add("silac2", L.name + ".reason", L.reason.empty() ? "-" : L.reason, "-",
+            L.reason.empty() ? L.name + " is assessed." : "The first rule that makes " + L.name + " not assessable is " + L.reason + ".");
+    }
+    if (c.called)
+      r.add("silac2", "status", "call", "-",
+            c.silac == "none" ? "A SILAC call is made: every label is assessed." : "A SILAC call is made: at least one label is present.");
+    else
+      r.add("silac2", "status", "no_call", "-",
+            c.reason == "low_resolution" ? "No SILAC call: the fragment tolerance is in Da."
+            : c.reason == "no_y1_ends"   ? "No SILAC call: no label is present and the y route is below the gate, so label-free cannot be told."
+                                         : "No SILAC call: no label is present and not every label is assessed.");
+    r.add("silac2", "silac", c.called ? c.silac : "-", "-",
+          !c.called              ? "There is no SILAC call."
+          : c.silac == "none"    ? "No SILAC label is present; all four are not detected."
+                                 : "The SILAC labels present are " + c.silac + ".");
+    r.add("silac2", "reason", c.called ? "-" : c.reason, "-",
+          c.called ? "A SILAC call is made." : "The first no-call rule that applies is " + c.reason + ".");
+    return out;
+  }
+  // ---- end 1.17 silac2 ----
+
   GapResult gapResult(const std::vector<GapRow>& rows, const std::vector<GapMod>& mods,
                       const std::vector<Combo>& combos, const GapSettings& s)
   {

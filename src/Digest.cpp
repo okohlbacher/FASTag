@@ -80,6 +80,41 @@ namespace FASTag::Digest
     return keys;
   }
 
+  // ---- 1.17 silac2 ----
+  const std::array<Silac2Key, NUM_SILAC2_KEYS>& silac2Keys()
+  {
+    // The same doubles as residueKeys() for K, K+8, R, R+10 and W; the Lys4
+    // and Arg6 deltas are the Unimod Label:2H(4) and Label:13C(6) masses of
+    // the -massgap_out modification table.
+    static const std::array<Silac2Key, NUM_SILAC2_KEYS> keys = [] {
+      constexpr double K = 128.09496, R = 156.10111;
+      return std::array<Silac2Key, NUM_SILAC2_KEYS>{{{"K", K},
+                                                     {"K+4", K + 4.025107},
+                                                     {"K+8", K + 8.014199},
+                                                     {"R", R},
+                                                     {"R+6", R + 6.020129},
+                                                     {"R+10", R + 10.008269},
+                                                     {"W", 186.07931}}};
+    }();
+    return keys;
+  }
+
+  std::vector<DipeptideAlias> dipeptideAliases(double mass, double window)
+  {
+    std::vector<DipeptideAlias> out;
+    const auto& keys = residueKeys();  // the 19 residues first, in AAS order
+    for (int a = 0; a < NUM_AA; ++a)
+      for (int b = a; b < NUM_AA; ++b)
+      {
+        const double d = keys[static_cast<std::size_t>(a)].mass + keys[static_cast<std::size_t>(b)].mass;
+        const std::string name{AAS[static_cast<std::size_t>(a)], AAS[static_cast<std::size_t>(b)]};
+        if (std::fabs(d - mass) <= window) out.push_back({name, d, false});
+        if (std::fabs(d - H2O_MASS - mass) <= window) out.push_back({name, d - H2O_MASS, true});
+      }
+    return out;
+  }
+  // ---- end 1.17 silac2 ----
+
   void TerminusCounter::add(double nterm, double cterm, std::string_view seq)
   {
     add_(nterm, cterm, seq, nullptr);
@@ -151,6 +186,37 @@ namespace FASTag::Digest
       lab_bg_n[l] += near_(nterm, mb);
       lab_bg_c[l] += near_(cterm, mb);
     }
+    // 1.17 silac2: the two routes per key, and the ends a dipeptide explains.
+    // Read only by silac2Call(); no other count depends on them.
+    {
+      if (!s2_alias_)
+      {
+        auto t = std::make_shared<std::array<std::vector<double>, NUM_SILAC2_KEYS>>();
+        for (std::size_t k = 0; k < NUM_SILAC2_KEYS; ++k)
+          for (const DipeptideAlias& d : dipeptideAliases(silac2Keys()[k].mass, w_)) (*t)[k].push_back(d.end_mass);
+        s2_alias_ = std::move(t);
+      }
+      const auto& s2 = silac2Keys();
+      for (std::size_t k = 0; k < NUM_SILAC2_KEYS; ++k)
+      {
+        const double m = s2[k].mass;
+        auto aliased = [&](double end) {
+          for (const double d : (*s2_alias_)[k])
+            if (near_(end, d)) return true;
+          return false;
+        };
+        if (near_(cterm, m))
+        {
+          ++s2_y[k];
+          if (aliased(cterm)) ++s2_y_alias[k];
+        }
+        if (near_(nterm, m + H2O_MASS))
+        {
+          ++s2_b[k];
+          if (aliased(nterm - H2O_MASS)) ++s2_b_alias[k];
+        }
+      }
+    }
     // 1.12 D #3d: one count per flank that is a two-residue sum.
     if (bins_)
     {
@@ -172,6 +238,10 @@ namespace FASTag::Digest
     add(lab_bg_c, o.lab_bg_c);
     for (std::size_t p = 0; p < 4; ++p) { add(cpos[p], o.cpos[p]); add(npos[p], o.npos[p]); }
     for (std::size_t a = 0; a < cq.size(); ++a) { add(cq[a], o.cq[a]); add(nq[a], o.nq[a]); }  // 1.13 digqual
+    add(s2_y, o.s2_y);  // 1.17 silac2
+    add(s2_b, o.s2_b);
+    add(s2_y_alias, o.s2_y_alias);
+    add(s2_b_alias, o.s2_b_alias);
     if (o.bins_)
     {
       if (!bins_) { bins_ = o.bins_; dip.assign(o.dip.size(), 0); }
