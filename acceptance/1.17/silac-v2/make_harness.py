@@ -31,10 +31,13 @@ def main():
                         f"instrument: {cls}\nfetch: [{', '.join(q(x) for x in fetch)}]\n"
                         "roles: [['\\.d\\.zip$', run], ['\\.raw$', run], ['.', truth]]\n"
                         "runs: '\\.(raw|d\\.zip)$'\n")
-        names = [re.sub(r"\.raw$", ".mzML", r["file"]) for r in runs]
+        # Deviation D1 (after the freeze): the pinned FileConverter is refused by pxd (its tree sha256 changed), so
+        # Orbitrap runs are read as .raw by the frozen binary (OpenMS Thermo bridge, vendor centroiding); on the
+        # development control this gives the mzML path's label.tsv and tags.tsv byte for byte (input row aside).
+        names = [r["file"] for r in runs]
         with open(os.path.join(hd, "benchmarks", "inputs", f"silac-heldout-v2-{pxd}.tsv"), "w") as f:
             f.write("file\n" + "".join(n + "\n" for n in names))
-        role = "run-mzml" if cls == "orbitrap" else "run"
+        role = "run"
         with open(os.path.join(hd, "benchmarks", f"silac-heldout-v2-{pxd}.yaml"), "w") as f:
             f.write(f"# PREREG-silac-v2 held-out run of {pxd} ({cls}): frozen binary {VERSION}, frozen command, run once.\n"
                     f"dataset: {pxd}\ninputs: {{list: inputs/silac-heldout-v2-{pxd}.tsv, column: file, role: {role}}}\n"
