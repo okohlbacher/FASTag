@@ -341,7 +341,8 @@ FASTag -in run.mzML -out tags.tsv
 # high-resolution data, seed 3 extended to at most 15 residues
 FASTag -in run.mzML -out tags.tsv -extension 6 -fragment_tolerance 20
 
-# ion-trap MS2 -- set the tolerance to match the analyser
+# ion-trap MS2 the file does not mark as such -- set the tolerance yourself
+# (spectra marked ion-trap are tagged at 0.5 Da without it)
 FASTag -in run.mzML -out tags.tsv -fragment_tolerance 0.3 -fragment_tolerance_unit Da
 
 # isotope collapsing and one gap are on by default; turn both off for
@@ -358,11 +359,16 @@ FASTag -in run.mzpeak -out tags.tsv
 FASTag -in run.mzML   -out tags.tsv -out_spectra hits.mzpeak
 ```
 
-**Set the fragment tolerance to match the analyser.** A high-resolution
+**The fragment tolerance must match the analyser.** A high-resolution
 tolerance on low-resolution data is silent and looks exactly like bad data — on
 an ion-trap file, 20 ppm returned 3,007 tags where 0.3 Da returned 824,959.
-FASTag infers resolution from peak spacing and warns when the two disagree, but
-it cannot know the analyser, so the setting is yours.
+Since 1.15.5 FASTag tags each MS2 spectrum at the tolerance of the analyser the
+file names (`-tolerance_by_analyzer`, on by default): ion-trap spectra at
+`-fragment_tolerance_itms` (0.5 Da), all others at `-fragment_tolerance`. The
+placement and mass-shift reports use `-fragment_tolerance`, so give an ion-trap
+run a Da tolerance when you ask for them. For spectra whose analyser the file
+does not name, FASTag infers resolution from peak spacing and warns when it
+disagrees with the tolerance, but the setting is yours.
 
 ## File formats
 
@@ -2252,8 +2258,10 @@ The PXD054073 deposit also holds an AlphaTims MGF of the same run
 
 All three are high-resolution MS2 and want the 20 ppm default. Run PXD000001
 with `-fixed_modifications "Methylthio (C)" "TMT6plex (K)" "TMT6plex (N-term)"`.
-For ion-trap MS2 set `-fragment_tolerance 0.3 -fragment_tolerance_unit Da`, and
-read the instrument out of the file itself before picking a tolerance: a
+Ion-trap MS2 that the file marks as such is tagged at 0.5 Da without a setting
+(`-tolerance_by_analyzer`); otherwise set `-fragment_tolerance 0.3
+-fragment_tolerance_unit Da`, and read the instrument out of the file itself
+before picking a tolerance: a
 repository catalogue can label a deposit by its main instrument while single
 files come from another. See [doc/TEST-DATA.md](doc/TEST-DATA.md) for the
 provenance and what each dataset is useful for comparing.
@@ -2503,8 +2511,12 @@ tags fill the slots (hence the small change in total recall):
   b/y (not under `-ion_series_hybrid both`, which reads them as both series),
   and `cz` warns (`Collisional activation:`) when more than 1% are
   collisional.
-- **Low-resolution (ion-trap) MS2 is not validated.** The validation numbers
-  and the passing 1.12 held-out result (#4) are for high-resolution MS2. On ion-trap
+- **Low-resolution (ion-trap) MS2 is validated only for its tolerances.** The
+  per-analyser tolerance (`-tolerance_by_analyzer`, 1.15.5: held-out PASS, correct
+  rank-1 tags on ion-trap spectra up from 0.070 to 0.431; CHANGELOG) and the measured
+  complement window (`-complement_tolerance_unit auto`) passed held-out tests on ion-trap
+  data. The other validation numbers and the passing 1.12 held-out result (#4) are for
+  high-resolution MS2. On ion-trap
   data `-pick_profile auto` failed (removed in 1.14), `-unknown_charge infer` scored worse
   (in the INCONCLUSIVE item06-H1-r2 scoring), and the other 1.12 options
   were not scored there.

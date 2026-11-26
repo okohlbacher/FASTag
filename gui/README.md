@@ -20,14 +20,21 @@ backend has to satisfy.
    from **all input spectra**, with per-residue confidence for downstream export. No FASTA
    is needed. To look at the output of an earlier run instead, click **Open earlier
    results…**.
-2. In **Inputs**, click **Choose file…** and select uncompressed mzML or MGF, or an mzPeak
-   file. Convert vendor files such as `.raw` and `.d` first. Raw DIA needs conversion to
+2. In **Inputs**, click **Choose file…** and select uncompressed mzML or MGF, an mzPeak
+   file, a Thermo `.raw` file or a timsTOF `.d.zip` archive, or drop a timsTOF `.d` folder on
+   the window. The Linux AppImage has no Thermo reader: convert `.raw` with
+   ThermoRawFileParser there. Other vendor formats need converting to mzML first, and the
+   checks before the run read mzML, mzPeak and MGF only. Raw DIA needs conversion to
    pseudo-DDA spectra; see **Checks before the run** below the input.
 3. Review those checks and the **Instrument** preset under **About these spectra**. It sets
-   the fragment tolerance and must match the analyser that measured the MS2 fragments:
-   20 ppm for high-resolution MS2, 0.3 Da for ion-trap MS2. A hybrid instrument's name alone
-   may not identify its MS2 analyser. A detected instrument is marked in the list and applied
-   only when you choose it; **Custom** shows the tolerance and its unit.
+   the fragment tolerance: 20 ppm for high-resolution MS2, 0.3 Da for ion-trap MS2. MS2
+   spectra that the file marks as ion-trap (Thermo filter string `ITMS`, or the spectrum's
+   instrument configuration) are tagged at 0.5 Da whatever the preset (Advanced › **Fragment
+   tolerance by analyzer**); the preset sets the tolerance of all other spectra and of the
+   placement and mass-shift reports, so it must match the analyser that measured the MS2
+   fragments. A hybrid instrument's name alone may not identify its MS2 analyser. A detected
+   instrument is marked in the list and applied only when you choose it; **Custom** shows the
+   tolerance and its unit.
 4. **Settings** shows the task's main settings; every other option is under **Advanced**.
 5. In **Outputs & run**, check the products, the **Output folder** and the **Run name**. By
    default the tags and the requested reports are written beside the input; **Change…**
@@ -485,7 +492,9 @@ The instrument the probe or the digest report names proposes a preset,
 marked "(detected)" in the instrument list; nothing is applied until it is
 chosen. After a run, the digest report's `meta instrument` rows and FASTag's
 low-resolution warning flag an ion-trap run at ppm, with "Re-run with
-0.3 Da". A run FASTag refuses as raw DIA (exit 11, `FASTAG_REFUSED
+0.3 Da". FASTag warns only when ion-trap spectra were tagged at the ppm
+tolerance: those the file does not mark as ion-trap, or all of them with
+`-tolerance_by_analyzer off`. A run FASTag refuses as raw DIA (exit 11, `FASTAG_REFUSED
 reason=raw_dia`) shows that reason and the DIAspeXtract command instead of a
 generic failure.
 
