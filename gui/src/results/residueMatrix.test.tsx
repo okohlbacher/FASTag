@@ -72,7 +72,7 @@ describe('Mass shifts › By residue', () => {
     mock.nextPickOutput = '/d/run01.delta.by_residue.csv'
     await click(screen.getByRole('button', { name: 'Export matrix…' }))
     await flush()
-    expect(mock.pickFileCalls.at(-1)).toEqual({ kind: 'save', formats: ['tsv', 'csv'] })
+    expect(mock.pickFileCalls[mock.pickFileCalls.length - 1]).toEqual({ kind: 'save', formats: ['tsv', 'csv'] })
     expect(mock.summaryWrites).toHaveLength(1)
     expect(mock.summaryWrites[0].dest).toBe('/d/run01.delta.by_residue.csv')
     expect(mock.summaryWrites[0].text).toBe(
@@ -81,7 +81,7 @@ describe('Mass shifts › By residue', () => {
         '229.1620,TMT6plex@N-term/K/T/H,135,26,48,19,17,9\n' +
         '229.1680,TMT6plex@N-term/K/S,240,58,37,24,41,17\n'
     )
-    expect(mock.summaryProtect.at(-1)).toEqual([DELTA])
+    expect(mock.summaryProtect[mock.summaryProtect.length - 1]).toEqual([DELTA])
     expect(screen.getByText(/^3 rows and 2 site columns written to/)).toBeTruthy()
   })
 
