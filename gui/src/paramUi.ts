@@ -1295,6 +1295,14 @@ export const PARAM_UI: Record<string, ParamUi> = {
       tip: "With a custom models file the file's models are used as given (the log says v2 is ignored for the table); v2 still loads the calibration and adds the p_correct rows."
     }
   },
+  // 1.17 silac2: CLI only until its preregistered held-out test; the
+  // Digest tab does not read the format-2 rows.
+  label_format: {
+    hidden: 'experimental CLI-only label report format (not validated on held-out data)',
+    help: {
+      text: 'Format 2 adds the tag-end routes, their dipeptide aliases and one call per SILAC label to the label report. Experimental; the app writes format 1.'
+    }
+  },
   dump_spectrum: {
     hidden: 'spectrum dump for programs; prints JSON lines and exits',
     help: {

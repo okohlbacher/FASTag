@@ -1517,6 +1517,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     return ILLEGAL_PARAMETERS;
   }
   digest_settings.silac_min = getIntOption_("digest_silac_min");
+  digest_settings.label_format = getStringOption_("label_format") == "2" ? 2 : 1;  // 1.17 silac2
   digest_settings.low_resolution = !p.tol_ppm;
   FD::ModelTable protease_models;
   const std::string digest_models = getStringOption_("digest_models");
@@ -1544,6 +1545,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         {"digest_background_share", "-digest_out", digest_on},
         {"digest_window", "-digest_out, -label_out or -qc_out", count_on},
         {"digest_silac_min", "-label_out", label_on},
+        {"label_format", "-label_out", label_on},  // 1.17 silac2
         {"glyco_out", "-glyco", glyco_flag},
         {"glyco_min_fraction", "-glyco", glyco_flag},
         {"species_out", "-species", want_species},
@@ -6457,6 +6459,12 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       // Appended after the 1.11 rows, which stay a byte prefix.
       const auto call = FD::labelCallRows(FD::labelCall(tc, digest_settings), tc, digest_settings);
       rows.insert(rows.end(), call.begin(), call.end());
+      // ---- 1.17 silac2: -label_format 2, after every 1.16 row ----
+      if (digest_settings.label_format == 2)
+      {
+        const auto s2 = FD::silac2Rows(FD::silac2Call(tc, digest_settings), tc, digest_settings);
+        rows.insert(rows.end(), s2.begin(), s2.end());
+      }
       if (!FD::writeReport(label_out, rows))
       {
         OPENMS_LOG_ERROR << "Failed writing " << label_out << "." << std::endl;
