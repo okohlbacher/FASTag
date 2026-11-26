@@ -1,0 +1,3 @@
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1896 repeat gaps, cycle 30, 2103 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Tolerance by analyzer: ion-trap MS2 at 0.5 Da, complement window 0.02 Da (fallback); other MS2 at 20 ppm. The probe draw found 0 ion-trap MS2.
+Tolerance by analyzer: 0 ion-trap MS2 tagged at 0.5 Da, 6103 other MS2 at 20 ppm
