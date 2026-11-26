@@ -125,8 +125,8 @@ th{border-bottom:2px solid var(--line)}
   <div class="openms">
     <a class="logo" href="https://www.openms.de"><img src="assets/openms-logo.png" alt="OpenMS"></a>
     <p>An <a href="https://www.openms.de">OpenMS</a> command-line (TOPP) tool with a desktop app —
-    reads mzML, <a href="https://github.com/OpenMS/mzpeak">mzPeak</a> and MGF, writes
-    tab-separated tags, and drops into an OpenMS pipeline like any other.</p>
+    reads mzML, <a href="https://github.com/OpenMS/mzpeak">mzPeak</a>, MGF, Thermo .raw and Bruker
+    timsTOF .d, writes tab-separated tags, and drops into an OpenMS pipeline like any other.</p>
   </div>
 </header>
 
@@ -147,7 +147,9 @@ at before you commit to a database search or de novo sequencing.</p>
 
 <p><strong>Input:</strong> mzML, mzPeak or uncompressed MGF with MS/MS spectra of one precursor
 each — DDA, PRM, or the pseudo-DDA spectra that DIA tools such as DIAspeXtract or diaTracer
-derive. Raw DIA files are refused with a message; convert them to pseudo-DDA first.
+derive. From 1.15.2 the command-line tool also reads Thermo <code>.raw</code> and Bruker timsTOF
+DDA-PASEF (<code>.d</code>, <code>.d.zip</code>) directly, with no conversion. Raw DIA files,
+dia-PASEF included, are refused with a message; convert them to pseudo-DDA first.
 <strong>Output:</strong> a tab-separated table of ranked tags per spectrum, optionally the matching
 spectra as mzML or mzPeak.</p>
 
@@ -160,6 +162,27 @@ scan=5019  LWV  1       1070.5592    326.1778   1.27e-09   0.946
 scan=6476  VLL  1       1483.8360    211.1521   1.46e-09   0.958
 scan=1262  ASA  1        872.4080    598.2782   2.38e-09   0.893
 scan=5345  VEE  2        889.5219   1314.7490   5.49e-09   0.907</code></pre>
+
+<p>Optional reports read more from the same tags. On the command line each is one option; in the
+desktop app the task you pick switches them on.</p>
+
+<ul>
+  <li><strong>Alkylation reagent</strong>, read from the cysteines in the tags with no protein
+      database (from 1.16). Its held-out test passed at the margin: 40 of 57 runs called, 37 of
+      them right, measured before the 1.16 alias checks
+      (<a href="https://github.com/okohlbacher/FASTag/blob/main/doc/ALKYLATION-REPORT.md">ALKYLATION-REPORT.md</a>).</li>
+  <li><strong>Isobaric kit</strong>: the run QC report names one kit, from the label mass on the
+      tag ends and the reporter channels seen, and counts each channel (from 1.16; PXD000001:
+      TMT 6-plex).</li>
+  <li><strong>Database reduction</strong>: a protein shortlist, a reduced FASTA and a search
+      configuration, for a faster search. Experimental. On held-out metaproteome runs (PXD045390,
+      <code>-shortlist_max_evalue 100</code>) the reduced search kept 96% of the full search's
+      peptides with 23% of an 870k-protein database; its FDR is optimistic
+      (<a href="https://github.com/okohlbacher/FASTag/blob/main/doc/SHORTLIST.md">SHORTLIST.md</a>).</li>
+  <li>Protease and label, species, glycopeptide flag, mass-shift survey (candidates, not
+      identifications) and identifiability triage: see the
+      <a href="https://github.com/okohlbacher/FASTag#readme">README</a>.</li>
+</ul>
 
 <div class="note">
 It is a prefilter, not a final identification method. It is tuned for <em>recall</em>: it would
@@ -217,8 +240,8 @@ By default FASTag refuses raw DIA such as PXD028735; tag it through pseudo-DDA s
 
 <p>Current release: <strong id="rel-version">see the release page</strong>
 (<a href="https://github.com/okohlbacher/FASTag/blob/main/CHANGELOG.md">what changed</a>).
-Every release has the command-line tool and a desktop app that runs it: pick files and options
-in a form, follow progress, and browse tags, spectra and reports.</p>
+Every release has the command-line tool and a desktop app that runs it: pick one of seven
+tasks, give it the inputs it asks for, follow progress, and browse tags, spectra and reports.</p>
 
 <p>Binaries are self-contained — the tool, its libraries and the OpenMS data it needs. macOS builds
 are signed with a Developer ID certificate, notarized by Apple, and the disk images carry their
@@ -239,9 +262,6 @@ notarization ticket, so they open with no network connection.</p>
 <tr><td>macOS 13.4+, Apple silicon</td>
     <td><a class="fname" data-asset="gui-macos-arm64.dmg" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-gui-macos-arm64.dmg</a></td>
     <td><a class="fname" data-asset="macos-arm64.dmg" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-macos-arm64.dmg</a></td></tr>
-<tr><td>macOS 13.4+, Intel</td>
-    <td><a class="fname" data-asset="gui-macos-x64.dmg" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-gui-macos-x64.dmg</a></td>
-    <td><a class="fname" data-asset="macos-x64.dmg" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-macos-x64.dmg</a></td></tr>
 <tr><td>Windows x64</td>
     <td><a class="fname" data-asset="gui-windows-x64-setup.exe" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-gui-windows-x64-setup.exe</a></td>
     <td><a class="fname" data-asset="windows-x64.zip" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-windows-x64.zip</a></td></tr>
@@ -254,10 +274,18 @@ notarization ticket, so they open with no network connection.</p>
 </tbody>
 </table>
 
-<p class="muted">On macOS both builds are also on Homebrew:
+<p class="muted">Intel Macs are no longer built from 1.16.2 on:
+<a href="https://github.com/okohlbacher/FASTag/releases/tag/v1.16.1">1.16.1</a> is the last Intel
+release (<a href="https://github.com/okohlbacher/FASTag/releases/download/v1.16.1/FASTag-1.16.1-gui-macos-x64.dmg">app</a>,
+<a href="https://github.com/okohlbacher/FASTag/releases/download/v1.16.1/FASTag-1.16.1-macos-x64.dmg">command line</a>).
+On Apple silicon both builds are also on Homebrew:
 <code>brew install --cask okohlbacher/fastag/fastag</code> (app) or
 <code>brew install --cask okohlbacher/fastag/fastag-cli</code>.
 Homebrew casks need macOS 14 or later; on macOS 13.4–13.x use the disk image.
+Every download except the Linux AppImage reads Thermo <code>.raw</code> and so includes Thermo's
+RawFileReader, which is under Thermo's own licence, not MIT: you may not redistribute its
+assemblies (<a href="https://github.com/okohlbacher/FASTag#install">README, Install</a>). On the
+AppImage convert <code>.raw</code> first; Bruker <code>.d</code> is read by every download.
 Species detection uses a taxonomy index of about 1 GB. Every release download above includes it,
 the Windows installer too; the separate
 <a class="fname" data-asset="taxonomy-k7.tar.gz" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-taxonomy-k7.tar.gz</a>
@@ -267,25 +295,29 @@ code-signed, so SmartScreen will warn on first run. All releases:
 
 <h2>Quick start</h2>
 
-<p><strong>Desktop app:</strong> open it, choose a spectrum file and an output folder, check the
-fragment tolerance, and press Run; the tag table opens when the run is done.
+<p><strong>Desktop app:</strong> Setup goes through four steps: Task, Inputs, Settings, and
+Outputs &amp; run. Pick a task — <strong>Generate tags</strong> (the default), Characterize a run,
+Species, Mass-shift survey, Database reduction, Run QC or Identifiability triage — choose a
+spectrum file, check the Instrument preset (it sets the fragment tolerance) and the output folder,
+and press Run. Only Mass-shift survey (which also offers a shipped proteome) and Database
+reduction ask for a protein database.
 <strong>Command line:</strong> the default fragment tolerance is 20 ppm, right for Orbitrap,
-timsTOF and Astral MS2. On ion-trap MS2 set it to 0.3 Da: a tolerance that is too tight gives
-almost no tags rather than an error.</p>
+timsTOF and Astral MS2. MS2 spectra the file marks as ion trap are tagged at 0.5 Da on their own
+(<code>-tolerance_by_analyzer</code>, from 1.15.5). When the file does not say, set ion-trap MS2
+to 0.3 Da yourself: a tolerance that is too tight gives almost no tags rather than an error.</p>
 
-<p>Try it on the example run shipped with every release (<code>FASTag/examples/</code>; ion-trap
-MS2, hence 0.3 Da). The <a href="https://github.com/okohlbacher/FASTag/blob/main/doc/TUTORIAL.md">tutorial</a>
-walks through it with expected output; the
+<p>Try it on the example run shipped with every release (<code>FASTag/examples/</code>; 139 MS2
+spectra, read in the ion trap). The <a href="https://github.com/okohlbacher/FASTag/blob/main/doc/TUTORIAL.md">tutorial</a>
+walks through it with expected output (counted with FASTag 1.15.0); the
 <a href="https://github.com/okohlbacher/FASTag/blob/main/doc/MANUAL.md">desktop app manual</a> opens
 the same data with <strong>File &gt; Open Example Data</strong>.</p>
 
-<pre><code># tags for every MS2 spectrum: 139 MS2 spectra, 5937 tags
-FASTag -in examples/Ecoli_MS2_small.mzML -out tags.tsv \
-       -fragment_tolerance 0.3 -fragment_tolerance_unit Da
+<pre><code># tags for every MS2 spectrum
+FASTag -in examples/Ecoli_MS2_small.mzML -out tags.tsv
 
-# keep only tags occurring in three E. coli proteins, and the spectra carrying them
+# keep only tags occurring in three E. coli proteins, and the spectra carrying them:
+# 105 tag rows from 57 spectra
 FASTag -in examples/Ecoli_MS2_small.mzML -out hits.tsv \
-       -fragment_tolerance 0.3 -fragment_tolerance_unit Da \
        -fasta examples/Ecoli_MS2_small.fasta -extension 1 -out_spectra hits.mzML</code></pre>
 
 <p>On your own data:</p>
@@ -296,7 +328,7 @@ FASTag -in run.mzML -out tags.tsv
 # high-resolution data, seed length 3 extended to at most 15 residues
 FASTag -in run.mzML -out tags.tsv -tag_length 3 -extension 6
 
-# ion-trap MS2 — set the tolerance to match the analyser
+# ion-trap MS2 in a file that does not name its analyser — set the tolerance yourself
 FASTag -in run.mzML -out tags.tsv -fragment_tolerance 0.3 -fragment_tolerance_unit Da
 
 # keep only tags occurring in a protein of interest, and the spectra carrying them;
@@ -307,8 +339,10 @@ FASTag -in run.mzML -out tags.tsv -fasta protein.fasta -extension 1 -out_spectra
 FASTag -in run.mzpeak -out tags.tsv -out_spectra hits.mzpeak</code></pre>
 
 <p><code>-threads 0</code> (the default) uses half the logical cores. Isotope collapsing and one gap
-per tag are on by default. For the fastest possible run, or to
-match a tool with no equivalent of either, add <code>-no_deisotope -gaps 0</code>.</p>
+per tag are on by default; for the fastest possible run, or to match a tool with no equivalent of
+either, add <code>-no_deisotope -gaps 0</code>. From 1.16 a tag that lies inside a longer tag of
+the same spectrum with an E-value at least as good is left out of the table
+(<code>-subsume_tags off</code> writes every tag).</p>
 
 <h2>mzPeak</h2>
 
@@ -353,10 +387,12 @@ and a run written to mzPeak and tagged again reproduces the original tag set exa
 from <a href="https://github.com/okohlbacher/FASTag/blob/main/CITATION.cff">CITATION.cff</a>; the
 repository is archived by
 <a href="https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/okohlbacher/FASTag">Software Heritage</a>,
-origin <code>swh:1:ori:6ec7356bbacb9bf3110bf84321f3b4b1c65394fd</code>, and each release requests a new save).
+origin <code>swh:1:ori:6ec7356bbacb9bf3110bf84321f3b4b1c65394fd</code>, and each release requests a new save;
+the reference below gives the 1.16.2 release's own identifier).
 A FASTag article is in preparation.</p>
 <p class="muted">Kohlbacher O. FASTag: a fast parallel sequence tagger and tag-based filter for peptide
-MS/MS spectra. Version 1.15.1, 2026. https://github.com/okohlbacher/FASTag</p>
+MS/MS spectra. Version 1.16.2, 2026. https://github.com/okohlbacher/FASTag,
+<a href="https://archive.softwareheritage.org/swh:1:rel:cdf86974183c9d9632cee129b81bcfa5b925abb4">swh:1:rel:cdf86974183c9d9632cee129b81bcfa5b925abb4</a></p>
 
 <p>For the algorithm:</p>
 <p class="muted">Tabb DL, Ma ZQ, Martin DB, Ham AJ, Chambers MC. DirecTag: accurate sequence tags
@@ -493,14 +529,28 @@ large-scale mass spectrometry data. <em>Nat Methods</em> 2024.
   if (/Mac/i.test(hay)) {
     // Architecture is only exposed by Chromium's high-entropy hints. Safari
     // reports nothing, so an unknown arch defaults to Apple silicon and
-    // offers the Intel build beside it.
+    // names the last Intel release beside it. Intel builds end with 1.16.1,
+    // so those links are fixed, not resolved from the latest release.
+    var INTEL = 'https://github.com/okohlbacher/FASTag/releases/download/v1.16.1/FASTag-1.16.1-';
+    var intel = function (t) {
+      return 'the last Intel release (1.16.1): <a href="' + INTEL + 'gui-macos-x64.dmg">' + t +
+             '</a>, <a href="' + INTEL + 'macos-x64.dmg">command line</a>';
+    };
     var render = function (arm, sure) {
-      var v = arm ? 'arm64' : 'x64';
-      show(arm ? 'macOS, Apple silicon' : 'macOS, Intel',
-           'Download the app', 'gui-macos-' + v + '.dmg',
-           'or the ' + link('macos-' + v + '.dmg', 'command-line tool') +
-           (sure ? '' : ' · for an Intel Mac: ' + link('gui-macos-x64.dmg', 'app') +
-                         ', ' + link('macos-x64.dmg', 'command line')),
+      if (!arm) {
+        osEl.textContent = 'macOS, Intel';
+        btn.textContent = 'Download the 1.16.1 app';
+        btn.href = INTEL + 'gui-macos-x64.dmg';
+        btn.removeAttribute('data-asset');
+        alt.innerHTML = 'or the <a href="' + INTEL + 'macos-x64.dmg">1.16.1 command-line tool</a>';
+        note.textContent = 'Releases from 1.16.2 on are built for Apple silicon only; 1.16.1 is the last Intel release. Needs macOS 13.4 or later.';
+        pick.hidden = false;
+        return;
+      }
+      show('macOS, Apple silicon',
+           'Download the app', 'gui-macos-arm64.dmg',
+           'or the ' + link('macos-arm64.dmg', 'command-line tool') +
+           (sure ? '' : ' · for an Intel Mac, ' + intel('app')),
            'Signed, notarized and stapled — it opens with no network connection. Needs macOS 13.4 or later.' +
            (sure ? '' : ' Your browser does not report the processor.'));
     };
