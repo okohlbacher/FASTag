@@ -811,6 +811,7 @@ vendored.
 | `-digest_window <Da>` | 0.008 | Advanced: window around a residue or label mass at the tag ends |
 | `-digest_background_share <f>` | 0.05 | Advanced: share of the background mixed into every model |
 | `-digest_silac_min <n>` | 50 | Advanced: K- and R-terminal tag ends each for `-label_out`'s heavy-share gate |
+| `-label_format <1\|2>` | 1 | Experimental (1.17, no held-out test): `2` appends to `-label_out` the y1-anchored (`cterm_mass`) and reversed-b (`nterm_mass` + H2O) routes of the K/R tag ends, their dipeptide aliases (Arg10 = A+L less H2O) and one call per SILAC label (Lys4, Arg6, Lys8, Arg10: share, count, Wilson 95% interval; present, not detected or not assessable); every 1.16 row stays a byte prefix. `1` writes the 1.16 report (see doc/DESIGN-digest.md, "Label report format 2") |
 | `-label_call_min_tags <n>` | 175 | Removed in 1.14 (0 failed its held-out test): accepted with a warning, no effect; the minimum is 175 |
 | `-massgap_window <Da>` / `-massgap_window_da <Da>` | 0.02 / 0.5 | Advanced: gap window on ppm runs / on Da runs |
 | `-massgap_min_spectra <n>` / `-massgap_min_share <f>` / `-massgap_min_bin <n>` | 20 / 0.005 / 2 | Advanced: spectra and share a gap peak needs; spectra a histogram row needs to take part |
@@ -1458,7 +1459,11 @@ options and their values.
   tag ends. The experimental `-label_call_min_tags 0` (1.13), which called
   every ppm run, failed its held-out test (149/172, 0.866, against the
   threshold 0.922) and was removed in 1.14 (doc/DESIGN-digest.md, "Label call
-  minimum").
+  minimum"). The experimental `-label_format 2` (1.17) appends the two routes
+  of each K/R tag end apart, flags ends a dipeptide explains as well (Arg10 is
+  A+L less H2O within 1.2 mDa) and calls Lys4, Arg6, Lys8 and Arg10 one by one;
+  without y1-anchored ends a run with no label present is a no call
+  (`no_y1_ends`), not label-free. The 1.16 rows and `label_call` are unchanged.
 - **`-label_discovery_out`** (1.13) was removed in 1.14: it failed its
   held-out tests (see Held-out acceptance).
 - **`-massgap_out`** reads the `-delta_out` histogram (built even when
