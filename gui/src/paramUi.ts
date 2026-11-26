@@ -103,6 +103,9 @@ export interface ParamUi {
   /// empty with this placeholder, and an emptied field goes back to it.
   unset?: { value: string; placeholder: string }
   help?: ParamHelp
+  /// More words the parameter search finds it by, as a help-text match:
+  /// what users call the view its output feeds ("residue matrix").
+  keywords?: string
 }
 
 /// FASTag 1.14 removed these options: they failed their held-out tests. The
@@ -650,9 +653,10 @@ export const PARAM_UI: Record<string, ParamUi> = {
     label: 'Mass-shift table',
     depends: [{ on: 'recon_out', note: 'the histogram is built from the placements' }],
     help: {
-      text: 'Write a histogram of the leftover masses, one count per spectrum.',
+      text: 'Write a histogram of the leftover masses, one count per spectrum, with the sites and names of each mass shift. Results › Mass shifts › By residue shows its residues column as a matrix: the mass shifts by residue.',
       tip: 'Read it as candidates: no peak here is an identified modification.'
-    }
+    },
+    keywords: 'mass shifts by residue, residue matrix, site matrix'
   },
   recon_id_out: {
     section: 'Placement on the database',

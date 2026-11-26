@@ -91,7 +91,9 @@ describe('help vs docs', () => {
     [readme, '`q_db` is conservative at `<= 0.02`', 'results', 'q_db at 0.02 or below was higher than the real chance rate (on the safe side)'],
     [digest, '`<L>.count` = `near(n, m) + near(c, m)`', 'digest', 'The count adds the N-term and C-term flanks'],
     [readme, 'Each length is tagged, scored and capped by `-max_tags` exactly as on its own', 'results', 'each length has its own limit of 50'],
-    [readme, '**underestimates the true false-match rate ~1.6x at 0.05–0.1**', 'results', 'at 0.05 to 0.1 the real rate was about 1.6 times higher']
+    [readme, '**underestimates the true false-match rate ~1.6x at 0.05–0.1**', 'results', 'at 0.05 to 0.1 the real rate was about 1.6 times higher'],
+    [readme, 'The `residues` column counts localized spectra only.', 'workflows', 'count localized spectra only'],
+    [readme, '| `localized` | spectra whose gap the fragments place on one site class (the sum of `residues`) |', 'workflows', 'the site columns of a row add up to its Localized count']
   ]
 
   for (const [text, inDoc, page, inHelp] of claims) {

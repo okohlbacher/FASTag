@@ -41,7 +41,7 @@ export const PRODUCTS: readonly Product[] = [
   { param: 'out_spectra', label: 'Spectra with tags', what: 'The spectra that carry a reported tag, as mzML.' },
   { param: 'qc_out', label: 'QC report', what: 'MS/MS counts, resolution, charges, labels, tag yield and instrument.' },
   { param: 'recon_out', label: 'Tag placements', what: 'Each tag placed on the database, with the mass left at each end.', db: true },
-  { param: 'delta_out', label: 'Mass-shift table', what: 'How often each mass shift occurs, with UniMod names.', needs: ['recon_out'], db: true },
+  { param: 'delta_out', label: 'Mass-shift table', what: 'How often each mass shift occurs, with UniMod names and the mass shifts by residue (Mass shifts › By residue).', needs: ['recon_out'], db: true },
   { param: 'delta_spectra_out', label: 'Spectra per mass shift', what: 'The spectra behind each mass shift, with the site.', needs: ['delta_out'], db: true, experimental: true },
   { param: 'delta_counts_out', label: 'Mass-shift accounting', what: 'How many spectra reach each step of the survey.', needs: ['delta_out'], db: true, experimental: true },
   { param: 'massgap_out', label: 'Mass-gap report', what: 'Peaks of the mass gaps, explained as UniMod combinations.', needs: ['recon_out'], db: true },
