@@ -5,7 +5,7 @@
 // the DOM (the 200-row rule of section 7). The data stays in the caller's
 // typed columns; a column reads a row by its id.
 
-import { useEffect, useId, useMemo, useRef, useState, type JSX, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type ReactNode } from 'react'
 import { useSticky } from './tableStore'
 import { useSpectrumLink } from './spectrumLink'
 import { IconSpectrum } from '../icons'
@@ -28,6 +28,9 @@ export interface Column {
   /// Spectrum tab, as the Tags table's scan cell does, when the Results
   /// page can show spectra (spectrumLink.ts); else plain, the tooltip says why.
   spectrum?(i: number): string
+  /// A share from 0 to 1 that shades the cell of row @p i (a count of a
+  /// matrix against its largest); undefined or 0: no shade.
+  heat?(i: number): number | undefined
 }
 
 export const PAGE = 100
@@ -56,6 +59,8 @@ export interface DataTableProps {
   openLabel?: string
   /// Told the rows in the order shown (after the user's sort), for an export.
   onOrder?(order: readonly number[]): void
+  /// A class of the table besides "taxa dt" (the residue matrix: "matrix").
+  className?: string
 }
 
 /// The ids of @p ids in the order of @p col (stable: ties keep file order).
@@ -87,7 +92,7 @@ export function sortIds(ids: ArrayLike<number>, col: Column | undefined, desc: b
   return order.map((j) => out[j])
 }
 
-export default function DataTable({ label, columns, ids, total, empty, sort: initial = null, keep, onOpen: openRow, openLabel: rowLabel, onOrder }: DataTableProps): JSX.Element {
+export default function DataTable({ label, columns, ids, total, empty, sort: initial = null, keep, onOpen: openRow, openLabel: rowLabel, onOrder, className }: DataTableProps): JSX.Element {
   // A spectrum column links its scans; without a row action of its own the
   // table opens the active row's spectrum (Enter, double-click, the button).
   const link = useSpectrumLink()
@@ -213,7 +218,7 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
         >
           <table
             ref={gridRef}
-            className="taxa dt"
+            className={className ? `taxa dt ${className}` : 'taxa dt'}
             role="grid"
             aria-label={label}
             aria-rowcount={n + 1}
@@ -267,11 +272,14 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
                     {columns.map((c) => {
                       const sp = c.spectrum?.(id) ?? ''
                       const tip = c.cellTitle?.(id)
+                      const heat = c.heat?.(id)
+                      const hot = heat != null && heat > 0
                       return (
                         <td
                           key={c.id}
                           role="gridcell"
-                          className={[c.num ? 'num' : '', c.mono ? 'mono' : ''].join(' ').trim() || undefined}
+                          className={[c.num ? 'num' : '', c.mono ? 'mono' : '', hot ? 'heat' : ''].join(' ').trim() || undefined}
+                          style={hot ? ({ '--heat': Math.min(1, heat) } as CSSProperties) : undefined}
                           title={sp !== '' && link && 'off' in link ? `${tip ?? sp}\n${link.off}.` : tip}
                         >
                           {sp !== '' && opener ? (
