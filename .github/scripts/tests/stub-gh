@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# A stand-in for gh in the script tests, answering from recorded or written
+# responses in $GH_FIXTURES:
+#   gh api [-X M] [-H h] [-f|-F k=v]... [--paginate] <endpoint> [--jq q]
+#     GET  -> $GH_FIXTURES/<endpoint, / ? = & as _>.json through jq;
+#             a missing file is a 404, a file "<name>.fail" a 500
+#     repos/<o>/<r>/releases (GET, POST) and .../releases/<id> (DELETE) act on
+#             $GH_FIXTURES/releases.state.json, a JSON array
+#   gh run download <id> --repo R --name N --dir D
+#     -> copies $GH_FIXTURES/artifacts/<id>/<N>/ into D
+# Every call is appended to $GH_FIXTURES/calls.
+set -u
+F="${GH_FIXTURES:?}"
+echo "$*" >> "$F/calls"
+if [ "$1" = run ] && [ "$2" = download ]; then
+  id=$3; shift 3; name=""; dir=""
+  while [ $# -gt 0 ]; do case "$1" in --name) name=$2; shift 2;; --dir) dir=$2; shift 2;; *) shift;; esac; done
+  src="$F/artifacts/$id/$name"
+  [ -d "$src" ] || { echo "no artifact $name in run $id" >&2; exit 1; }
+  mkdir -p "$dir" && cp -R "$src/." "$dir/"
+  exit 0
+fi
+[ "$1" = api ] || { echo "stub-gh: unsupported: $*" >&2; exit 2; }
+shift
+method=GET; ep=""; q="."; fields=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -X) method=$2; shift 2;;
+    -H) shift 2;;
+    -f|-F) fields+=("$2"); shift 2;;
+    --paginate) shift;;
+    --jq) q=$2; shift 2;;
+    *) ep=$1; shift;;
+  esac
+done
+state="$F/releases.state.json"
+case "$method $ep" in
+  "GET repos/"*/releases\?*|"GET repos/"*/releases)
+    [ -f "$state" ] || echo '[]' > "$state"
+    jq -r "$q" "$state"; exit $?;;
+  "POST repos/"*/releases)
+    [ -f "$state" ] || echo '[]' > "$state"
+    tag=""; for kv in "${fields[@]}"; do case "$kv" in tag_name=*) tag=${kv#tag_name=};; esac; done
+    id=$(( $(jq '[.[].id] | max // 100' "$state") + 1 ))
+    jq --arg t "$tag" --argjson id "$id" '. + [{id: $id, tag_name: $t, draft: true, assets: []}]' "$state" > "$state.tmp" && mv "$state.tmp" "$state"
+    # a racing job's draft, created between this POST and the next list
+    if [ -f "$F/race" ]; then
+      jq --arg t "$tag" --argjson id "$((id + 1))" '. + [{id: $id, tag_name: $t, draft: true, assets: []}]' "$state" > "$state.tmp" && mv "$state.tmp" "$state"
+      rm -f "$F/race"
+    fi
+    echo "{\"id\": $id}"; exit 0;;
+  "DELETE repos/"*/releases/*)
+    id=${ep##*/}
+    jq --argjson id "$id" 'map(select(.id != $id))' "$state" > "$state.tmp" && mv "$state.tmp" "$state"; exit 0;;
+esac
+f="$F/$(echo "$ep" | tr '/?=&' '____').json"
+[ -f "${f%.json}.fail" ] && { echo "gh: Server Error (HTTP 500)" >&2; exit 1; }
+[ -f "$f" ] || { echo "gh: Not Found (HTTP 404)" >&2; exit 1; }
+jq -r "$q" "$f"
