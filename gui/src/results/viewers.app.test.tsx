@@ -26,7 +26,7 @@ describe('P4c viewers in the app', () => {
     await click(screen.getByRole('button', { name: 'Open report…' }))
     const recon = await screen.findByRole('tab', { name: 'Mass shifts' })
     expect(recon.getAttribute('aria-selected')).toBe('true')
-    expect((await screen.findByRole('grid', { name: 'Placements' })).getAttribute('aria-rowcount')).toBe('4707')
+    expect((await screen.findByRole('grid', { name: 'Placements' })).getAttribute('aria-rowcount')).toBe('3890')
     mock.nextPickReport = '/r/run.tags.glyco.tsv'
     await click(screen.getByRole('button', { name: 'Open report…' }))
     expect((await screen.findByRole('tab', { name: 'Glyco' })).getAttribute('aria-selected')).toBe('true')
@@ -122,7 +122,7 @@ describe('P4c viewers in the app', () => {
     // Round 11: the mass-shift table leads; the placements are one click away.
     await screen.findByRole('grid', { name: 'Mass-shift table' })
     await click(await screen.findByRole('button', { name: 'Placements' }))
-    expect((await screen.findByRole('grid', { name: 'Placements' })).getAttribute('aria-rowcount')).toBe('4707')
+    expect((await screen.findByRole('grid', { name: 'Placements' })).getAttribute('aria-rowcount')).toBe('3890')
     expect(mock.reportCalls).toContain(paths.recon_out)
     expect(mock.reportCalls).toContain(paths.delta_out)
     await click(screen.getByRole('tab', { name: 'Glyco' }))
@@ -193,7 +193,7 @@ describe('P4c viewers in the app', () => {
     await flush()
     await click(screen.getByRole('tab', { name: 'Mass shifts' }))
     expect(srcs()).toEqual(['/b/run.massgap.tsv', '/b/run.recon.tsv'])
-    expect((await screen.findByRole('grid', { name: 'Placements' })).getAttribute('aria-rowcount')).toBe('4707')
+    expect((await screen.findByRole('grid', { name: 'Placements' })).getAttribute('aria-rowcount')).toBe('3890')
   })
 
   it('opening the same recon.tsv again reads it again', async () => {
@@ -203,7 +203,7 @@ describe('P4c viewers in the app', () => {
     await renderApp(mock)
     await goTo('results')
     await click(screen.getByRole('button', { name: 'Open report…' }))
-    expect((await screen.findByRole('grid', { name: 'Placements' })).getAttribute('aria-rowcount')).toBe('4707')
+    expect((await screen.findByRole('grid', { name: 'Placements' })).getAttribute('aria-rowcount')).toBe('3890')
     // The CLI wrote the file again: its header and the first ten rows.
     mock.reportFiles = { '/r/run.recon.tsv': humanRecon.split('\n').slice(0, 11).join('\n') + '\n' }
     mock.nextPickReport = '/r/run.recon.tsv'
@@ -261,7 +261,7 @@ describe('P4c viewers in the app', () => {
     await click(within(grid).getByRole('button', { name: /^Pos/ }))
     const count = document.querySelector('.dt-count')?.textContent
     const firstRow = within(grid).getAllByRole('row')[1].textContent
-    expect(count).toMatch(/ of 4,706 rows/)
+    expect(count).toMatch(/^3,889 rows/)
     // The table alone has no other tab to switch to (no tags were opened):
     // leave Results and come back.
     await goTo('setup')

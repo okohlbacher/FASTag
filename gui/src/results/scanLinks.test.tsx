@@ -230,7 +230,9 @@ describe('scan links on the Results page', () => {
 
   it('the spectra per mass shift opened alone: their scans follow their own run record', async () => {
     const mock = installMockBridge()
-    mock.reportFiles = { [DS]: deltaSpectra }
+    // The recorded rows are all at 0 Da, which the table does not list: the
+    // first one given a shift here (synthetic) so that it is listed.
+    mock.reportFiles = { [DS]: deltaSpectra.replace('\t0.000000\t0.0000\t', '\t15.994900\t15.9950\t') }
     mock.history = [
       {
         id: 'D', input: '/r/run01.mzML', outputs: ['/r/run01.tags.tsv', DS], cwd: '/r',
@@ -241,6 +243,8 @@ describe('scan links on the Results page', () => {
     render(<Harness tab="recon" reports={{ list: [], errors: [], workflow: { deltaSpectra: DS } }} spectrumSupport={{ supported: true, probed: true, detail: '' }} />)
     await flush()
     const grid = screen.getAllByRole('grid')[0]
+    expect(grid.getAttribute('aria-rowcount')).toBe('2')
+    expect(screen.getByText('4 spectra with a gap under 0.5 Da (no shift) not listed.')).toBeTruthy()
     await click(within(grid).getAllByRole('button', { name: /^Open spectrum / })[0])
     await flush()
     expect(mock.spectrumCalls[mock.spectrumCalls.length - 1]).toMatchObject({ input: '/r/run01.mzML', nativeId: 'controllerType=0 controllerNumber=1 scan=11482' })

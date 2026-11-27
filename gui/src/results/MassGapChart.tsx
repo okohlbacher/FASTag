@@ -13,6 +13,7 @@
 import { useId, useMemo, useState, type JSX, type KeyboardEvent, type PointerEvent } from 'react'
 import { fmt, type GapPeak } from '../digestReport'
 import DataTable, { type Column } from './DataTable'
+import { UnshiftedLine, listedGap } from './unshifted'
 import { marksIn, nearestMark, type Mark } from './unimod'
 
 export interface GapBin {
@@ -274,7 +275,17 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
     },
     { id: 'interps', label: 'Placement interpretations', text: (i) => (sorted[i].interps ?? []).map((x) => `${x.name} ${x.n}`).join(', ') }
   ]
-  const allIds = useMemo(() => Uint32Array.from(sorted, (_, i) => i), [sorted])
+  // The Bins table lists the shifts: a bin under SHIFT_MIN_DA is not listed
+  // (unshifted.tsx); the chart still draws it, cut, as the reference.
+  const { listedIds, unshiftedSpectra } = useMemo(() => {
+    const ids: number[] = []
+    let none = 0
+    sorted.forEach((b, i) => {
+      if (listedGap(b.gap)) ids.push(i)
+      else none += b.spectra
+    })
+    return { listedIds: Uint32Array.from(ids), unshiftedSpectra: none }
+  }, [sorted])
 
   return (
     <figure className="mg-chart" aria-labelledby={`${id}-cap`}>
@@ -314,7 +325,10 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
         )}
       </div>
       {view === 'table' ? (
-        <DataTable label="Gap peaks" columns={tableCols} ids={allIds} total={sorted.length} sort={{ column: 'spectra', desc: true }} />
+        <>
+          <DataTable label="Gap peaks" columns={tableCols} ids={listedIds} total={listedIds.length} sort={{ column: 'spectra', desc: true }} />
+          <UnshiftedLine n={unshiftedSpectra} />
+        </>
       ) : (
         <>
           <ul className="mg-legend" aria-label="Legend">
