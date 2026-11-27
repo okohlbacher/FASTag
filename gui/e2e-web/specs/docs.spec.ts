@@ -37,7 +37,7 @@ test('the controls the documents name for a first run are in the window', async 
   await expect(page.getByRole('button', { name: 'Continue with Generate tags ›' })).toBeVisible()
   await toStep(page, 'Inputs')
   await expect(page.getByRole('button', { name: 'Choose file…' })).toBeVisible()
-  await expect(page.locator('#instrument option', { hasText: 'Ion trap CID 0.3 Da' })).toHaveCount(1)
+  await expect(page.locator('#instrument option', { hasText: 'Ion trap CID 0.5 Da' })).toHaveCount(1)
   await expect(page.locator('label[for="instrument"]')).toHaveText('Instrument')
   await toStep(page, 'Settings')
   await expect(page.locator('#p-extension')).toHaveValue('3')

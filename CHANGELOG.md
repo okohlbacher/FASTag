@@ -1,7 +1,37 @@
 # Changelog
 
-## Unreleased
+## 1.16.4 (2026-11-27)
 
+- **Desktop app, ion-trap check reads the filter strings (fix).** The check before the run no longer warns that
+  the MS2 "may be read in the ion trap" when their Thermo filter strings say `FTMS`, and it detects ion-trap MS2
+  from `ITMS` filter strings, whatever the instrument configurations name (often the Orbitrap of an LTQ Orbitrap
+  whose MS2 were read in the ion trap, as in `test/fixtures/Ecoli_MS2_small.mzML`). At a ppm tolerance such a run
+  gets a warning, not a red flag, while Tolerance by analyzer is on (the default): FASTag tags its ITMS MS2 at
+  0.5 Da anyway, and only the reports use the ppm tolerance; with it off, the red flag holds Run as before. `-probe_input`'s
+  `instrument` record has two new fields, `ms2_filter_itms` and `ms2_filter_ftms` (probed MS2 whose filter
+  string names that analyser; probe format still 1). Tagging, the label call and species ranking are unchanged.
+- **Desktop app, Ion trap CID preset at 0.5 Da (fix).** The preset sets 0.5 Da instead of 0.3 Da, the tolerance
+  `-tolerance_by_analyzer` gives ion-trap MS2 (`-fragment_tolerance_itms`, held-out PASS in 1.15.5); on the
+  ion-trap benchmark 0.5 Da was as good as 0.3 Da or better (rank-1 correct tags 0.544 vs 0.542 on CPTAC colon,
+  0.457 vs 0.447 on PXD001819). Settings saved at 0.3 Da show as Custom.
+- **Desktop app, mass-shift best names (fix).** The best name of the Mass-shift table (new Best name column),
+  Mass shifts › By residue (one table, pooled rows and the export) and the Overview's Top mass shift no longer
+  take the first Unimod entry as is (Label:15N(1) for +0.9955 Da, Label:18O(1) for +1.9960 Da). A gap within
+  0.02 Da of 1, 2 or 3 x 1.00336 Da, or with the CLI's `isotope_error` entry, is named "isotope error +k"; a
+  common modification plus isotopes within 0.005 Da is named so ("Deamidated + isotope error +1" for +1.9880
+  Da); else the first common modification among the Unimod entries (Oxidation, Deamidated, Carbamidomethyl,
+  Acetyl, Methyl, Phospho, Carbamyl, Formyl, Amidated, Dehydrated, Cation:Na, Cation:K, Ammonia-loss,
+  Gln->pyro-Glu, Glu->pyro-Glu) is preferred over an exotic first entry; else the first entry as before. The Top
+  mass shift tile shows the name without its mass error. The CLI's `unimod` column is unchanged.
+- **Desktop app, Database reduction at E-value 100 (fix).** The workflow sends `-shortlist_max_evalue 100`
+  instead of 10: the recipe with 100 is the configuration that passed its held-out test on large databases
+  (PREREG-shortlist, PXD045390: 0.96 of the full-search peptides kept). With MSFragger chosen the form shows the
+  CLI's recipe value 10, the value of the MSFragger tests. The CLI's defaults are unchanged (0.1, and 10 under
+  the shortlist recipe).
+- **doc/SHORTLIST.md (fix).** The MSFragger shortlist defaults paragraph said both that the recipe is the
+  default of every tryptic shortlist run since 1.15.4 and that Sage, Comet and runs without
+  `-search_config_out` keep 1.13.1's values; only another protease (or `-shortlist_defaults plain`) does. The
+  Database reduction help said the same of the CLI.
 - **Desktop app, no unshifted rows in the Mass shifts tables.** No table of the Mass shifts tab lists rows
   with a gap under 0.5 Da (the threshold of the Shifted count): the Mass-shift table, By residue, the gap chart's
   **Bins**, the **Placements** (exact placements included) and **Spectra per mass shift**. Such a row is the

@@ -45,7 +45,7 @@ describe('instrument presets', () => {
       'Orbitrap/TOF HCD 20 ppm',
       'Orbitrap ETD 20 ppm (unvalidated)',
       'Orbitrap EThcD 20 ppm (unvalidated)',
-      'Ion trap CID 0.3 Da',
+      'Ion trap CID 0.5 Da',
       'timsTOF 30 ppm (unvalidated)',
       'Astral 20 ppm (unvalidated)'
     ])
@@ -57,7 +57,7 @@ describe('instrument presets', () => {
     const after = applyInstrument(before, it)
     const changed = Object.keys(after).filter((k) => JSON.stringify(after[k]) !== JSON.stringify((before as Record<string, unknown>)[k]))
     expect(changed.sort()).toEqual(['fragment_tolerance', 'fragment_tolerance_unit', 'ion_series', 'ion_series_hybrid'])
-    expect(after).toMatchObject({ fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' })
+    expect(after).toMatchObject({ fragment_tolerance: '0.5', fragment_tolerance_unit: 'Da' })
     expect(matchesInstrument(after, it)).toBe(true)
     // EThcD reads hybrid spectra both ways; ETD alone leaves them b/y.
     const ethcd = applyInstrument(before, INSTRUMENTS.find((p) => p.id === 'orbitrap-ethcd')!)
@@ -151,7 +151,7 @@ describe('App wiring', () => {
     expect(screen.getByRole('button', { name: /Search settings…/ }).getAttribute('aria-keyshortcuts')).toContain('K')
   })
 
-  it('choosing "Ion trap CID" sets 0.3 Da and nothing else in the run', async () => {
+  it('choosing "Ion trap CID" sets 0.5 Da and nothing else in the run', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, '/d/a.mzML')
@@ -163,7 +163,7 @@ describe('App wiring', () => {
     await click(screen.getByRole('button', { name: 'Run' }))
     await waitFor(() => expect(mock.runCalls).toHaveLength(1))
     const p = mock.runCalls[0].params as Record<string, unknown>
-    expect(p).toMatchObject({ fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' })
+    expect(p).toMatchObject({ fragment_tolerance: '0.5', fragment_tolerance_unit: 'Da' })
     // Changing the tolerance by hand leaves the preset.
     expect(screen.queryByText(/not validated/)).toBeNull()
     await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))

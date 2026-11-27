@@ -212,10 +212,14 @@ export const TASKS: readonly Task[] = [
     products: 'shortlist',
     // The shortlist recipe of doc/SHORTLIST.md, whole (database-6): -tag_length
     // 4 -extension 6 -shortlist_min_spectra 1 with the gapped placements,
-    // E-value 10, shortest placed tag 6 and 2 missed cleavages. It is not
-    // validated: it passed its second held-out test and failed the third.
-    // From 1.15.4 the CLI applies it by default to every tryptic shortlist
-    // run; the GUI sends it for every engine and protease, and says so.
+    // shortest placed tag 6 and 2 missed cleavages, at E-value 100 (1.16.4;
+    // 10 before): the recipe with -shortlist_max_evalue 100 is the one
+    // configuration that passed its held-out test on large databases
+    // (PREREG-shortlist, PXD045390, Sage), the databases this workflow is
+    // for. The CLI's recipe default stays 10 (its MSFragger test PASSED,
+    // its repeat FAILED). From 1.15.4 the CLI applies the recipe to every
+    // tryptic shortlist run; the GUI sends it for every engine and
+    // protease, and says so.
     values: {
       ...ALL,
       shortlist_out: 'shortlist.tsv',
@@ -226,7 +230,7 @@ export const TASKS: readonly Task[] = [
       shortlist_min_spectra: '1',
       shortlist_gapped: true,
       recon_min_length: '6',
-      shortlist_max_evalue: '10',
+      shortlist_max_evalue: '100',
       recon_missed_cleavages: '2'
     },
     // The protease is a search setting as in any search tool (round 11);
@@ -245,7 +249,7 @@ export const TASKS: readonly Task[] = [
     },
     outputs: ['out', 'shortlist_out', 'fasta_out', 'search_config_out'],
     settingsNote:
-      'The shortlist recipe this workflow sets (tag length 4, extension 6, at least 1 spectrum per protein, gapped placements, E-value 10, shortest placed tag 6, 2 missed cleavages) is not validated: it failed its third held-out test with MSFragger and has no held-out test with Sage, Comet or another protease. Its values are under Advanced: Tagging (tag length, extension), Shortlist, advanced (spectra per protein, E-value, gapped), Placement, advanced (shortest tag) and Placement on the database (missed cleavages).',
+      'The shortlist recipe this workflow sets (tag length 4, extension 6, at least 1 spectrum per protein, gapped placements, E-value 100, shortest placed tag 6, 2 missed cleavages) passed its held-out test with Sage on large metaproteome databases (96% of the full-search peptides kept with 20-33% of the proteins); the recipe default of the CLI, E-value 10, passed one held-out test with MSFragger and failed the next. Neither has a held-out test with Comet or another protease. Its values are under Advanced: Tagging (tag length, extension), Shortlist, advanced (spectra per protein, E-value, gapped), Placement, advanced (shortest tag) and Placement on the database (missed cleavages).',
     docs: { to: 'workflow-db-reduction', label: 'Database reduction' }
   },
   {

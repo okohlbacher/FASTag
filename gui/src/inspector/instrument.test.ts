@@ -42,6 +42,16 @@ describe('familyOf', () => {
     expect(presetFor(familyOf(p.instrument!))).toBeNull()
   })
 
+  it('the MS2 filter strings decide first (probe 1.16.4): the analyser most probed MS2 name', () => {
+    expect(familyOf({ name: 'LTQ Orbitrap XL', ms2Analyzer: 'orbitrap', ms2AnalyzerFrom: 'run_default', ms2FilterItms: 139, ms2FilterFtms: 0 })).toBe('ion-trap')
+    expect(familyOf({ name: 'LTQ Orbitrap XL', ms2Analyzer: 'orbitrap', ms2AnalyzerFrom: 'run_default', ms2FilterItms: 0, ms2FilterFtms: 139 })).toBe('orbitrap')
+    expect(familyOf({ name: 'Orbitrap Fusion Lumos', ms2Analyzer: 'ion trap', ms2AnalyzerFrom: 'spectra', ms2FilterItms: 10, ms2FilterFtms: 90 })).toBe('orbitrap')
+    expect(familyOf({ ms2FilterItms: 5 })).toBe('ion-trap')
+    // A tie, or no filter string: the configurations decide, as before.
+    expect(familyOf({ name: 'LTQ Orbitrap XL', ms2FilterItms: 4, ms2FilterFtms: 4 })).toBe('hybrid-ion-trap')
+    expect(familyOf({ name: 'LTQ Orbitrap XL', ms2FilterItms: 0, ms2FilterFtms: 0 })).toBe('hybrid-ion-trap')
+  })
+
   it('without the analyser, a hybrid with an ion trap stays undecided', () => {
     expect(familyOf({ name: 'LTQ Orbitrap XL' })).toBe('hybrid-ion-trap')
     expect(familyOf({ name: 'Orbitrap Fusion Lumos' })).toBe('hybrid-ion-trap')

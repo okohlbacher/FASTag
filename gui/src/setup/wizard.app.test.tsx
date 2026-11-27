@@ -291,7 +291,7 @@ describe('wizard: inputs per task', () => {
     await change(document.getElementById('instrument')!, 'iontrap-cid')
     expect(about.textContent).toMatch(/Species calls are unreliable on ion-trap spectra/)
     // The plan line names the assumptions, from every step.
-    expect(document.querySelector('.plan-assume')!.textContent).toBe('Assumes: Ion trap CID 0.3 Da · Carbamidomethyl (C)')
+    expect(document.querySelector('.plan-assume')!.textContent).toBe('Assumes: Ion trap CID 0.5 Da · Carbamidomethyl (C)')
   })
 })
 

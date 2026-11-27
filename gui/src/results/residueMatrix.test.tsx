@@ -247,7 +247,7 @@ describe('the residue matrix is findable', () => {
   it('the Top mass shift tile names the view, the file and the column', () => {
     const base: OverviewInputs = { log: ['6103 MS2 spectra, 223912 tags'], reports: [], species: null, census: null, params: { delta_out: DELTA }, instrument: null, delta: pxd1Delta }
     const t = buildOverview(base).figures.find((x) => x.id === 'topshift')!
-    expect(t.value).toBe('+229.1680 Da (TMT6plex@N-term/K/S(+3.9ppm))')
+    expect(t.value).toBe('+229.1680 Da (TMT6plex@N-term/K/S)')
     expect(t.note).toMatch(/; mass shifts by residue: Mass shifts › By residue \(the residues column of run01\.delta\.tsv\)$/)
     // A 1.12 table has no residues column: no such note.
     expect(byResidueNote(humanDelta, DELTA)).toBeNull()

@@ -18,6 +18,7 @@ import type { SpeciesReport } from '../types'
 import { electronReadAsBy, noActivationMeta } from '../inspector/checks'
 import { alkylationExtension, alkylationTagOnly, alkylationShipped, alkylationShort, alkylationTarget } from '../setup/products'
 import { longestSeed } from '../paramLayout'
+import { bestShiftName } from './shiftName'
 import { kitCallOf, unassessedKits } from './calls'
 import {
   alkylationCall,
@@ -278,12 +279,13 @@ export function triageFacts(text: string | null | undefined): {
 export const SHIFT_MIN_DA = 0.5
 
 /// The most frequent mass shift of a mass-shift table (-delta_out) away
-/// from 0, with its UniMod name (or first interpretation) when it has one.
+/// from 0, with its best name (bestShiftName, as the Mass shifts tables
+/// show it), else its first interpretation, when it has one.
 export function topShift(text: string | null | undefined): { delta: string; spectra: number; name: string | null } | null {
   if (!text) return null
   const lines = text.split(/\r?\n/).filter((l) => l !== '' && !l.startsWith('#'))
   const head = (lines[0] ?? '').split('\t').map((h) => h.trim())
-  const [d, sp, un, ti] = ['delta', 'spectra', 'unimod', 'top_interps'].map((c) => head.indexOf(c))
+  const [d, sp, un, ti, pm, iso] = ['delta', 'spectra', 'unimod', 'top_interps', 'psimod', 'isotope_error'].map((c) => head.indexOf(c))
   if (d < 0 || sp < 0) return null
   let best: { delta: string; spectra: number; name: string | null } | null = null
   for (const l of lines.slice(1)) {
@@ -292,7 +294,8 @@ export function topShift(text: string | null | undefined): { delta: string; spec
     const n = Number(f[sp])
     if (!Number.isFinite(delta) || !Number.isFinite(n) || Math.abs(delta) < SHIFT_MIN_DA) continue
     if (best && n <= best.spectra) continue
-    const named = (un >= 0 ? f[un] : '')?.trim()
+    const at = (j: number): string | undefined => (j >= 0 ? f[j] : undefined)
+    const named = bestShiftName({ delta, unimod: at(un), psimod: at(pm), isotope: at(iso) })
     const interp = (ti >= 0 ? f[ti] : '')?.trim().split(/[;,]/)[0]?.replace(/:\d+$/, '').trim()
     const none = (x: string | undefined): boolean => !x || x === '-' || x === '?'
     const name = !none(named) ? named! : !none(interp) ? interp! : null

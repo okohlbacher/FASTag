@@ -152,8 +152,8 @@ export default function ResidueMatrix({ t, batch = [], onPooled }: ResidueMatrix
       id: 'name',
       label: 'Best name',
       title: pooled
-        ? "The best name the most of the row's spectra carry, over the pooled rows (each row's: the first UniMod name that fits a site, else the first PSI-MOD name, else the isotope error); without its mass error"
-        : 'The first UniMod name that fits a site of the row, else the first PSI-MOD name, else the isotope error; without its mass error',
+        ? "The best name the most of the row's spectra carry, over the pooled rows (each row's: an isotope error, else the first common modification of its UniMod match, else its first UniMod name, else the first PSI-MOD name); without its mass error"
+        : 'An isotope error (k × 1.00336 Da, also added to a common modification), else the first common modification of the UniMod match, else its first UniMod name, else the first PSI-MOD name; without its mass error',
       text: (i) => rowAt(i).name,
       cellTitle: (i) => rowAt(i).names || undefined,
       raw: (i) => rowAt(i).name

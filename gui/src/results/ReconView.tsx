@@ -23,6 +23,7 @@ import ReportHeader from './ReportHeader'
 import ProductFiles, { type ProductFile } from './ProductFiles'
 import ResidueMatrix from './ResidueMatrix'
 import { UnshiftedLine, listedGap } from './unshifted'
+import { bestShiftName } from './shiftName'
 import './viewers.css'
 
 /// Below this many placed spectra the gap distribution supports no
@@ -526,8 +527,26 @@ function DeltaPeaks({ t }: { t: DeltaTable }): JSX.Element {
     return { shifted: out.slice(0, k), unshifted: none }
   }, [t])
   const rows = useMemo(() => shifted.filter((i) => t.spectra[i] >= min), [t, shifted, min])
+  // The best name of each row, as By residue and the Overview give it
+  // (bestShiftName); only for a table with the survey columns.
+  const names = useMemo(() => {
+    const [un, pm, iso] = ['unimod', 'psimod', 'isotope_error'].map((c) => t.extra[c])
+    if (!un && !pm && !iso) return null
+    return Array.from({ length: t.rows }, (_, i) => bestShiftName({ delta: t.delta[i], unimod: un?.[i], psimod: pm?.[i], isotope: iso?.[i] }))
+  }, [t])
   const cols: Column[] = [
     { id: 'delta', label: 'Gap (Da)', num: true, text: (i) => t.keys[i], key: (i) => t.delta[i] },
+    ...(names
+      ? [
+          {
+            id: 'best_name',
+            label: 'Best name',
+            title: 'An isotope error, else the first common modification of the UniMod match, else its first entry, else the first PSI-MOD name; without the mass error',
+            mono: true,
+            text: (i: number) => names[i]
+          }
+        ]
+      : []),
     { id: 'spectra', label: 'Spectra', num: true, text: (i) => fmt(t.spectra[i]), key: (i) => t.spectra[i] },
     { id: 'interps', label: 'Top interpretations', mono: true, text: (i) => t.interps[i].map((x) => `${x.name} ${x.n}`).join(', ') },
     // The survey columns (1.15.2 on): localization, residues, UniMod names

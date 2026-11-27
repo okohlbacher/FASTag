@@ -75,7 +75,7 @@ grid; see the Decision at the end of this section.
 | W2 | `qc_out` |
 | W3 | `recon_out`, `delta_out`, `delta_spectra_out`, `delta_counts_out`, `extension 3` |
 | W4 | `species true`, `extension 2` (validated in the paper: seed 3 + 2 x 2 = k 7) |
-| W5 | `shortlist_out`, `fasta_out`, `search_config_out`, plus the shortlist recipe of doc/SHORTLIST.md: `tag_length 4`, `extension 6`, `shortlist_min_spectra 1`, `shortlist_gapped true`, `recon_min_length 6`, `shortlist_max_evalue 10`, `recon_missed_cleavages 2` (from 1.16.2; 1.16.1 and earlier sent `extension 3` at tag length 3). The recipe is **not validated**: with MSFragger and the tryptic shortlist it passed its second held-out test and failed the third. The GUI sets it for every engine and protease as its default recipe, and the workflow help says so. |
+| W5 | `shortlist_out`, `fasta_out`, `search_config_out`, plus the shortlist recipe of doc/SHORTLIST.md: `tag_length 4`, `extension 6`, `shortlist_min_spectra 1`, `shortlist_gapped true`, `recon_min_length 6`, `shortlist_max_evalue 100`, `recon_missed_cleavages 2` (from 1.16.2; 1.16.1 and earlier sent `extension 3` at tag length 3; E-value 100 from 1.16.4, the value of the metaproteome held-out PASS, 10 before; with MSFragger chosen the form shows the CLI's recipe value 10). The recipe is **not validated**: with MSFragger and the tryptic shortlist it passed its second held-out test and failed the third. The GUI sets it for every engine and protease as its default recipe, and the workflow help says so. |
 | W6 | `census true`, `census_score true`, `census_sorted_out` |
 | W7 | `digest_out`, `label_out`, `alkylation_out`, `glyco true`, `species true`, `extension 2`; all spectra (no `subsample_fraction`). From 1.16 the alkylation report is on and every spectrum is read: the report needs no database (its call is read off the tags), and on all spectra at extension 2 enough cysteines vote (PXD000001: methylthio, 52 of 69 votes), where 10% of the spectra (the earlier default) gave 8 votes and no call. Before 1.16 it placed on the shipped human proteome, which needs tags of 8+ residues. |
 
@@ -85,7 +85,7 @@ grid; see the Decision at the end of this section.
 
 | Field | Params | One-line help |
 |---|---|---|
-| Instrument | `fragment_tolerance`, `fragment_tolerance_unit`, `ion_series`, `ion_series_hybrid` | Sets the fragment tolerance for your analyzer. Presets: Orbitrap or TOF HCD 20 ppm; Orbitrap ETD 20 ppm with c/z ions (`ion_series auto`, unvalidated); Orbitrap EThcD, the same plus `ion_series_hybrid both` (unvalidated); ion trap CID 0.3 Da; Custom. |
+| Instrument | `fragment_tolerance`, `fragment_tolerance_unit`, `ion_series`, `ion_series_hybrid` | Sets the fragment tolerance for your analyzer. Presets: Orbitrap or TOF HCD 20 ppm; Orbitrap ETD 20 ppm with c/z ions (`ion_series auto`, unvalidated); Orbitrap EThcD, the same plus `ion_series_hybrid both` (unvalidated); ion trap CID 0.5 Da; Custom. |
 | Fixed modifications | `fixed_modifications` | Modifications on every such residue. Remove Carbamidomethyl (C) if cysteines were not alkylated; add TMT for labelled runs. |
 
 - The Instrument preset is matched by value: 20 ppm with b/y ions shows

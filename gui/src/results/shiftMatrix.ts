@@ -13,6 +13,7 @@
 
 import type { DeltaTable } from './tables'
 import { SHIFT_MIN_DA } from './overview'
+import { bestShiftName } from './shiftName'
 
 /// The 20 amino acids, in the order of the matrix.
 export const AMINO_ACIDS = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y'] as const
@@ -97,11 +98,7 @@ export function columnOrder(cols: Iterable<string>): string[] {
 
 /// The first entry of a unimod or psimod cell, without its mass error:
 /// "TMT6plex@N-term/K/T/H(-0.5ppm);..." gives "TMT6plex@N-term/K/T/H".
-export function firstName(cell: string | undefined): string {
-  const c = (cell ?? '').trim()
-  if (c === '' || c === '-') return ''
-  return c.split(';')[0].replace(/\((?:[+-]?[\d.]+(?:ppm|mDa))\)$/, '').trim()
-}
+export { firstName } from './shiftName'
 
 export interface MatrixRow {
   /// The row's place in the matrix (ResidueMatrix.rows).
@@ -110,8 +107,9 @@ export interface MatrixRow {
   key: string
   delta: number
   spectra: number
-  /// The best name: the first UniMod entry, else the first PSI-MOD one,
-  /// else the isotope error; '' when none. A pooled row: the entry the most
+  /// The best name (bestShiftName): an isotope error, else the first common
+  /// modification of the UniMod entries, else the first UniMod entry, else
+  /// the first PSI-MOD one; '' when none. A pooled row: the entry the most
   /// of its spectra carry, with the sites its rows name (poolName).
   name: string
   /// The names behind it, for the tooltip (unimod; psimod; isotope error).
@@ -186,8 +184,7 @@ export function sourceOf(t: DeltaTable): MatrixSource | null {
     const sites = parseSites(res[i] ?? '', bad)
     // Without a localized column, the sites are all there is.
     const localized = count(loc, i) ?? sites.reduce((n, s) => n + s.n, 0)
-    const isoName = (iso?.[i] ?? '').trim()
-    const name = firstName(unimod?.[i]) || firstName(psimod?.[i]) || (isoName === '-' ? '' : firstName(isoName))
+    const name = bestShiftName({ delta: t.delta[i], unimod: unimod?.[i], psimod: psimod?.[i], isotope: iso?.[i] })
     const names = [unimod?.[i], psimod?.[i], iso?.[i]]
       .map((v) => (v ?? '').trim())
       .filter((v) => v !== '' && v !== '-')

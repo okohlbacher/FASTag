@@ -23,7 +23,7 @@ for (const w of RUNS) {
     await page.getByRole('button', { name: 'Choose file…' }).click()
     await page.locator('#instrument').selectOption('iontrap-cid')
     if (w.fasta) await page.locator('#p-recon_fasta').fill(w.fasta)
-    // Species at 0.3 Da is a red flag of the checks before the run: answered.
+    // Species at a Da tolerance is a red flag of the checks before the run: answered.
     const anyway = page.getByRole('button', { name: 'Run anyway' })
     if ((await anyway.count()) > 0) await anyway.first().click()
     await page.locator('.view-setup .runbar').getByRole('button', { name: /^Run$/ }).click()

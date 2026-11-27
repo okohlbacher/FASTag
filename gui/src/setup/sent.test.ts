@@ -108,13 +108,28 @@ describe('the parameters a run sends', () => {
     expect('shortlist_max_evalue' in sentValuesFrom(old, old)).toBe(false)
   })
 
+  // 1.16.4: Database reduction sends E-value 100 (the metaproteome held-out
+  // PASS, Sage); choosing MSFragger shows the CLI's recipe value 10 (its
+  // tested value), and back to Sage the workflow's 100.
+  it('Database reduction: E-value 100, 10 while MSFragger is chosen', () => {
+    const base = startValues('builtin:db-reduction', '/d/a.tags.tsv')
+    expect(base['shortlist_max_evalue']).toBe('100')
+    const msf = syncRecipe(base, { ...base, search_engine: 'msfragger' }, new Set(), base)
+    expect(msf['shortlist_max_evalue']).toBe('10')
+    expect('shortlist_max_evalue' in sentValuesFrom(msf, base)).toBe(false)
+    const sage = syncRecipe(msf, { ...msf, search_engine: 'sage' }, new Set(), base)
+    expect(sage['shortlist_max_evalue']).toBe('100')
+    expect(sentValuesFrom(sage, base)['shortlist_max_evalue']).toBe('100')
+  })
+
   it('sends a value that differs from the MSFragger recipe, even when it is the static default', () => {
     const base = startValues('builtin:db-reduction', '/d/a.tags.tsv')
     const v = { ...base, recon_fasta: '/d/h.fasta', search_engine: 'msfragger' }
     const sentValues = (x: Record<string, unknown>): Record<string, unknown> => sentValuesFrom(x, base)
-    // The workflow's values are the recipe: none needs naming.
+    // The workflow's values are the recipe but for its E-value (100, not the CLI's 10): only that is named.
     const sent = sentValues(v)
-    for (const n of ['recon_min_length', 'recon_missed_cleavages', 'shortlist_max_evalue', 'shortlist_gapped']) expect(n in sent, n).toBe(false)
+    for (const n of ['recon_min_length', 'recon_missed_cleavages', 'shortlist_gapped']) expect(n in sent, n).toBe(false)
+    expect(sent['shortlist_max_evalue']).toBe('100')
     // E-value back to 0.1 (the static default): the CLI would use 10.
     expect(sentValues({ ...v, shortlist_max_evalue: '0.1' })['shortlist_max_evalue']).toBe('0.1')
     expect(sentValues({ ...v, recon_min_length: '0', recon_missed_cleavages: '1' })).toMatchObject({ recon_min_length: '0', recon_missed_cleavages: '1' })
@@ -123,7 +138,7 @@ describe('the parameters a run sends', () => {
     expect('shortlist_gapped' in sentValues({ ...v, shortlist_gapped: false })).toBe(false)
     // With Sage the recipe is the workflow's: every value is named.
     const sage = sentValues({ ...v, search_engine: 'sage' })
-    expect(sage).toMatchObject({ recon_min_length: '6', recon_missed_cleavages: '2', shortlist_max_evalue: '10', shortlist_gapped: true })
+    expect(sage).toMatchObject({ recon_min_length: '6', recon_missed_cleavages: '2', shortlist_max_evalue: '100', shortlist_gapped: true })
     expect(forcedValue('shortlist_gapped', { ...v, search_engine: 'sage' })).toBeNull()
   })
 

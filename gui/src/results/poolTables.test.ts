@@ -126,7 +126,8 @@ describe('poolTables: the best name', () => {
 
   it('ties between entries go by name; an isotope error has no sites; no name at all is empty', () => {
     const iso = poolTables([table('/a', [['1.0030', 4, 0, '-', 4, '13C+1']]), table('/b', [['1.0035', 4, 0, '-', 4, 'Label:15N(1)@L(+2ppm)']])])
-    expect(iso.rows[0].name).toBe('13C+1')
+    // 1.16.4: both rows are an isotope error (bestShiftName), one by the gap.
+    expect(iso.rows[0].name).toBe('isotope error +1')
     const none = poolTables([table('/a', [['77.0000', 4, 0, '-', 4]]), table('/b', [['77.0010', 4, 0, '-', 4]])])
     expect([none.rows[0].name, none.rows[0].names]).toEqual(['', ''])
     expect(nameParts('Methyl@C[-Carbamidomethyl]')).toEqual({ entry: 'Methyl', sites: ['C[-Carbamidomethyl]'] })

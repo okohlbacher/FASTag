@@ -103,7 +103,7 @@ describe('useSession', () => {
     installMockBridge()
     const { result } = renderHook(() => useSession())
     act(() => result.current.chooseInstrument('iontrap-cid'))
-    expect(result.current.values['fragment_tolerance']).toBe('0.3')
+    expect(result.current.values['fragment_tolerance']).toBe('0.5')
     expect(result.current.values['fragment_tolerance_unit']).toBe('Da')
     expect(result.current.instrument).toBe('iontrap-cid')
   })

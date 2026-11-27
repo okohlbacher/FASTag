@@ -16,6 +16,9 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -190,6 +193,25 @@ namespace
     check(field(sp, "verdict") == "centroid", "Ecoli centroid: " + sp);
     const std::string in = record(e.jsonl, "instrument");
     check(field(in, "ms2_analyzer") == "orbitrap" && field(in, "ms2_analyzer_from") == "run_default", "Ecoli analyser: " + in);
+    // 1.16.4: the filter strings say where the MS2 were read (ITMS), whatever
+    // the run's default configuration names.
+    check(field(in, "ms2_filter_itms") == "139" && field(in, "ms2_filter_ftms") == "0", "Ecoli filter strings ITMS: " + in);
+    {
+      // The same file with FTMS filter strings (same length: the index holds).
+      std::ifstream src(dir + "/Ecoli_MS2_small.mzML", std::ios::binary);
+      std::string xml((std::istreambuf_iterator<char>(src)), std::istreambuf_iterator<char>());
+      for (std::size_t k = xml.find("\"ITMS + "); k != std::string::npos; k = xml.find("\"ITMS + ", k + 1)) xml.replace(k + 1, 4, "FTMS");
+      const std::string ftms = (std::filesystem::temp_directory_path() / "fastag_probe_ftms_test.mzML").string();
+      std::ofstream(ftms, std::ios::binary) << xml;
+      const P::ProbeOutput f = P::probeInput(ftms, opt);
+      const std::string fi = record(f.jsonl, "instrument");
+      check(f.status == P::Status::OK && field(fi, "ms2_filter_ftms") == "139" && field(fi, "ms2_filter_itms") == "0",
+            "FTMS twin: filter strings FTMS: " + fi);
+      std::filesystem::remove(ftms);
+    }
+    // MGF has no filter strings: both counts 0.
+    check(field(record(P::probeInput(dir + "/Ecoli_MS2_small.mgf", opt).jsonl, "instrument"), "ms2_filter_itms") == "0",
+          "MGF: no filter strings");
     check(field(record(e.jsonl, "index"), "state") == "ok", "Ecoli index ok");
     check(field(record(e.jsonl, "acquisition"), "refuse") == "false", "Ecoli not refused");
 
