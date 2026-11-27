@@ -203,11 +203,12 @@ jobs:
           echo "build legs: $(jq -r 'map(.name) | join(", ")' <<<"$legs")" | tee -a "$GITHUB_STEP_SUMMARY"
 
   build:
-    name: ${{ matrix.name }}
+    name: ${{ matrix.name }} build
     runs-on: ${{ matrix.runner }}
     needs: [version]
     env:
       ASSET_VERSION: ${{ needs.version.outputs.version }}
+      FASTAG_BUILD_TARGET: FASTag
     # write, not the default: needed only for the tag-triggered release-asset
     # upload below. Scoped to this job rather than the workflow, since nothing
     # else here needs it. GitHub already forces a read-only token for
@@ -215,9 +216,6 @@ jobs:
     # nothing to an untrusted PR -- it only ever matters on an actual tag push.
     permissions:
       contents: write
-      # read: the Test step's reuse lookup on a v* tag (.github/scripts/tested-tree.sh)
-      # lists this workflow's earlier runs and their jobs.
-      actions: read
     # A ceiling, not an estimate. Linux finishes in minutes once OpenMS is
     # cached; this exists so a job that hangs dies rather than holding a
     # concurrency group. It does NOT cover a job stuck waiting for a runner --
@@ -244,13 +242,15 @@ jobs:
         include: ${{ fromJSON(needs.version.outputs.linux_legs) }}
 
     steps: &build-steps
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - &s01
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
       # The same libraries OpenMS was built against (.github/env/openms.yml),
       # the same compilers, plus what packaging needs.
-      - name: Install the toolchain and dependencies
+      - &s02
+        name: Install the toolchain and dependencies
         uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
         with:
           environment-file: .github/env/openms.yml
@@ -261,14 +261,16 @@ jobs:
       # OpenMS: restored from the cache, or built from source and saved at once,
       # so a later FASTag failure in this job cannot keep the build from the
       # cache (actions/cache would save only from a successful job).
-      - name: Restore OpenMS
+      - &s03
+        name: Restore OpenMS
         id: openms-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: openms-install
           key: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
 
-      - name: Check out OpenMS at the pinned commit
+      - &s04
+        name: Check out OpenMS at the pinned commit
         if: steps.openms-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
@@ -291,7 +293,8 @@ jobs:
       # The .NET SDK the Thermo bridge's managed half is built with (only
       # when OpenMS is built; the runtime the CLI uses is installed below on
       # every run).
-      - name: Install the .NET SDK (OpenMS Thermo bridge)
+      - &s05
+        name: Install the .NET SDK (OpenMS Thermo bridge)
         if: steps.openms-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
@@ -300,7 +303,8 @@ jobs:
           bash "$RUNNER_TEMP/dotnet-install.sh" --version "$DOTNET_SDK_VERSION" --install-dir "$RUNNER_TEMP/dotnet-sdk" --no-path
           "$RUNNER_TEMP/dotnet-sdk/dotnet" --info | head -20
 
-      - name: Build and install OpenMS
+      - &s06
+        name: Build and install OpenMS
         if: steps.openms-cache.outputs.cache-hit != 'true'
         shell: bash -el {0}
         run: |
@@ -336,14 +340,16 @@ jobs:
           cmake --build openms-build --parallel "$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)"
           cmake --install openms-build
 
-      - name: Save OpenMS
+      - &s07
+        name: Save OpenMS
         if: steps.openms-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: openms-install
           key: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
 
-      - name: Verify the OpenMS install
+      - &s08
+        name: Verify the OpenMS install
         shell: bash
         run: |
           set -euo pipefail
@@ -362,7 +368,8 @@ jobs:
           find openms-install/include -name 'BrukerTimsFile.h' | grep -q .
           grep -m1 -oE 'PACKAGE_VERSION "[^"]+"' openms-install/lib/cmake/OpenMS/OpenMSConfigVersion.cmake
 
-      - name: Point the build at OpenMS
+      - &s09
+        name: Point the build at OpenMS
         shell: bash -el {0}
         run: |
           set -euo pipefail
@@ -377,7 +384,8 @@ jobs:
       # steps copy it into dist/FASTag/dotnet (tools/vendor_bundle.py), where
       # the shipped CLI finds it itself. And a .raw to read: OpenMS's own
       # 2 MB test file at OPENMS_REF, checked by its sha256.
-      - name: Install the .NET runtime and fetch a Thermo .raw
+      - &s10
+        name: Install the .NET runtime and fetch a Thermo .raw
         shell: bash
         run: |
           set -euo pipefail
@@ -397,7 +405,8 @@ jobs:
       # The mzPeak fixture of OpenMS's own tests at the pinned commit: 34 MS2
       # spectra, written by the reference converter. The smoke runs read it,
       # and the validator step uses it as its control.
-      - name: Fetch the mzPeak test archive
+      - &s11
+        name: Fetch the mzPeak test archive
         shell: bash
         run: |
           set -euo pipefail
@@ -407,9 +416,11 @@ jobs:
           echo "5af157f1744d13502dbc8f7103ad0d01c4ba5ecc528087756aa09ed75d4b4087  ci-data/small.mzpeak" > ci-data/small.sha256
           if command -v sha256sum >/dev/null; then sha256sum -c ci-data/small.sha256; else shasum -a 256 -c ci-data/small.sha256; fi
 
-      - name: Configure
+      - &s12
+        name: Configure
         shell: bash -el {0}
         run: |
+          if [ "${TESTS_REUSED:-}" = true ]; then echo "tests reused from an identical tree: nothing to build here"; exit 0; fi
           # pipefail, because the cmake line below is piped into tee. This
           # shell is `bash -el`, which has errexit but NOT pipefail, so a
           # failed configure would otherwise be swallowed by tee.
@@ -425,9 +436,11 @@ jobs:
             -DOpenMS_DIR="$OPENMS_DIR" \
             -DCMAKE_PREFIX_PATH="$OPENMS_INSTALL;$CONDA_PREFIX" 2>&1 | tee configure.log
 
-      - name: Verify OpenMP was found
+      - &s13
+        name: Verify OpenMP was found
         shell: bash -el {0}
         run: |
+          if [ "${TESTS_REUSED:-}" = true ]; then echo "tests reused from an identical tree: nothing to build here"; exit 0; fi
           # Without this, macOS goes GREEN while shipping a serial binary.
           #
           # Missing OpenMP is not a build error. CMakeLists.txt warns and carries
@@ -445,9 +458,15 @@ jobs:
           fi
           grep "FASTag: OpenMP" configure.log
 
-      - name: Build
+      # The build jobs build the CLI alone (FASTAG_BUILD_TARGET=FASTag: the
+      # bundles take build/FASTag and data/ from the source tree); the test
+      # jobs build everything ctest runs.
+      - &s14
+        name: Build
         shell: bash -el {0}
-        run: cmake --build build --parallel
+        run: |
+          if [ "${TESTS_REUSED:-}" = true ]; then echo "tests reused from an identical tree: nothing to build here"; exit 0; fi
+          cmake --build build --parallel ${FASTAG_BUILD_TARGET:+--target "$FASTAG_BUILD_TARGET"}
 
       # mzPeakValidator, for every archive this job writes: ctest's
       # mzpeak_validate (the round-trip archives) and the bundle check below.
@@ -459,17 +478,20 @@ jobs:
       # --only-binary: every compiled dependency has a wheel for all five
       # targets, and a source build here would be a silent multi-minute
       # detour on a runner without a compiler for it.
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      - &s15
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         id: validator-python
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: test/mzpeak-validator-requirements.txt
-      - name: Install mzPeakValidator
+      - &s16
+        name: Install mzPeakValidator
         shell: bash
         env:
           PY: ${{ steps.validator-python.outputs.python-path }}
         run: |
+          if [ "${TESTS_REUSED:-}" = true ]; then echo "tests reused from an identical tree: nothing to build here"; exit 0; fi
           set -euo pipefail
           PY="${PY//\\//}"
           for attempt in 1 2 3; do
@@ -487,47 +509,6 @@ jobs:
           "$V" --help >/dev/null
           echo "MZPEAK_VALIDATE=$V" >> "$GITHUB_ENV"
           echo "validator: $V"
-
-      # A v* tag build does not re-run ctest when an earlier push or dispatch
-      # run of this workflow (the release dry run, the main push of the merge
-      # commit) has the SAME git tree and a successful Test step in the job of
-      # the same name. Any API error, a PR, a main push or a dispatch: the
-      # tests run as before. The run it relied on is named in the log and the
-      # job summary.
-      - name: Look for an identical tree that already passed the tests (tag builds)
-        id: test-reuse
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash .github/scripts/tested-tree.sh "${{ matrix.name }}"
-
-      - name: Test
-        if: steps.test-reuse.outputs.reuse != 'true'
-        shell: bash -el {0}
-        run: |
-          # pipefail, as in Configure: this shell has errexit but not pipefail.
-          set -o pipefail
-          # One test per core: the tests are independent (their own temp
-          # directories; fixtures, RUN_SERIAL and COST in CMakeLists.txt).
-          # The required-test checks below read the per-test result lines,
-          # which ctest prints the same way with -j.
-          NJ=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
-          echo "ctest -j $NJ"
-          ctest --test-dir build --output-on-failure -j "$NJ" 2>&1 | tee ctest.log
-          # The mzPeak tests SKIP themselves in a build without mzPeak support
-          # or without the validator. This job has both, so a skip here would
-          # be a broken harness presenting as green -- the very class of
-          # failure this coverage exists for. Require a Passed line for each.
-          # The vendor readers (1.15.2) likewise: bruker_cli_test reads the
-          # trimmed timsTOF fixture, thermo_cli_test checks the reader's gate
-          # and notice (its data part needs a peptide .raw, which CI has not).
-          # gui_cli_test and shipped_data_test: the shipped data in every
-          # layout and the build tree's staging (they skip without Python).
-          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test bruker_cli_test thermo_cli_test gui_cli_test shipped_data_test; do
-            grep -E "Test +#[0-9]+: $t " ctest.log | grep -q 'Passed' \
-              || { echo "::error::$t did not pass (skipped, not run or missing)"; grep -E "$t" ctest.log || true; exit 1; }
-          done
 
       # Not part of Test, so a tag build that reuses an earlier test run still
       # reads both vendor formats with the binary it built.
@@ -1069,9 +1050,6 @@ jobs:
       # test/mzpeak_validate.sh.
       - name: Validate every mzPeak archive this job wrote
         shell: bash
-        env:
-          TESTS_REUSED: ${{ steps.test-reuse.outputs.reuse == 'true' }}
-          TESTS_REUSED_FROM: ${{ steps.test-reuse.outputs.run_url }}
         run: |
           set -euo pipefail
           R=validator-reports; rm -rf "$R"; mkdir -p "$R"
@@ -1079,11 +1057,7 @@ jobs:
             || { echo "::error::the CONTROL archive (reference converter) fails the pinned validator -- the validator or its pin is broken, not FASTag"; exit 1; }
           bash test/mzpeak_validate.sh "$R/bundle" /tmp/bundle-mzpeak/bundle.mzpeak \
             || { echo "::error::the archive the shipped bundle wrote is not a valid mzPeak archive"; exit 1; }
-          if [ "$TESTS_REUSED" = true ]; then
-            echo "ctest did not run here (tests reused from $TESTS_REUSED_FROM): no round-trip reports to collect"
-          else
-            cp -r build/mzpeak-roundtrip/validator "$R/ctest"
-          fi
+          # ctest's round-trip reports are the test job's (mzpeak-validator-ctest-<leg>).
           ls -R "$R" | head -40
 
       # The reports, pass or fail: a red validator run is only useful with
@@ -1761,20 +1735,132 @@ jobs:
   # The macOS legs of build: the same steps, a job of their own so that the
   # Linux GUI jobs do not wait for them (release-complete still needs both).
   build-macos:
-    name: ${{ matrix.name }}
+    name: ${{ matrix.name }} build
     runs-on: ${{ matrix.runner }}
     needs: [version]
     env:
       ASSET_VERSION: ${{ needs.version.outputs.version }}
+      FASTAG_BUILD_TARGET: FASTag
     permissions:
       contents: write
-      actions: read
     timeout-minutes: 330
     strategy:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.version.outputs.macos_legs) }}
     steps: *build-steps
+
+  # ---------------------------------------------------------------- tests
+  # ctest, in jobs of their own that start with the build jobs below rather
+  # than inside them: the build jobs go on to bundle, sign and package (and
+  # the GUI jobs wait only for them) while the tests run. Each test job
+  # compiles FASTag and its tests itself from the same tree and toolchain.
+  # The job keeps the leg's name (linux-x64, ...): tested-tree.sh, on a v*
+  # tag, looks for an earlier run whose job of that name passed its "Test"
+  # step. release-complete needs these jobs.
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    needs: [version]
+    permissions:
+      contents: read
+      # read: the Test step's reuse lookup on a v* tag (.github/scripts/tested-tree.sh)
+      # lists this workflow's earlier runs and their jobs.
+      actions: read
+    # 330: a cold OpenMS build (up to 240 minutes) plus the suite.
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.version.outputs.linux_legs) }}
+    steps: &test-steps
+      - *s01
+      # A v* tag build does not re-run ctest when an earlier push or dispatch
+      # run of this workflow (the release dry run, the main push of the merge
+      # commit) has the SAME git tree and a successful Test step in the job of
+      # the same name. Any API error, a PR, a main push or a dispatch: the
+      # tests run as before. The run it relied on is named in the log and the
+      # job summary.
+      - name: Look for an identical tree that already passed the tests (tag builds)
+        id: test-reuse
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash .github/scripts/tested-tree.sh "${{ matrix.name }}"
+          # The shared Configure, Build and validator steps read this.
+          grep -q '^reuse=true$' "$GITHUB_OUTPUT" && echo "TESTS_REUSED=true" >> "$GITHUB_ENV" || true
+
+      - *s02
+      - *s03
+      - *s04
+      - *s05
+      - *s06
+      - *s07
+      - *s08
+      - *s09
+      - *s10
+      - *s11
+      - *s12
+      - *s13
+      - *s14
+      - *s15
+      - *s16
+      - name: Test
+        if: steps.test-reuse.outputs.reuse != 'true'
+        shell: bash -el {0}
+        run: |
+          # pipefail, as in Configure: this shell has errexit but not pipefail.
+          set -o pipefail
+          # One test per core: the tests are independent (their own temp
+          # directories; fixtures, RUN_SERIAL and COST in CMakeLists.txt).
+          # The required-test checks below read the per-test result lines,
+          # which ctest prints the same way with -j.
+          NJ=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+          echo "ctest -j $NJ"
+          ctest --test-dir build --output-on-failure -j "$NJ" 2>&1 | tee ctest.log
+          # The mzPeak tests SKIP themselves in a build without mzPeak support
+          # or without the validator. This job has both, so a skip here would
+          # be a broken harness presenting as green -- the very class of
+          # failure this coverage exists for. Require a Passed line for each.
+          # The vendor readers (1.15.2) likewise: bruker_cli_test reads the
+          # trimmed timsTOF fixture, thermo_cli_test checks the reader's gate
+          # and notice (its data part needs a peptide .raw, which CI has not).
+          # gui_cli_test and shipped_data_test: the shipped data in every
+          # layout and the build tree's staging (they skip without Python).
+          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test bruker_cli_test thermo_cli_test gui_cli_test shipped_data_test; do
+            grep -E "Test +#[0-9]+: $t " ctest.log | grep -q 'Passed' \
+              || { echo "::error::$t did not pass (skipped, not run or missing)"; grep -E "$t" ctest.log || true; exit 1; }
+          done
+
+      # ctest's mzpeak_validate reports (the round-trip archives), pass or fail.
+      - name: Collect the ctest validator reports
+        if: always() && steps.test-reuse.outputs.reuse != 'true'
+        shell: bash
+        run: |
+          mkdir -p validator-reports
+          cp -r build/mzpeak-roundtrip/validator validator-reports/ctest 2>/dev/null || echo "no ctest validator reports"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always() && steps.test-reuse.outputs.reuse != 'true'
+        with:
+          name: mzpeak-validator-ctest-${{ matrix.name }}
+          path: validator-reports
+          if-no-files-found: warn
+
+  test-macos:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    needs: [version]
+    permissions:
+      contents: read
+      actions: read
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.version.outputs.macos_legs) }}
+    steps: *test-steps
 
   # ----------------------------------------------------------- GUI checks
   # Independent on purpose: no `needs:` -- waiting for OpenMS to test
@@ -2915,7 +3001,7 @@ jobs:
     # would otherwise turn the cancelled run's completeness check red for
     # uploads the NEW run will finish.
     if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
-    needs: [version, build, build-macos, taxonomy-asset, release-notes, gui-linux-release, gui-linux-arm64-release, gui-cli-consistency]
+    needs: [version, test, test-macos, build, build-macos, taxonomy-asset, release-notes, gui-linux-release, gui-linux-arm64-release, gui-cli-consistency]
     runs-on: ubuntu-24.04
     env:
       V: ${{ needs.version.outputs.version }}
@@ -2932,6 +3018,19 @@ jobs:
         run: |
           echo "::error::release-notes was ${{ needs.release-notes.result }}: the release body is not the CHANGELOG section"
           exit 1
+      # The suites passed (or an identical tree's did, tested-tree.sh), and
+      # every build job finished: an asset left by an earlier attempt must not
+      # make a failed one green.
+      - name: The tests and the builds passed
+        env:
+          RESULTS: >-
+            test=${{ needs.test.result }} test-macos=${{ needs.test-macos.result }}
+            build=${{ needs.build.result }} build-macos=${{ needs.build-macos.result }}
+        run: |
+          echo "$RESULTS"
+          for r in $RESULTS; do
+            [ "${r#*=}" = success ] || { echo "::error::${r%%=*} was ${r#*=}"; exit 1; }
+          done
       - name: The GUI's argv passed against the release CLI
         if: needs.gui-cli-consistency.result != 'success'
         run: |
