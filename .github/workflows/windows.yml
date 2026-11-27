@@ -36,6 +36,13 @@ on:
         description: 'With gui_dry_run: embed the pinned taxonomy index (release-sized installer and zip)'
         type: boolean
         default: false
+      # ci.yml's input of the same name: the promotion path of a tag build
+      # (the release candidate's installer and zip attached to this DRAFT,
+      # then smoke-tested), without a tag. Must start with ci-promotion-test-.
+      promote_to:
+        description: 'Promotion dry run: attach the release candidate of this tree to this DRAFT release (ci-promotion-test-*); empty = off'
+        type: string
+        default: ''
       # Builds and uploads the Windows assets of an EXISTING release from the
       # dispatched ref, e.g. after a Windows-only CI fix landed on main once the
       # tag was cut. The dispatched ref must have the tag's source tree; only
@@ -109,6 +116,10 @@ env:
   # 'true' where the zip and the installer carry the pinned k-mer index: a v*
   # tag, a release_tag upload, and a gui_dry_run with gui_full_payload.
   FULL_PAYLOAD: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '' || (inputs.gui_dry_run && inputs.gui_full_payload) }}
+  # A release CANDIDATE (ci.yml's RC_CANDIDATE): a full-payload dry run whose
+  # installer and zip a v* tag of the same tree attaches instead of building
+  # them again (job version, promote-assets).
+  RC_CANDIDATE: ${{ inputs.gui_dry_run && inputs.gui_full_payload && 'true' || 'false' }}
 jobs:
   # ------------------------------------------------------ release version
   # The ONE place this workflow decides the version the release files carry
@@ -121,8 +132,14 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+      actions: read
     outputs:
       version: ${{ steps.v.outputs.version }}
+      # ci.yml's outputs of the same names: promote ('true': the candidate's
+      # files are attached instead of built), its run, and the release.
+      promote: ${{ steps.rc.outputs.promote }}
+      candidate_run: ${{ steps.rc.outputs.run_id }}
+      release: ${{ steps.rc.outputs.release }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -130,6 +147,7 @@ jobs:
           sparse-checkout: |
             CMakeLists.txt
             tools/release_assets.sh
+            .github/scripts
           sparse-checkout-cone-mode: false
       - id: v
         env:
@@ -139,6 +157,38 @@ jobs:
           v=$(tools/release_assets.sh version "$TAG")
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "### Release files carry version $v (FASTag-$v-<variant>.<ext>)" >> "$GITHUB_STEP_SUMMARY"
+      # On a v* tag: a release candidate of this tree (release-candidate.sh)
+      # signed as this tag would sign -- the manifest's windows_signed must
+      # be what SignPath's availability here gives (release signing when it
+      # is configured; a test-signed candidate is never promoted). Not on a
+      # release_tag upload, which rebuilds by definition.
+      - name: Look for a release candidate of this tree (tag builds, promote_to)
+        id: rc
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.v.outputs.version }}
+          IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && inputs.release_tag == '' }}
+          PROMOTE_TO: ${{ inputs.promote_to }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORG_ID: ${{ secrets.SIGNPATH_ORG_ID }}
+        run: |
+          set -euo pipefail
+          if [ -n "$PROMOTE_TO" ]; then
+            [[ "$PROMOTE_TO" =~ ^ci-promotion-test-[A-Za-z0-9._-]+$ ]] \
+              || { echo "::error::promote_to must be a ci-promotion-test-* draft, not '$PROMOTE_TO'"; exit 1; }
+            echo "release=$PROMOTE_TO" >> "$GITHUB_OUTPUT"
+          elif [ "$IS_TAG" = true ]; then
+            echo "release=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          else
+            { echo "promote=false"; echo "release=${{ inputs.release_tag }}"; } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          signs=false
+          [ -n "$SIGNPATH_API_TOKEN" ] && [ -n "$SIGNPATH_ORG_ID" ] && [ -n "$SIGNPATH_PROJECT_SLUG" ] && signs=true
+          RC_META="windows_signed=$signs" bash .github/scripts/release-candidate.sh "$RUNNER_TEMP/rc"
+          if [ -n "$PROMOTE_TO" ] && ! grep -qx 'promote=true' "$GITHUB_OUTPUT"; then
+            echo "::error::promote_to: no release candidate of this tree (see above)"; exit 1
+          fi
 
   # ----------------------------------------------------------------- FASTag
   #
@@ -146,6 +196,7 @@ jobs:
   # OpenMS install.
   windows-x64:
     name: windows-x64 build
+    if: needs.version.outputs.promote != 'true'
     runs-on: windows-2022
     needs: [version]
     # read only: job release-assets attaches the assets, after job
@@ -1329,7 +1380,8 @@ jobs:
             fastag/gui/src-tauri/target/release/bundle/nsis/*.exe
             FASTag-${{ env.ASSET_VERSION }}-windows-x64.zip
           if-no-files-found: error
-          retention-days: 3
+          # 14: a release candidate's zip is promoted from here.
+          retention-days: 14
 
       # SignPath's 'initial' artifact configuration expects a ZIP containing
       # *.exe -- upload-artifact always zips, and the NSIS installer is an
@@ -1385,6 +1437,31 @@ jobs:
         with:
           name: FASTag-gui-windows-x64-${{ (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && 'release' || 'dryrun' }}
           path: ${{ steps.signpath-gate.outputs.enabled == 'true' && 'signed-gui/*.exe' || 'fastag/gui/src-tauri/target/release/bundle/nsis/*.exe' }}
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
+      # A release candidate's two files (ci.yml's parts): the zip and the
+      # installer that ships, under their release names.
+      - name: Release-candidate part (Windows)
+        if: env.RC_CANDIDATE == 'true'
+        shell: bash
+        env:
+          SIGNED: ${{ steps.signpath-gate.outputs.enabled == 'true' }}
+        run: |
+          set -euo pipefail
+          PY=$(command -v python3 || command -v python)
+          if [ "$SIGNED" = true ]; then exe=$(ls signed-gui/*.exe | head -1); else exe=$(ls fastag/gui/src-tauri/target/release/bundle/nsis/*.exe | head -1); fi
+          "$PY" fastag/.github/scripts/rc-manifest.py part --job windows-x64 --group windows-x64 \
+            --artifact FASTag-gui-windows-x64-installer-check --out rc-part-windows-zip.json \
+            "FASTag-${ASSET_VERSION}-windows-x64.zip=FASTag-${ASSET_VERSION}-windows-x64.zip"
+          "$PY" fastag/.github/scripts/rc-manifest.py part --job windows-x64 --group windows-x64 \
+            --artifact FASTag-gui-windows-x64-dryrun --out rc-part-windows-setup.json \
+            "FASTag-${ASSET_VERSION}-gui-windows-x64-setup.exe=$exe"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: env.RC_CANDIDATE == 'true'
+        with:
+          name: rc-part-windows-x64
+          path: rc-part-windows-*.json
           if-no-files-found: error
 
   # ------------------------------------------------------------ tests
@@ -1395,6 +1472,7 @@ jobs:
   # and release-complete need it.
   windows-x64-test:
     name: windows-x64
+    if: needs.version.outputs.promote != 'true'
     runs-on: windows-2022
     needs: [version]
     permissions:
@@ -1519,7 +1597,7 @@ jobs:
   #     and reports, and a refused run quoting FASTag's reason. Screenshots
   #     and the record are uploaded.
   installed-app:
-    if: ${{ !cancelled() && ((startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') || inputs.gui_dry_run) }}
+    if: ${{ !cancelled() && needs.version.outputs.promote != 'true' && ((startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') || inputs.gui_dry_run) }}
     needs: [version, windows-x64]
     env:
       ASSET_VERSION: ${{ needs.version.outputs.version }}
@@ -1718,7 +1796,7 @@ jobs:
             CMakeLists.txt
             tools/release_assets.sh
             tools/check_no_appledouble.sh
-            .github/scripts/fetch-artifact.sh
+            .github/scripts
           sparse-checkout-cone-mode: false
       # Each download bounded (5 minutes) and retried into a fresh directory.
       - name: Download the checked installer, the zip and the installer to ship
@@ -1749,8 +1827,174 @@ jobs:
           tools/release_assets.sh check "$V" "$setup" "$(basename "$zip")"
           # linux-1: no package carries macOS AppleDouble files (._*).
           bash tools/check_no_appledouble.sh "$zip"
-          gh release create "$TAG" --title "$TAG" --notes "Automated binary upload; the release notes follow from CHANGELOG.md (ci.yml job release-notes)." 2>/dev/null || true
+          # The one draft of the tag (or the published release), whoever came first.
+          bash .github/scripts/release-draft.sh "$TAG" > /dev/null
           gh release upload "$TAG" "$setup" "$zip" --clobber
+
+  # ------------------------------------------------------ release candidate
+  # ci.yml's job of the same name for the Windows files: on a gui_dry_run +
+  # gui_full_payload dispatch, when the build, the suite and the installed-app
+  # checks on x64 and ARM64 passed, the manifest of the installer and the zip.
+  release-candidate:
+    name: release candidate
+    if: ${{ !cancelled() && inputs.gui_dry_run && inputs.gui_full_payload }}
+    needs: [version, windows-x64, windows-x64-test, installed-app]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    env:
+      V: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Every gate passed
+        env:
+          RESULTS: >-
+            windows-x64=${{ needs.windows-x64.result }} windows-x64-test=${{ needs.windows-x64-test.result }}
+            installed-app=${{ needs.installed-app.result }}
+        run: |
+          echo "$RESULTS"
+          for r in $RESULTS; do
+            [ "${r#*=}" = success ] || { echo "::error::${r%%=*} was ${r#*=}: no release candidate"; exit 1; }
+          done
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        timeout-minutes: 10
+        with:
+          name: rc-part-windows-x64
+          path: parts
+      - name: Write the manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNED: ${{ needs.windows-x64.outputs.signed == 'true' }}
+        run: |
+          set -euo pipefail
+          tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$GITHUB_SHA" --jq .tree.sha)
+          wid=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .workflow_id)
+          mkdir -p rc
+          python3 .github/scripts/rc-manifest.py merge --out rc/manifest.json \
+            --require "FASTag-$V-windows-x64.zip" --require "FASTag-$V-gui-windows-x64-setup.exe" \
+            --meta "tree=$tree" --meta "version=$V" --meta "run_id=$GITHUB_RUN_ID" --meta "run_attempt=$GITHUB_RUN_ATTEMPT" \
+            --meta "workflow_id=$wid" --meta "workflow=$GITHUB_WORKFLOW" --meta "commit=$GITHUB_SHA" --meta "ref=$GITHUB_REF" \
+            --meta "windows_signed=$SIGNED" parts/*.json
+          { echo "### Release candidate $V (tree \`$tree\`), Windows signed: $SIGNED"; echo; echo '| file | sha256 |'; echo '|---|---|'
+            python3 .github/scripts/rc-manifest.py list rc/manifest.json | awk -F'\t' '{ print "| " $3 " | `" $4 "` |" }'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: release-candidate-manifest
+          path: rc/manifest.json
+          retention-days: 30
+          if-no-files-found: error
+
+  # ------------------------------------------------------ promotion
+  # ci.yml's promote-assets for the installer and the zip.
+  promote-assets:
+    if: needs.version.outputs.promote == 'true'
+    needs: [version]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+    env:
+      REL: ${{ needs.version.outputs.release }}
+      RUN: ${{ needs.version.outputs.candidate_run }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/scripts
+            tools/release_assets.sh
+            tools/check_no_appledouble.sh
+          sparse-checkout-cone-mode: false
+      - name: Fetch the candidate's files, check them, attach them, check the release's digests
+        env:
+          DRAFT_ONLY: ${{ inputs.promote_to != '' && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          bash .github/scripts/fetch-artifact.sh "$RUN" release-candidate-manifest "$RUNNER_TEMP/m" 3 120
+          M="$RUNNER_TEMP/m/manifest.json"
+          for a in $(python3 .github/scripts/rc-manifest.py list "$M" | cut -f1 | sort -u); do
+            bash .github/scripts/fetch-artifact.sh "$RUN" "$a" "$RUNNER_TEMP/a/$a" 3 600
+          done
+          python3 .github/scripts/rc-manifest.py check "$M" --dir "$RUNNER_TEMP/a" --out promoted
+          tools/release_assets.sh check "${{ needs.version.outputs.version }}" promoted/*
+          bash tools/check_no_appledouble.sh promoted/*.zip
+          id=$(RELEASE_DRAFT_ONLY=$DRAFT_ONLY bash .github/scripts/release-draft.sh "$REL")
+          gh release upload "$REL" promoted/* --clobber
+          gh api "repos/$GH_REPO/releases/$id" > "$RUNNER_TEMP/release.json"
+          python3 .github/scripts/rc-manifest.py release "$M" "$RUNNER_TEMP/release.json"
+          cp "$M" promoted-manifest.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: promoted-manifest
+          path: promoted-manifest.json
+          if-no-files-found: error
+
+  # The promoted installer and zip from the draft release, on x64 and ARM64:
+  # silent per-user install, the app's start-up probe and the bundled CLI
+  # (windows_installed_check.ps1, with the pinned index required), and the
+  # zip's FASTag.bat. The scopes, the upgrade and the GUI specs ran on these
+  # same bytes in the candidate run.
+  promoted-smoke:
+    name: promoted installer on ${{ matrix.os }}
+    if: needs.version.outputs.promote == 'true'
+    needs: [version, promote-assets]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      V: ${{ needs.version.outputs.version }}
+      REL: ${{ needs.version.outputs.release }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            tools
+            test/fixtures
+            CMakeLists.txt
+            data/taxonomy/manifests
+          sparse-checkout-cone-mode: false
+      - name: The promoted files
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release download "$REL" -p "FASTag-$V-gui-windows-x64-setup.exe" -p "FASTag-$V-windows-x64.zip" -D installer
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/thermo-smoke.raw" \
+            "https://raw.githubusercontent.com/OpenMS/OpenMS/$OPENMS_REF/src/tests/topp/THIRDPARTY/ginkgotoxin-ms-switching.raw"
+          echo "$THERMO_SMOKE_RAW_SHA256  $RUNNER_TEMP/thermo-smoke.raw" | sha256sum -c -
+          echo "FASTAG_THERMO_SMOKE_RAW=$RUNNER_TEMP/thermo-smoke.raw" >> "$GITHUB_ENV"
+      - name: Installed-app check (per user)
+        shell: pwsh
+        run: |
+          ./tools/windows_installed_check.ps1 -Installer "installer\FASTag-$($env:V)-gui-windows-x64-setup.exe" -Scope CurrentUser -Out "$env:RUNNER_TEMP\installed-check" -RequireTaxonomyIndex:$true
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: The release zip
+        shell: pwsh
+        run: |
+          Expand-Archive "installer\FASTag-$($env:V)-windows-x64.zip" -DestinationPath "$env:RUNNER_TEMP\zip" -Force
+          $bat = "$env:RUNNER_TEMP\zip\FASTag\FASTag.bat"
+          $o = & $bat --help 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0 -or $o -notmatch "Version:\s*$([regex]::Escape($env:V))") { Write-Host $o; Write-Host "::error::the promoted zip's FASTag.bat does not start the CLI $($env:V)"; exit 1 }
+          $mz = "$env:RUNNER_TEMP\zip\FASTag\share-OpenMS\examples\ID\Ecoli_MS2_small.mzML"
+          $tsv = "$env:RUNNER_TEMP\zip-tags.tsv"
+          $o = & $bat -in $mz -out $tsv 2>&1 | Out-String
+          $rows = if (Test-Path $tsv) { @(Get-Content $tsv | Where-Object { $_ -and -not $_.StartsWith('#') }).Count - 1 } else { 0 }
+          if ($LASTEXITCODE -ne 0 -or $rows -le 0) { Write-Host $o; Write-Host "::error::the promoted zip's tagging run failed"; exit 1 }
+          Write-Host "promoted zip: FASTag.bat runs, $rows tag rows"
 
   # ------------------------------------------------- release completeness
   # Asserts the Windows zip only; ci.yml's mirror job asserts the unix
@@ -1758,11 +2002,16 @@ jobs:
   # `needs:` and either workflow can finish first.
   release-complete:
     # !cancelled() for the same reason as ci.yml's job.
-    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') }}
-    needs: [version, windows-x64, windows-x64-test, installed-app, release-assets]
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '' || inputs.promote_to != '') && needs.version.result == 'success' }}
+    needs: [version, windows-x64, windows-x64-test, installed-app, release-assets, promote-assets, promoted-smoke]
     runs-on: ubuntu-24.04
+    # write: the release may still be a draft (ci.yml publishes it).
+    permissions:
+      contents: write
+      actions: read
     env:
       V: ${{ needs.version.outputs.version }}
+      REL: ${{ needs.version.outputs.release }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -1773,7 +2022,16 @@ jobs:
           sparse-checkout-cone-mode: false
       # The jobs that made and checked the assets succeeded: an asset of an
       # earlier attempt with the same name must not make a failed one green.
+      - name: The promotion and its smoke jobs succeeded
+        if: needs.version.outputs.promote == 'true'
+        env:
+          PROMOTE: ${{ needs.promote-assets.result }}
+          SMOKE: ${{ needs.promoted-smoke.result }}
+        run: |
+          echo "promote-assets: $PROMOTE, promoted-smoke: $SMOKE"
+          [ "$PROMOTE" = success ] && [ "$SMOKE" = success ] || { echo "::error::the promotion did not succeed"; exit 1; }
       - name: The Windows build, the installed-app checks and the upload succeeded
+        if: needs.version.outputs.promote != 'true'
         env:
           BUILD: ${{ needs.windows-x64.result }}
           TEST: ${{ needs.windows-x64-test.result }}
@@ -1791,7 +2049,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ inputs.release_tag || github.ref_name }}
+          TAG: ${{ needs.version.outputs.release || inputs.release_tag || github.ref_name }}
         run: |
           set -euo pipefail
           have=$(gh release view "$TAG" --json assets --jq '.assets[].name')
@@ -1806,7 +2064,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ inputs.release_tag || github.ref_name }}
+          TAG: ${{ needs.version.outputs.release || inputs.release_tag || github.ref_name }}
         run: |
           set -euo pipefail
           gh release view "$TAG" --json assets --jq '.assets[].name' \
