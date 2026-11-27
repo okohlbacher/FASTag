@@ -80,10 +80,13 @@ done
 # ---- (b) rows, (c) tagged set, (e) n_ms2, (f) summary -------------------------
 check_run() {  # census summary tags log mzML_for_count subsampled [max_tags [res_cover_exact]]
   local c="$1" s="$2" t="$3" l="$4" src="$5" sub="$6" mt="${7:-50}" ex="${8:-0}"
-  [ "$(head -1 "$c" | awk -F'\t' '{ print NF }')" = 23 ] || fail "$c: header has not 23 fields"
-  awk -F'\t' 'NF != 23 { exit 1 }' "$c" || fail "$c: a row has not 23 fields"
-  [ "$(head -1 "$c" | cut -f20-23)" = "$(printf 'tag_cover\tmax_len\tres_cover\tres_cover_exact')" ] \
-    || fail "(j) $c: census 2/3 columns"
+  [ "$(head -1 "$c" | awk -F'\t' '{ print NF }')" = 25 ] || fail "$c: header has not 25 fields"
+  awk -F'\t' 'NF != 25 { exit 1 }' "$c" || fail "$c: a row has not 25 fields"
+  [ "$(head -1 "$c" | cut -f20-25)" = "$(printf 'tag_cover\tmax_len\tres_cover\tres_cover_exact\ttic\txrea')" ] \
+    || fail "(j) $c: census 2/3/4 columns"
+  # (l) census 4: tic > 0 and 0 <= xrea < 1 wherever a peak has a positive intensity (n_peaks > 0)
+  awk -F'\t' 'NR > 1 && (($7 > 0) != ($24 > 0) || ($7 > 0) != ($25 != "") || ($25 != "" && ($25 < 0 || $25 >= 1))) { exit 1 }' "$c" \
+    || fail "(l) $c: tic/xrea inconsistent with n_peaks"
   # (k) census 3
   awk -F'\t' -v ex="$ex" 'NR > 1 && (($15 == "") != ($23 == "") \
                || ($23 != "" && (ex == "0" ? $23 != "0" : ($23 != "0" && $23 != "1")))) { exit 1 }' "$c" \
@@ -108,7 +111,7 @@ check_run() {  # census summary tags log mzML_for_count subsampled [max_tags [re
   awk -F'\t' 'NF != 5 { exit 1 }' "$s" || fail "(f) $s: a line has not five fields"
   [ "$(head -1 "$s")" = "$(printf 'section\tkey\tvalue\tn\tdescription')" ] || fail "(f) $s: header"
   [ "$(sed -n 2p "$s" | cut -f1,2)" = "$(printf 'run\tversion')" ] || fail "(f) $s: does not start with the run rows"
-  [ "$(summary "$s" census_version)" = 3 ] || fail "(f) $s: census_version"
+  [ "$(summary "$s" census_version)" = 4 ] || fail "(f) $s: census_version"
   # (j) census 2
   cmp -s <(awk -F'\t' 'NR > 1 && $3 > m[$1] { m[$1] = $3 } END { for (k in m) print k "\t" m[k] }' "$t" | sort) \
          <(awk -F'\t' 'NR > 1 && $21 != "" { print $2 "\t" $21 }' "$c" | sort) \

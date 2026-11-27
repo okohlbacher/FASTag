@@ -84,6 +84,9 @@ namespace
     r.n_peaks = f.n_peaks = sig.n_peaks;
     r.has_gini = sig.has_gini;
     r.gini = sig.gini;
+    r.tic = sig.tic;
+    r.has_xrea = sig.has_xrea;
+    r.xrea = sig.xrea;
     f.precursor_mz = prec_mz;
     std::vector<FASTag::Tag> tags;
     if (!f.empty && has_prec)
@@ -246,6 +249,42 @@ int main(int argc, char** argv)
     std::printf("3. Gini\n");
   }
 
+  // 3b. Xrea (Na & Paek 2006) and tic, by hand. Intensities 1, 2, 3, 4
+  //     (total 10): cumulative shares 0.1, 0.3, 0.6, 1.0 at x = 1/4 .. 1;
+  //     area under the curve (trapezoids from (0, 0)) =
+  //     1/4 * (0.05 + 0.2 + 0.45 + 0.8) = 0.375, XX = 0.5 - 0.375 = 0.125,
+  //     alpha = 4/10, Xrea = 0.125 / (0.5 + 0.4) = 5/36.
+  {
+    double x = -1;
+    const std::vector<double> lin = {1, 2, 3, 4};
+    CHECK(C::xrea(lin, x) && std::fabs(x - 5.0 / 36.0) < 1e-12, "Xrea of 1..4 is %g, not 5/36", x);
+    const std::vector<double> eq(10, 3.5);
+    CHECK(C::xrea(eq, x) && std::fabs(x) < 1e-12, "Xrea of equal intensities is %g", x);
+    const std::vector<double> one = {0, 0, 7};  // zeros are skipped: one peak
+    CHECK(C::xrea(one, x) && std::fabs(x) < 1e-12, "Xrea of a single peak is %g", x);
+    // 1, 1, 1, 7 (total 10): shares 0.1, 0.2, 0.3, 1.0; area
+    // 1/4 * (0.05 + 0.15 + 0.25 + 0.65) = 0.275, XX = 0.225, alpha = 0.7,
+    // Xrea = 0.225 / 1.2 = 0.1875.
+    const std::vector<double> dom = {1, 1, 1, 7};
+    CHECK(C::xrea(dom, x) && std::fabs(x - 0.1875) < 1e-12, "Xrea of 1,1,1,7 is %g, not 0.1875", x);
+    const std::vector<double> none = {0, 0};
+    CHECK(!C::xrea(none, x), "Xrea of an all-zero spectrum");
+    // Through signal(): input order does not matter, NaN, negative and zero
+    // intensities are left out of tic and xrea.
+    MSSpectrum s;
+    s.emplace_back(100, 3.0f); s.emplace_back(150, 0.0f); s.emplace_back(200, 1.0f);
+    s.emplace_back(250, std::numeric_limits<float>::quiet_NaN()); s.emplace_back(300, 4.0f);
+    s.emplace_back(350, -2.0f); s.emplace_back(400, 2.0f);
+    const C::Signal sig = C::signal(s);
+    CHECK(sig.n_peaks == 4 && sig.tic == 10.0, "signal: %zu peaks, tic %g", sig.n_peaks, sig.tic);
+    CHECK(sig.has_xrea && std::fabs(sig.xrea - 5.0 / 36.0) < 1e-12, "signal Xrea %g", sig.xrea);
+    MSSpectrum z;
+    z.emplace_back(100, 0.0f);
+    const C::Signal sz = C::signal(z);
+    CHECK(!sz.has_xrea && sz.tic == 0.0, "an all-zero spectrum has an Xrea or a tic");
+    std::printf("3b. Xrea and tic\n");
+  }
+
   // 4. bestTag: the minimum E-value, ties to the first output position, the
   //    rows themselves untouched.
   {
@@ -281,7 +320,7 @@ int main(int argc, char** argv)
     std::printf("5. tag_cover\n");
   }
 
-  // 6. Rows: 22 fields, tab escaping, empty fields where nothing was computed.
+  // 6. Rows: 25 fields, tab escaping, empty fields where nothing was computed.
   {
     auto fields = [](const std::string& line) {
       std::vector<std::string> f(1);
@@ -293,14 +332,15 @@ int main(int argc, char** argv)
       return f;
     };
     const auto hdr = fields(C::header());
-    CHECK(hdr.size() == 23, "header has %zu fields", hdr.size());
+    CHECK(hdr.size() == 25, "header has %zu fields", hdr.size());
     CHECK(hdr[0] == "index" && hdr[1] == "spectrum" && hdr[11] == "status" && hdr[19] == "tag_cover"
-              && hdr[20] == "max_len" && hdr[21] == "res_cover" && hdr[22] == "res_cover_exact",
+              && hdr[20] == "max_len" && hdr[21] == "res_cover" && hdr[22] == "res_cover_exact"
+              && hdr[23] == "tic" && hdr[24] == "xrea",
           "header columns out of place");
     const auto hion = fields(C::header(true, true));
-    CHECK(hion.size() == 28 && hion[21] == "res_cover" && hion[22] == "res_cover_exact"
-              && hion[23] == "best_ion_series",
-          "max_len/res_cover/res_cover_exact are not before best_ion_series");
+    CHECK(hion.size() == 30 && hion[21] == "res_cover" && hion[22] == "res_cover_exact"
+              && hion[23] == "tic" && hion[24] == "xrea" && hion[25] == "best_ion_series",
+          "max_len/res_cover/res_cover_exact/tic/xrea are not before best_ion_series");
 
     double pmz = 0;
     const MSSpectrum clean = ladder("VGAHAGEYGAEALER", pmz);
@@ -310,7 +350,9 @@ int main(int argc, char** argv)
     C::appendRow(line, r, "scan=1\tx\ny");
     const auto f = fields(line);
     CHECK(line.back() == '\n' && std::count(line.begin(), line.end(), '\n') == 1, "row is not one line");
-    CHECK(f.size() == 23, "row has %zu fields", f.size());
+    CHECK(f.size() == 25, "row has %zu fields", f.size());
+    CHECK(r.tic > 0 && !f[23].empty() && std::fabs(std::stod(f[23]) / r.tic - 1) < 1e-5, "tic '%s'", f[23].c_str());
+    CHECK(r.has_xrea && !f[24].empty() && std::fabs(std::stod(f[24]) - r.xrea) < 1e-4, "xrea '%s'", f[24].c_str());
     CHECK(f[1] == "scan=1 x y", "native id not escaped: '%s'", f[1].c_str());
     CHECK(f[0] == "17" && f[4] == "0" && f[5] == "2" && f[11] == "tagged", "row values wrong");
     CHECK(f[14].empty() && f[20].empty() && f[21].empty() && f[22].empty(),
@@ -322,14 +364,14 @@ int main(int argc, char** argv)
     std::string lb;
     C::appendRow(lb, r, "s");
     const auto fb = fields(lb);
-    CHECK(fb.size() == 23 && fb[15] == "4" && fb[20] == "7" && fb[21] == "11" && fb[22] == "1",
+    CHECK(fb.size() == 25 && fb[15] == "4" && fb[20] == "7" && fb[21] == "11" && fb[22] == "1",
           "max_len/res_cover/res_cover_exact: '%s' '%s'",
-          fb.size() == 23 ? fb[20].c_str() : "?", fb.size() == 23 ? fb[21].c_str() : "?");
+          fb.size() == 25 ? fb[20].c_str() : "?", fb.size() == 25 ? fb[21].c_str() : "?");
     r.res_cover_exact = false;
     std::string lx;
     C::appendRow(lx, r, "s");
     const auto fx = fields(lx);
-    CHECK(fx.size() == 23 && fx[22] == "0", "res_cover_exact 0 not written");
+    CHECK(fx.size() == 25 && fx[22] == "0", "res_cover_exact 0 not written");
 
     C::Row e;
     e.status = C::Status::NO_PRECURSOR;
@@ -337,8 +379,8 @@ int main(int argc, char** argv)
     std::string le;
     C::appendRow(le, e, "s");
     const auto fe = fields(le);
-    CHECK(fe.size() == 23 && fe[3].empty() && fe[4].empty() && fe[5].empty() && fe[7].empty()
-              && fe[12].empty() && fe[13].empty() && fe[22].empty(),
+    CHECK(fe.size() == 25 && fe[3].empty() && fe[4].empty() && fe[5].empty() && fe[7].empty()
+              && fe[12].empty() && fe[13].empty() && fe[22].empty() && fe[23] == "0" && fe[24].empty(),
           "no_precursor row writes precursor or tagger fields");
     std::printf("6. rows\n");
   }
@@ -373,7 +415,7 @@ int main(int argc, char** argv)
       return nullptr;
     };
     for (const auto& r : rows) CHECK(r.section == "census", "row %s not in section census", r.key.c_str());
-    CHECK(find("census_version") && find("census_version")->value == "3", "census_version");
+    CHECK(find("census_version") && find("census_version")->value == "4", "census_version");
     CHECK(find("input_spectra") && find("input_spectra")->value == "12", "input_spectra");
     CHECK(find("ms2_seen") && find("ms2_seen")->value == "5", "ms2_seen");
     CHECK(find("ms2_processed") && find("ms2_processed")->value == "3", "ms2_processed");

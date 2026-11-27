@@ -132,6 +132,9 @@ const FORMATS: Record<string, Format> = {
   n_edges: { label: 'Residue steps' },
   n_compl: { label: 'Complement pairs' },
   int_gini: { label: 'Intensity spread (Gini)' },
+  // Census 4: summed intensity and Xrea (Na & Paek 2006) of the peaks as read.
+  tic: { label: 'Total ion current', text: (v) => (isNum(v) ? Number(v).toPrecision(4) : v), num: true },
+  xrea: { label: 'Xrea' },
   n_found: { label: 'Tags found' },
   n_reported: { label: 'Tags reported' },
   // The CLI's tag status (tagged, no tags, ...), not the identification.

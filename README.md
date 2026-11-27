@@ -1715,8 +1715,19 @@ the reported tag with the lowest E-value (not necessarily the first row with
 `-tag_lengths`): `best_evalue`, `best_len`, `best_min_conf`,
 `best_mean_conf`, `best_tic` (summed intensity of its peaks), plus
 `tag_cover` (m/z covered by the union of the reported tags), `max_len`,
-`res_cover` and `res_cover_exact` (census formats 2 and 3, see below). Fields that were not computed for a
-spectrum are empty.
+`res_cover` and `res_cover_exact` (census formats 2 and 3, see below), then `tic` and `xrea` (census
+format 4). Fields that were not computed for a spectrum are empty.
+
+`tic` is the summed intensity of the `n_peaks` peaks (positive, finite intensity), as read, before any
+preprocessing; 0 for a spectrum without such a peak. `xrea` is Xrea (Na & Paek, J Proteome Res 2006,
+doi:10.1021/pr0603248) over the same peaks: sorted by intensity, ascending, the cumulative intensity divided by
+`tic` is plotted against the peak's rank divided by `n_peaks`; XX is the area between the diagonal and that
+curve (trapezoids from the origin) and alpha the share of `tic` in the most intense peak; `xrea` = XX / (1/2 +
+alpha), four decimals. It is 0 for equal intensities and for a single peak, and below 1; a few strong peaks
+of similar height over many weak ones give high values. Empty when `n_peaks` is 0. `int_gini` (zero intensities included) is
+our own signal; for peaks without zeros it equals 2 XX, so `xrea` adds the alpha term. In formats before 4 the
+two columns are missing; the columns before them keep their positions, the optional `best_ion_series` and
+`pre_*` columns (and `identified`, `triage`, `ident_score`) come after them.
 
 `max_len` is the length of the longest reported tag, which differs from
 `best_len` under `-tag_lengths` or `-extension`. `res_cover` counts the
@@ -1760,7 +1771,8 @@ that it is right, and acquisition (DIA or DDA) is never a census status.
 The summary (`.census_summary.tsv`, the long form of the digest reports)
 starts with the `run` rows, then the run row `max_tags` (the `-max_tags`
 cap that `n_found` and `n_reported` stop at, per seed length; 0 = no cap),
-and adds section `census`: `census_version` (3 after 1.15.7; 2 had no
+and adds section `census`: `census_version` (4 after 1.16.4, with `tic` and `xrea`; 3 after 1.15.7 had
+neither; 2 had no
 `res_cover_exact` and placed every tag as a y read; 1 had no `max_len`,
 `res_cover` or `max_tags`),
 `input_spectra` (all MS levels), `ms2_seen`, `ms2_processed`, `ms2_total`
