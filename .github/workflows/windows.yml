@@ -1204,6 +1204,31 @@ jobs:
           echo "$OUT" | grep -q "FASTAG_ALLOC allocator=mimalloc version=[0-9]* redirected=1" \
             || { echo "::error::the GUI's bundled CLI does not redirect the CRT heap to mimalloc"; exit 1; }
 
+      # The release profile's compiled crates (Cargo registry, deps/, build/,
+      # .fingerprint/ -- never bundle/, the staged resources or the app
+      # binary), keyed on the image, the architecture, rustc and Cargo.lock,
+      # falling back to the newest of the same toolchain. Saved right after
+      # the build that filled it.
+      - name: Cargo cache key
+        if: (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') || inputs.gui_dry_run
+        id: cargo-key
+        shell: bash
+        run: echo "key=cargo-release-${{ runner.os }}-${{ runner.arch }}-${ImageOS:-img}-$(rustc -V | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+      - name: Restore the Cargo cache
+        if: (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') || inputs.gui_dry_run
+        id: cargo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            fastag/gui/src-tauri/target/release/deps
+            fastag/gui/src-tauri/target/release/build
+            fastag/gui/src-tauri/target/release/.fingerprint
+          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('fastag/gui/src-tauri/Cargo.lock') }}
+          restore-keys: ${{ steps.cargo-key.outputs.key }}-
+
       # pwsh, NOT bash: Git Bash prepends its /usr/bin at startup, and that
       # directory has a link.exe -- coreutils' hard-link command -- which then
       # shadows MSVC's linker for every cargo invocation. rustc finds `link.exe`
@@ -1237,6 +1262,19 @@ jobs:
           # --verbose: shows WiX light.exe's own messages when the MSI step fails.
           npm run tauri build -- --verbose; if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Get-ChildItem src-tauri/target/release/bundle/nsis/ -ErrorAction SilentlyContinue
+
+      - name: Save the Cargo cache
+        if: (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') || inputs.gui_dry_run && steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            fastag/gui/src-tauri/target/release/deps
+            fastag/gui/src-tauri/target/release/build
+            fastag/gui/src-tauri/target/release/.fingerprint
+          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('fastag/gui/src-tauri/Cargo.lock') }}
 
       # bundle.windows.nsis.compression is "lzma" in tauri.conf.json, set
       # explicitly rather than left to Tauri's default. This records what
