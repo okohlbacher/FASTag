@@ -290,8 +290,9 @@ switches); without a FASTA it offers to choose one and run again, and when a FAS
 placed too few spectra with an extension below 3 it offers the run with extension 3. A
 `-delta_out` opened without its run's `-massgap_out` beside it is matched with an assumed
 0.5 Da window, and the chart says so. Its **By residue** view is the `residues` column as a
-mass-shift × residue matrix, for one run or the tables of several runs pooled by mass; these
-tables do not list the rows with a gap under 0.5 Da (unshifted placements), which the file keeps. Tables up to 128 MB open in the app; larger ones
+mass-shift × residue matrix, for one run or the tables of several runs pooled by mass. The tab's
+tables (bins, mass shifts, placements, spectra per shift) do not list gaps under 0.5 Da (unshifted
+placements), which the files keep, and the tab uses the full window width. Tables up to 128 MB open in the app; larger ones
 open only in a spreadsheet. A **Glyco** tab lists the `-glyco_out` spectra, flagged ones first by their
 oxonium intensity. Setup goes through four steps (Task, Inputs, Settings,
 Outputs & run) and starts with **Generate tags**, generating tags from **all input

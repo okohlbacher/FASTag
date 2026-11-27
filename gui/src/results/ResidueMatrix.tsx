@@ -16,6 +16,7 @@ import { pathKey } from '../run/batch'
 import { useSticky } from './tableStore'
 import type { DeltaTable } from './tables'
 import { SHIFT_MIN_DA } from './overview'
+import { UnshiftedLine } from './unshifted'
 import { readPool, recordedGroup, type PoolRead, type PoolTable } from './poolLoad'
 import { C_TERM, N_TERM, RESIDUE_NAME, delimited, localizedPct, poolTables, poolTolerance, shownColumns, sourceOf, type MatrixRow, type TerminalMode } from './shiftMatrix'
 
@@ -25,17 +26,6 @@ const en = (n: number): string => n.toLocaleString('en-US')
 /// count shown, so a rare modification still shows beside a frequent one
 /// (oxidation can outnumber the others a hundredfold).
 export const heatOf = (n: number, top: number): number => (n > 0 && top > 0 ? Math.log1p(n) / Math.log1p(top) : 0)
-
-/// The line under a mass-shift table: the spectra it leaves out, those of
-/// the rows with a gap under SHIFT_MIN_DA (no shift); none when there are none.
-export function UnshiftedLine({ spectra }: { spectra: number }): JSX.Element | null {
-  if (spectra <= 0) return null
-  return (
-    <p className="hint unshifted-note">
-      {en(spectra)} {spectra === 1 ? 'spectrum' : 'spectra'} with a gap under {SHIFT_MIN_DA} Da (no shift) not listed.
-    </p>
-  )
-}
 
 /// The tooltip of a site column's heading.
 function columnTitle(c: string, mode: TerminalMode): string {
@@ -340,7 +330,7 @@ export default function ResidueMatrix({ t, batch = [] }: ResidueMatrixProps): JS
           order.current = o
         }}
       />
-      <UnshiftedLine spectra={m.unshiftedSpectra} />
+      <UnshiftedLine n={m.unshiftedSpectra} />
     </>
   )
 }

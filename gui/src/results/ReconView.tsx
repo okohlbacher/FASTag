@@ -21,7 +21,8 @@ import { FASTA_EXTENSION, SHIFT_MIN_DA, type TileAction } from './overview'
 import { longestSeed, shortestSeed } from '../paramLayout'
 import ReportHeader from './ReportHeader'
 import ProductFiles, { type ProductFile } from './ProductFiles'
-import ResidueMatrix, { UnshiftedLine } from './ResidueMatrix'
+import ResidueMatrix from './ResidueMatrix'
+import { UnshiftedLine, listedGap } from './unshifted'
 import './viewers.css'
 
 /// Below this many placed spectra the gap distribution supports no
@@ -379,8 +380,7 @@ const INTERP_CHOICES: { v: string; label: string }[] = [
   { v: '*', label: 'any' },
   { v: '?', label: '? (no interpretation)' },
   { v: 'sub:', label: 'sub: (substitution)' },
-  { v: 'mod:', label: 'mod: (modification)' },
-  { v: '', label: 'none (no gap)' }
+  { v: 'mod:', label: 'mod: (modification)' }
 ]
 
 function PlacementTable({ t }: { t: ReconTable }): JSX.Element {
@@ -395,7 +395,13 @@ function PlacementTable({ t }: { t: ReconTable }): JSX.Element {
     interp: interp === '*' ? undefined : interp
   }
   const key = JSON.stringify(f)
-  const rows = useMemo(() => filterRecon(t, JSON.parse(key) as ReconFilter), [t, key])
+  // The placements with a shift: an exact one, or one under SHIFT_MIN_DA, is not listed (unshifted.tsx).
+  const { listed, unshifted } = useMemo(() => {
+    let n = 0
+    for (let i = 0; i < t.rows; i++) if (listedGap(t.delta[i])) n++
+    return { listed: n, unshifted: t.rows - n }
+  }, [t])
+  const rows = useMemo(() => filterRecon(t, JSON.parse(key) as ReconFilter).filter((i) => listedGap(t.delta[i])), [t, key])
   const cols: Column[] = [
     { id: 'spectrum', label: 'Spectrum', mono: true, text: (i) => t.spectra[t.spectrum[i]], spectrum: (i) => t.spectra[t.spectrum[i]] },
     { id: 'tag', label: 'Tag', mono: true, text: (i) => t.tag[i] },
@@ -445,7 +451,15 @@ function PlacementTable({ t }: { t: ReconTable }): JSX.Element {
           <input type="checkbox" checked={gapped} onChange={(e) => setGapped(e.target.checked)} /> One flank off (a localized gap)
         </label>
       </div>
-      <DataTable label="Placements" columns={cols} ids={rows} total={t.rows} empty="No placement matches these filters." keep={t} />
+      <DataTable
+        label="Placements"
+        columns={cols}
+        ids={rows}
+        total={listed}
+        empty={listed === 0 ? `No placement with a shift: every gap is under ${SHIFT_MIN_DA} Da.` : 'No placement matches these filters.'}
+        keep={t}
+      />
+      <UnshiftedLine n={unshifted} one="placement" many="placements" />
     </>
   )
 }
@@ -532,7 +546,7 @@ function DeltaPeaks({ t }: { t: DeltaTable }): JSX.Element {
         sort={{ column: 'spectra', desc: true }}
         keep={t}
       />
-      <UnshiftedLine spectra={unshifted} />
+      <UnshiftedLine n={unshifted} />
     </>
   )
 }

@@ -297,6 +297,11 @@ header.topbar button.bar-icon.on { background: var(--primary-soft); color: var(-
    panel takes the height left (the table scrolls, not the page). */
 .results-col { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .results-col > .tabpanel { padding-top: var(--space-1); }
+/* Mass shifts: the residue matrix (22 site columns) and the mass-shift
+   tables take the window's width, not the 1200 px column; under that width
+   nothing changes, and a table wider than the window still scrolls in its
+   own box. */
+.results-col:has(.recon-tab) { max-width: none; }
 
 /* ---- Regions every view shares (doc/GUI-SETUP-WIZARD.md 1) ---------------
    The content column: max 1200 px, a 24 px gutter, the same left edge in

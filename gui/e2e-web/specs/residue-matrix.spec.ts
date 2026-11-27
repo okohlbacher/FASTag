@@ -180,6 +180,25 @@ test('By residue at 960x600: the table scrolls sideways in its own box, the gap 
   expect(Math.abs(f!.x - w!.x)).toBeLessThan(2)
 })
 
+test('By residue at 1800x1300: the Mass shifts tab takes the window width, every site column in view', async ({ page }) => {
+  await page.setViewportSize({ width: 1800, height: 1300 })
+  await openMatrix(page)
+  await page.getByRole('checkbox', { name: /Hide empty residue columns/ }).uncheck()
+  await expect(grid(page).getByRole('columnheader')).toHaveCount(28)
+  // Wider than the 1200 px content column, and no scroll sideways: not the page, the pane or the table box.
+  const box = await page.evaluate(() => {
+    const col = document.querySelector('.results-col') as HTMLElement
+    const wrap = document.querySelector('.recon-tables .dt-wrap') as HTMLElement
+    const d = document.scrollingElement!
+    return { col: col.getBoundingClientRect().width, wrap: wrap.scrollWidth - wrap.clientWidth, doc: d.scrollWidth - d.clientWidth }
+  })
+  expect(box.col).toBeGreaterThan(1700)
+  expect([box.wrap, box.doc]).toEqual([0, 0])
+  // Another view keeps the content column (1200 px and its gutters).
+  await goTo(page, 'Setup')
+  expect(await page.locator('.wizard.page-col').evaluate((e) => e.getBoundingClientRect().width)).toBeLessThanOrEqual(1200 + 2 * 24 + 1)
+})
+
 test('By residue in both themes: shaded cells take the theme tokens, the numbers stay', async ({ page }, info) => {
   const look: Record<string, { heat: string; text: string; cells: string[] }> = {}
   for (const scheme of ['light', 'dark'] as const) {

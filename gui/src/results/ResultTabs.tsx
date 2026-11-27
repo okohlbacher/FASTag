@@ -447,7 +447,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
             <ReportTable key={`sum:${wr.censusSummary}`} kind="generic" title="Run summary of the identifiability table" path={wr.censusSummary} gen={reports.workflowGen?.censusSummary} />
           </div>
         ) : tab === 'recon' ? (
-          <div className="tablewrap">
+          <div className="tablewrap recon-tab">
             {(hasRecon || (!wr.deltaSpectra && !wr.deltaCounts)) && (
               <SpectrumLinkContext.Provider value={linkFor(reconFile)}>
                 <ReconView massgap={massgap} tables={tables} gen={reports.gen} notice={reports.notice} action={p.reconAction} extend={p.reconExtend} onOpen={p.openReport} batchDeltas={p.batchDeltas} />
@@ -457,7 +457,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
               <details className="raw" open={!hasRecon}>
                 <summary>Spectra per mass shift</summary>
                 <SpectrumLinkContext.Provider value={linkFor(wr.deltaSpectra)}>
-                  <ReportTable key={`ds:${wr.deltaSpectra}`} kind="generic" title="Spectra per mass shift" path={wr.deltaSpectra} gen={reports.workflowGen?.deltaSpectra} />
+                  <ReportTable key={`ds:${wr.deltaSpectra}`} kind="generic" title="Spectra per mass shift" path={wr.deltaSpectra} gen={reports.workflowGen?.deltaSpectra} shift="delta" />
                 </SpectrumLinkContext.Provider>
               </details>
             )}

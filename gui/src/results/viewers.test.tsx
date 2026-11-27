@@ -98,10 +98,12 @@ describe('MassGapChart', () => {
     render(<MassGapChart bins={deltaBins()} peaks={gapPeaksOf(human())} window={0.02} source="d" />)
     await click(screen.getByRole('button', { name: 'Bins' }))
     const grid = screen.getByRole('grid', { name: 'Gap peaks' })
-    expect(grid.getAttribute('aria-rowcount')).toBe('274')
-    // Sorted by spectra, descending: the zero bin first.
+    // The 3 bins under 0.5 Da (141 spectra, awk) are not listed; the chart still draws the zero bin.
+    expect(grid.getAttribute('aria-rowcount')).toBe('271')
+    expect(screen.getByText('141 spectra with a gap under 0.5 Da (no shift) not listed.')).toBeTruthy()
+    // Sorted by spectra, descending: 8.0150 (12 spectra) first.
     const first = within(grid).getAllByRole('row')[1]
-    expect(first.textContent).toMatch(/^0\.0000139/)
+    expect(first.textContent).toMatch(/^8\.015012/)
     const row = within(grid).getAllByRole('row').find((r) => r.textContent?.startsWith('10.0090'))
     expect(row?.textContent).toMatch(/Label:13C\(6\)15N\(4\) \(R\)0\.71: Label:13C\(6\)15N\(4\)\? 10/)
   })
@@ -281,16 +283,19 @@ describe('ReconView', () => {
     expect(screen.getByText('141 spectra with a gap under 0.5 Da (no shift) not listed.')).toBeTruthy()
     await click(screen.getByRole('button', { name: 'Placements' }))
     const grid = screen.getByRole('grid', { name: 'Placements' })
-    expect(grid.getAttribute('aria-rowcount')).toBe('4707')
+    // awk: 4,706 placements, 817 with a gap under 0.5 Da (not listed); every one listed has one flank off.
+    expect(grid.getAttribute('aria-rowcount')).toBe('3890')
+    expect(screen.getByText('817 placements with a gap under 0.5 Da (no shift) not listed.')).toBeTruthy()
     await click(screen.getByRole('checkbox', { name: /One flank off/ }))
-    expect(screen.getByText(/^3,905 of 4,706 rows/)).toBeTruthy()
+    // Every listed placement has one flank off (awk): the filter keeps them all.
+    expect(screen.getByText(/^3,889 rows/)).toBeTruthy()
     await act(async () => void fireEvent.change(screen.getByRole('combobox', { name: 'Interpretation' }), { target: { value: 'sub:' } }))
     // awk: one flank off and a sub: interpretation, 22 rows; 3 of them in UBB_HUMAN.
-    expect(screen.getByText(/^22 of 4,706 rows/)).toBeTruthy()
+    expect(screen.getByText(/^22 of 3,889 rows/)).toBeTruthy()
     const subs = within(screen.getByRole('grid', { name: 'Placements' })).getAllByRole('row').slice(1)
     for (const r of subs) expect(r.textContent).toMatch(/sub:/)
     await act(async () => void fireEvent.change(screen.getByRole('searchbox', { name: 'Contains' }), { target: { value: 'UBB_HUMAN' } }))
-    expect(screen.getByText(/^3 of 4,706 rows/)).toBeTruthy()
+    expect(screen.getByText(/^3 of 3,889 rows/)).toBeTruthy()
     // The shared table: the gap peaks.
     await click(screen.getByRole('button', { name: 'Mass-shift table' }))
     expect(screen.getByRole('grid', { name: 'Mass-shift table' }).getAttribute('aria-rowcount')).toBe('271')
@@ -312,7 +317,10 @@ describe('ReconView', () => {
     await flush()
     const grid = screen.getByRole('grid', { name: 'Placements' })
     expect(within(grid).getByRole('button', { name: /^Site score/ })).toBeTruthy()
-    expect(within(grid).getAllByRole('row')[2].textContent).toMatch(/−1660\.9183.*9-29\?R69267/)
+    // awk: 194 placements, 130 with a gap of 0.5 Da or more; the first of them is the file's second row.
+    expect(grid.getAttribute('aria-rowcount')).toBe('131')
+    expect(within(grid).getAllByRole('row')[1].textContent).toMatch(/−1660\.9183.*9-29\?R69267/)
+    expect(screen.getByText('64 placements with a gap under 0.5 Da (no shift) not listed.')).toBeTruthy()
     await click(screen.getByRole('button', { name: 'Identifications (mzTab)' }))
     const ids = screen.getByRole('grid', { name: 'Identifications' })
     expect(ids.getAttribute('aria-rowcount')).toBe('195')

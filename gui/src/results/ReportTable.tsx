@@ -18,7 +18,8 @@ import { PARAM_BY_NAME, choiceText, humanName } from '../paramLayout'
 import ReportHeader from './ReportHeader'
 import ProductFiles from './ProductFiles'
 import { evidenceText, isKitCallKey, kitCallOf, reporterChannels, unassessedKits, type ReporterChannel } from './calls'
-import { shortlistFacts } from './overview'
+import { SHIFT_MIN_DA, shortlistFacts } from './overview'
+import { UnshiftedLine, listedGap } from './unshifted'
 import TriageOverview, { NO_IDS } from './TriagePanel'
 import { OBSERVED_SHARE, TILE_KEYS, assessability, caveats, chargeBars, kitLine, msLevels, pctText, qcChannels, qcTiles, resolutionClasses, valueGroups, type Group as QcGroup, type ResClass } from './qcModel'
 import { BarChart, ResolutionChart, StackChart } from './QcCharts'
@@ -889,10 +890,21 @@ function TriageView({ tsv, path, openSpectrum, params, summaryPath, summaryGen }
   )
 }
 
-function GenericView({ tsv, label }: { tsv: Tsv; label: string }): JSX.Element {
+/// @p shift: the gap column of a mass-shift table (Spectra per mass shift's
+/// delta): its rows under SHIFT_MIN_DA are not listed, and counted under it.
+function GenericView({ tsv, label, shift }: { tsv: Tsv; label: string; shift?: string }): JSX.Element {
   const columns = useMemo(() => columnsOf(tsv), [tsv])
-  const ids = useMemo(() => Uint32Array.from(tsv.rows.map((_, i) => i)), [tsv])
-  return <DataTable label={label} columns={columns} ids={ids} total={tsv.rows.length} keep={tsv} />
+  const at = shift ? tsv.columns.indexOf(shift) : -1
+  const ids = useMemo(() => {
+    const keep = tsv.rows.flatMap((r, i) => (at < 0 || listedGap(Number((r[at] ?? '').trim() || NaN)) ? [i] : []))
+    return Uint32Array.from(keep)
+  }, [tsv, at])
+  return (
+    <>
+      <DataTable label={label} columns={columns} ids={ids} total={ids.length} keep={tsv} empty={at >= 0 && ids.length === 0 ? `No row with a shift: every gap is under ${SHIFT_MIN_DA} Da.` : undefined} />
+      {at >= 0 && <UnshiftedLine n={tsv.rows.length - ids.length} />}
+    </>
+  )
 }
 
 export interface ReportTableProps {
@@ -912,6 +924,9 @@ export interface ReportTableProps {
   /// The heading of a generic report; without one, its file name as written
   /// (database-12: never "Run01.delta spectra.tsv").
   title?: string
+  /// A generic report that is a mass-shift table: its gap column. Rows with
+  /// a gap under 0.5 Da are not listed (unshifted.tsx).
+  shift?: string
 }
 
 const REPORT_TITLE: Partial<Record<ReportKind, string>> = {
@@ -925,7 +940,7 @@ const REPORT_HELP: Partial<Record<ReportKind, { to: string; label: string }>> = 
   triage: { to: 'workflow-triage', label: 'How to read the ranking' }
 }
 
-export default function ReportTable({ kind, title: given, path, gen, files = [], openSpectrum, params, summaryPath, summaryGen }: ReportTableProps): JSX.Element {
+export default function ReportTable({ kind, title: given, path, gen, files = [], openSpectrum, params, summaryPath, summaryGen, shift }: ReportTableProps): JSX.Element {
   const { tsv, error } = useReport(path, gen)
   // A census without a score is no ranking (TriageView says the same).
   const census = kind === 'triage' && !!tsv && !tsv.columns.includes('ident_score')
@@ -947,7 +962,7 @@ export default function ReportTable({ kind, title: given, path, gen, files = [],
       ) : kind === 'triage' ? (
         <TriageView tsv={tsv} path={path} openSpectrum={openSpectrum} params={params} summaryPath={summaryPath} summaryGen={summaryGen} />
       ) : (
-        <GenericView tsv={tsv} label={baseName(path)} />
+        <GenericView tsv={tsv} label={baseName(path)} shift={shift} />
       )}
     </div>
   )

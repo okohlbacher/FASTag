@@ -21,6 +21,12 @@ function oracle(c: string) {
   const placed = Number(body(read(c, 'run.massgap.tsv')).find((r) => r[0] === 'cys' && r[1] === 'spectra')![2])
   return {
     placements: recon.length,
+    // The placements the table lists: a gap of 0.5 Da or more (exact ones are 0).
+    listed: recon.filter((r) => Math.abs(Number(r[8])) >= 0.5).length,
+    listedGapped: recon.filter((r) => Math.abs(Number(r[8])) >= 0.5 && r[6] !== r[7]).length,
+    // The fullest bin with a shift, first in the Bins table (ties in file order).
+    topShift: delta.filter((r) => Math.abs(Number(r[0])) >= 0.5).reduce((b, r) => (Number(r[1]) > Number(b[1]) ? r : b))[0],
+    unshiftedSpectra: delta.filter((r) => Math.abs(Number(r[0])) < 0.5).reduce((n, r) => n + Number(r[1]), 0),
     spectra: new Set(recon.map((r) => r[0])).size,
     gapped: recon.filter((r) => r[6] !== r[7]).length,
     deltaRows: delta.length,
@@ -75,9 +81,13 @@ test('Mass shifts: figures equal the oracles of the PXD014764 recon run', async 
   await expect(page.getByRole('grid', { name: 'Mass-shift table' })).toHaveAttribute('aria-rowcount', String(o.shiftRows + 1))
   await page.getByRole('button', { name: 'Placements', exact: true }).click()
   const grid = page.getByRole('grid', { name: 'Placements' })
-  await expect(grid).toHaveAttribute('aria-rowcount', String(o.placements + 1))
+  // Placements with a gap under 0.5 Da (exact ones too) are not listed, and counted under the table.
+  await expect(grid).toHaveAttribute('aria-rowcount', String(o.listed + 1))
+  await expect(page.locator('.recon-tables .unshifted-note')).toHaveText(`${en(o.placements - o.listed)} placements with a gap under 0.5 Da (no shift) not listed.`)
   await page.getByRole('checkbox', { name: /One flank off/ }).check()
-  await expect(page.locator('.dt-count').first()).toHaveText(`${en(o.gapped)} of ${en(o.placements)} rows · showing 1–100`)
+  await expect(page.locator('.dt-count').first()).toHaveText(
+    o.listedGapped === o.listed ? `${en(o.listed)} rows · showing 1–100` : `${en(o.listedGapped)} of ${en(o.listed)} rows · showing 1–100`
+  )
   // The shared table: the gap peaks.
   await page.getByRole('button', { name: 'Mass-shift table', exact: true }).click()
   // Rows with a gap under 0.5 Da are not listed.
@@ -123,8 +133,11 @@ test('the mass-gap chart: thin sticks, UniMod marks, legend, hover and keyboard 
   // The table view has every value.
   await chart.getByRole('button', { name: 'Bins' }).click()
   const t = chart.getByRole('grid', { name: 'Gap peaks' })
-  await expect(t).toHaveAttribute('aria-rowcount', '274')
-  await expect(t.getByRole('row').nth(1)).toContainText('0.0000')
+  // The bins with a shift: the zero bin is drawn in the chart, not listed here.
+  const o = oracle('v112-pxd014764-delta-ext3')
+  await expect(t).toHaveAttribute('aria-rowcount', String(o.shiftRows + 1))
+  await expect(t.getByRole('row').nth(1)).toContainText(o.topShift)
+  await expect(chart.locator('.unshifted-note')).toHaveText(`${en(o.unshiftedSpectra)} spectra with a gap under 0.5 Da (no shift) not listed.`)
   await expect(t.getByRole('row', { name: /^10\.0090/ })).toContainText('Label:13C(6)15N(4) (R)')
 })
 
@@ -142,7 +155,7 @@ test('the shared table by keyboard: arrows, Page Down, End and Home move the act
   await page.keyboard.press('PageDown')
   await expect(active).toHaveAttribute('aria-rowindex', '23')
   await page.keyboard.press('End')
-  await expect(active).toHaveAttribute('aria-rowindex', String(o.placements + 1))
+  await expect(active).toHaveAttribute('aria-rowindex', String(o.listed + 1))
   // Never more than one page of rows in the DOM.
   expect(await grid.locator('tbody tr').count()).toBeLessThanOrEqual(100)
   await expect(grid).toHaveAttribute('aria-activedescendant', (await active.getAttribute('id'))!)
@@ -177,7 +190,7 @@ test('E. coli recon run: -recon_localize columns, the mzTab identifications, and
   await expect(page.locator('.recon-view .banner.warn')).toContainText(`Only ${o.placed} spectra are placed on the database`)
   await page.getByRole('button', { name: 'Placements', exact: true }).click()
   const grid = page.getByRole('grid', { name: 'Placements' })
-  await expect(grid).toHaveAttribute('aria-rowcount', String(o.placements + 1))
+  await expect(grid).toHaveAttribute('aria-rowcount', String(o.listed + 1))
   await expect(grid.getByRole('columnheader', { name: /Site score/ })).toBeVisible()
   await page.getByRole('button', { name: 'Identifications (mzTab)' }).click()
   await expect(page.getByRole('grid', { name: 'Identifications' })).toHaveAttribute('aria-rowcount', String(psm + 1))
@@ -247,7 +260,8 @@ test('a dropped recon table and glyco report open in their tabs', async ({ page 
   await expect(page.getByRole('tab', { name: 'Glyco' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('grid', { name: 'Glyco spectra' })).toBeVisible()
   await page.getByRole('tab', { name: 'Mass shifts' }).click()
-  await expect(page.getByRole('grid', { name: 'Placements' })).toHaveAttribute('aria-rowcount', '4707')
+  // 4,706 placements, 3,889 with a gap of 0.5 Da or more (awk).
+  await expect(page.getByRole('grid', { name: 'Placements' })).toHaveAttribute('aria-rowcount', '3890')
   // No "no tab shows" note for them.
   await expect(page.getByText(/No tab shows/)).toHaveCount(0)
 })
@@ -294,10 +308,10 @@ test('opening Mass shifts or Glyco, or filtering, does not scroll the page; the 
       e.dispatchEvent(new Event('change', { bubbles: true }))
     }, v)
   await setFilter('sub:')
-  await expect(page.locator('.dt-count').first()).toHaveText(/ of 4,706 rows/)
+  await expect(page.locator('.dt-count').first()).toHaveText(/ of 3,889 rows/)
   expect(await top(outer)).toBe(0)
   await setFilter('*')
-  await expect(page.locator('.dt-count').first()).toHaveText(/^4,706 rows/)
+  await expect(page.locator('.dt-count').first()).toHaveText(/^3,889 rows/)
   expect(await top(outer)).toBe(0)
   // In the table: Page Down moves the row and its box, not the page around it.
   await grid.focus()
