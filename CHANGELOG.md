@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **Desktop app, pooled residue matrix.** Mass shifts › By residue pools the mass-shift tables of several runs
+  into one matrix: **Add tables…** (several `<run>.delta.tsv` at once) and, after a batch, **Pool the batch**.
+  Rows of different tables within 0.004 Da (the `-delta_group` default, or the runs' own when History records
+  it) are one row, as `-delta_group` merges one run's bins (most spectra first, no chaining); spectra,
+  localized, unlocalized and site counts are summed, a **Tables** column counts the runs with the shift, and the
+  best name is the entry most of the row's spectra carry, with the sites the runs named. The caption names the
+  tables pooled (hover for the files); Export matrix… writes the pooled matrix and `<name>.sources.tsv` listing
+  them. Tables are read a few at a time: 200 tables of 700 rows pool in about 0.3 s in the browser tests.
+- **Desktop app, no unshifted rows.** The Mass-shift table and By residue no longer list rows with a gap under
+  0.5 Da (the threshold of the Shifted count): such a row is the unshifted placement, and its "localized" sites
+  are sequence-constrained by construction (the residue the placement ends on, e.g. C-term|K, C-term|R), not
+  modification sites. A line under each table gives the spectra left out. The Overview tiles and the CLI's
+  `delta.tsv` (whose 0 Da row gives the shifted share) are unchanged.
 - **Desktop app, By residue shading.** The cells of the residue matrix are shaded by the log of the spectral
   count, so rare modifications stay visible beside frequent ones such as oxidation (suggested by D. Tabb).
 - **Desktop app, Mass shifts › By residue.** The mass-shift-by-residue matrix of a Mass-shift survey: beside the
