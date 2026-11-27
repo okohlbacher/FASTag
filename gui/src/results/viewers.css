@@ -91,6 +91,8 @@ table.taxa.dt td.mono { font-family: var(--font-seq); font-size: var(--text-xs);
    image over the row's background, so the active row still shows. */
 table.dt.matrix th, table.dt.matrix td { white-space: nowrap; }
 table.dt.matrix td.num { min-width: 2.25em; }
+/* The best name: a pooled row's can be long; cut, whole in its tooltip. */
+table.dt.matrix td:nth-child(2) { max-width: 18em; overflow: hidden; text-overflow: ellipsis; }
 table.dt.matrix td.heat {
   --heat-ink: color-mix(in srgb, var(--primary) calc(var(--heat) * 38%), transparent);
   background-image: linear-gradient(var(--heat-ink), var(--heat-ink));

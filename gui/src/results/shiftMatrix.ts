@@ -291,13 +291,14 @@ export function nameParts(name: string): { entry: string; sites: string[] } {
 
 /// The localized spectra of a pooled row on @p token, a site as a name
 /// writes it (M, N-term, Protein N-term, C[-Carbamidomethyl]): on the
-/// residue, also terminal-ambiguous (N-term|M for M); on a terminus, its
-/// terminal sites.
+/// residue itself (a terminal-ambiguous N-term|M is the terminus's: the
+/// N-term column holds most of a row's sites, and would rank any residue
+/// a peptide starts with); on a terminus, its terminal sites.
 function siteSupport(token: string, detail: ReadonlyMap<string, readonly SiteCount[]>): number {
   const t = token.replace(/\[.*\]$/, '')
   let n = 0
   for (const list of detail.values())
-    for (const s of list) if (s.site === t || (/-term$/.test(t) ? s.site.startsWith(`${t}|`) : s.site.endsWith(`|${t}`))) n += s.n
+    for (const s of list) if (s.site === t || (/-term$/.test(t) && s.site.startsWith(`${t}|`))) n += s.n
   return n
 }
 

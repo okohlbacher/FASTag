@@ -221,8 +221,8 @@ export default function ResidueMatrix({ t, batch = [] }: ResidueMatrixProps): JS
       setSaved({ ok: false, text: `Not written: name the file .tsv or .csv (${dest}).` })
       return
     }
-    // A pooled matrix names its tables in a sidecar beside it: <name>.sources.tsv.
-    const side = pooled ? `${stripExt(dest)}.sources.tsv` : null
+    // A pooled matrix names its tables in a sidecar beside it: <name>.sources.tsv (or .csv).
+    const side = pooled ? `${stripExt(dest)}.sources.${format}` : null
     for (const out of side ? [dest, side] : [dest]) {
       if (inPool.has(pathKey(out))) {
         setSaved({ ok: false, text: `Not written: ${out} is ${pathKey(out) === pathKey(t.path) ? 'the mass-shift table shown' : 'a pooled mass-shift table'}. Choose another name.` })

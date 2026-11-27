@@ -25,6 +25,9 @@ export interface PoolRead {
 /// the progress line moves.
 const PARALLEL = 4
 
+/// The longest stretch of parsing without a turn for the page (ms).
+const YIELD_MS = 12
+
 /// The -delta_group of the recorded run that wrote @p path; null when no
 /// record names it.
 export async function recordedGroup(path: string): Promise<number | null> {
@@ -65,12 +68,19 @@ export async function readPool(paths: readonly string[], onProgress?: (done: num
   const got: (PoolTable | { why: string } | undefined)[] = new Array(list.length)
   let next = 0
   let done = 0
+  // A read that answers at once (a cached file) chains parses without a
+  // task boundary: every YIELD_MS of them, the page gets a turn.
+  let since = performance.now()
   async function worker(): Promise<void> {
     while (next < list.length && live()) {
       const k = next++
       got[k] = await readOne(list[k])
       done++
       onProgress?.(done, list.length)
+      if (performance.now() - since > YIELD_MS) {
+        await new Promise((r) => setTimeout(r, 0))
+        since = performance.now()
+      }
     }
   }
   await Promise.all(Array.from({ length: Math.min(PARALLEL, list.length) }, worker))

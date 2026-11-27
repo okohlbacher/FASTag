@@ -119,7 +119,7 @@ describe('poolTables: the best name', () => {
       table('/b', [['15.9950', 10, 10, 'M:5,F:3,Y:2', 0, 'Oxidation@M/F/Y(+0.1ppm)']]),
       table('/c', [['15.9950', 2, 2, 'H:1,N-term|M:1', 0, 'Oxidation@H/M(+0.1ppm)']])
     ])
-    // M 4+5+1 (N-term|M counts for M), W 6, F 3, Y 2, H 1.
+    // M 4+5 (N-term|M is the terminus's), W 6, F 3, Y 2, H 1.
     expect(m.rows[0].name).toBe('Oxidation@M/W/F/…')
     expect(m.rows[0].names).toMatch(/Oxidation@M\/W\/F\/Y\/H: 22 spectra in 3 tables$/)
   })

@@ -523,7 +523,15 @@ function DeltaPeaks({ t }: { t: DeltaTable }): JSX.Element {
           <input type="number" min={0} step={1} value={minSpectra} onChange={(e) => setMinSpectra(e.target.value)} />
         </label>
       </div>
-      <DataTable label="Mass-shift table" columns={cols} ids={rows} total={shifted.length} sort={{ column: 'spectra', desc: true }} keep={t} />
+      <DataTable
+        label="Mass-shift table"
+        columns={cols}
+        ids={rows}
+        total={shifted.length}
+        empty={shifted.length === 0 ? `No mass shift: every row has a gap under ${SHIFT_MIN_DA} Da.` : 'No mass shift has that many spectra: lower Spectra at least.'}
+        sort={{ column: 'spectra', desc: true }}
+        keep={t}
+      />
       <UnshiftedLine spectra={unshifted} />
     </>
   )
