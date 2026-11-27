@@ -68,6 +68,13 @@
 .dt-bar { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; font-size: var(--text-sm); color: var(--muted-foreground); }
 .dt-pages { display: inline-flex; gap: var(--space-2); }
 .dt-wrap { overflow: auto; max-height: 420px; border: 1px solid var(--border); border-radius: var(--radius-md); }
+/* Mass shifts (the Mass-shift table, By residue, the placements): the box
+   grows with the window, its height less the room of the app bar, the page
+   header and tab strip, the log bar (about 240 px) and By residue's captions,
+   filters and count lines (about 280 px), so with the tables scrolled to the
+   top of the pane the whole box is in view; never under the 420 px of the
+   other tables (960x600 as before). */
+.recon-tab .recon-tables .dt-wrap { max-height: max(420px, calc(100vh - 520px)); }
 table.dt { width: 100%; }
 table.dt:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 table.dt thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
