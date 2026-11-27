@@ -258,6 +258,7 @@ export const WORKFLOWS: HelpPage = {
             <li>UniMod marks (all of them with <strong>All UniMod marks</strong>) show known mass changes near a peak. A nearby mark or a CLI explanation is a hypothesis, not an identified modification. Opening a delta table without its mass-gap report uses an explicitly labelled, assumed 0.5 Da matching window.</li>
             <li>In the placement table, <strong>Contains</strong> searches spectrum, tag, protein or peptide. <strong>|Δ| at least (Da)</strong> filters by the size of the gap in either direction. <strong>Interpretation</strong> selects modification, substitution or unexplained rows; <strong>One flank off</strong> keeps placements with a gap localized to one side of the tag.</li>
             <li>Every table of this tab (Bins, the Mass-shift table, By residue, the placements and Spectra per mass shift) lists only gaps of 0.5 Da or more: a gap nearer 0 Da is an unshifted placement (no modification), and a line under each table gives the spectra, or placements, it leaves out. The files keep them, and the Placed spectra, Shifted (≥ 0.5 Da) and Placements counts above and the Overview count them as before.</li>
+            <li>The tab takes the window&apos;s width, and its tables grow with the window&apos;s height (never under 420 px); on a small window they scroll in their own box.</li>
             <li><strong>By residue</strong>, beside the Mass-shift table, shows the same mass shifts as a matrix over the residues, for one run or several pooled: see <L to="workflow-shift-residues">Mass shifts by residue</L>.</li>
           </ul>
           <p>
@@ -295,7 +296,8 @@ export const WORKFLOWS: HelpPage = {
           <p>
             <strong>Pooling several runs.</strong> <strong>Add tables…</strong> picks more mass-shift tables (<code>&lt;run&gt;.delta.tsv</code>, several at once)
             and pools them with the one shown into one matrix; after a batch, <strong>Pool the batch</strong> pools the
-            tables of its finished jobs. <strong>This table only</strong> goes back. Hundreds of tables are read a few at
+            tables of its finished jobs. While a matrix is pooled, the gap chart above, which shows the opened run only, is
+            hidden; <strong>This table only</strong> goes back to the one table and brings the chart back. Hundreds of tables are read a few at
             a time, with a progress line.
           </p>
           <ul>

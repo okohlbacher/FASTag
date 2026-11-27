@@ -79,9 +79,19 @@ async function openPool(page: Page, files: { path: string; text: string }[], fix
 test('Pooled: four lens tables, rows and sums as the files pool them', async ({ page }) => {
   const o = oracle(LENS)
   await openPool(page, LENS)
+  const chart = page.locator('.recon-view .mg-chart')
+  await expect(chart).toBeVisible()
   await page.getByRole('button', { name: 'Add tables…' }).click()
   const files = page.locator('.pool-files')
   await expect(files).toHaveText('4 mass-shift tables')
+  // The gap chart and its caption show the opened run only: hidden while pooled.
+  await expect(chart).toHaveCount(0)
+  await expect(page.locator('.recon-view .chart-hidden')).toHaveText(/^The gap chart is hidden while By residue pools 4 mass-shift tables/)
+  // Back on the Mass-shift table (one run's rows) the chart is there; By residue is still pooled.
+  await page.getByRole('button', { name: 'Mass-shift table', exact: true }).click()
+  await expect(chart).toBeVisible()
+  await page.getByRole('button', { name: 'By residue' }).click()
+  await expect(chart).toHaveCount(0)
   await expect(files).toHaveAttribute('title', LENS.map((f) => f.path).join('\n'))
   await expect(page.locator('.recon-tables .unshifted-note')).toHaveText(`${en(o.unshifted)} spectra with a gap under 0.5 Da (no shift) not listed.`)
   await page.getByRole('spinbutton', { name: 'Localized at least' }).fill('0')
@@ -100,6 +110,8 @@ test('Pooled: four lens tables, rows and sums as the files pool them', async ({ 
   // Back to the one table.
   await page.getByRole('button', { name: 'This table only' }).click()
   await expect(files).toHaveCount(0)
+  await expect(chart).toBeVisible()
+  await expect(page.locator('.recon-view .chart-hidden')).toHaveCount(0)
   await expect(grid(page).getByRole('columnheader', { name: /^Tables/ })).toHaveCount(0)
 })
 
@@ -184,7 +196,8 @@ test('Pooled screenshots: every lens table in LENS_DIR, light and dark', async (
     await expect(page.locator('.pool-files')).toHaveText(`${files.length} mass-shift tables`, { timeout: 60_000 })
     await page.getByRole('spinbutton', { name: 'Localized at least' }).fill('100')
     await page.getByRole('checkbox', { name: /Hide empty residue columns/ }).uncheck()
-    await page.locator('.recon-tables').evaluate((e) => e.scrollIntoView({ block: 'start' }))
+    // From the line that says the one-run chart is hidden, down to the matrix.
+    await page.locator('.recon-view .chart-hidden').evaluate((e) => e.scrollIntoView({ block: 'start' }))
     await page.screenshot({ path: `${process.env.SHOT_DIR}/pooled-matrix-${scheme}.png` })
   }
 })

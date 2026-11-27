@@ -162,6 +162,8 @@ test('By residue at 960x600: the table scrolls sideways in its own box, the gap 
   await page.getByRole('checkbox', { name: /Hide empty residue columns/ }).uncheck()
   await expect(grid(page).getByRole('columnheader')).toHaveCount(28)
   const wrap = page.locator('.recon-tables .dt-wrap')
+  // A small window keeps the 420 px box.
+  expect(await wrap.evaluate((e) => getComputedStyle(e).maxHeight)).toBe('420px')
   const box = await wrap.evaluate((e) => ({ sw: e.scrollWidth, cw: e.clientWidth }))
   expect(box.sw).toBeGreaterThan(box.cw)
   // No page scroll sideways: neither the document nor the results pane.
@@ -194,6 +196,24 @@ test('By residue at 1800x1300: the Mass shifts tab takes the window width, every
   })
   expect(box.col).toBeGreaterThan(1700)
   expect([box.wrap, box.doc]).toEqual([0, 0])
+  // The box grows with the window: with the tables at the top of the pane it
+  // shows at least 18 whole rows, all in view (the fixed 420 px box showed 10).
+  // Every shifted row: more than fit.
+  await page.getByRole('spinbutton', { name: 'Localized at least' }).fill('0')
+  await page.locator('.recon-tables').evaluate((e) => e.scrollIntoView({ block: 'start' }))
+  const seen = await page.evaluate(() => {
+    const wrap = document.querySelector('.recon-tables .dt-wrap') as HTMLElement
+    const pane = (document.querySelector('.recon-tab') as HTMLElement).getBoundingClientRect()
+    const r = wrap.getBoundingClientRect()
+    const rows = [...wrap.querySelectorAll('tbody tr')].filter((tr) => {
+      const b = tr.getBoundingClientRect()
+      return b.top >= r.top && b.bottom <= r.bottom + 1
+    })
+    return { rows: rows.length, height: r.height, inPane: r.bottom <= pane.bottom + 1 }
+  })
+  expect(seen.height).toBeGreaterThan(700)
+  expect(seen.rows).toBeGreaterThanOrEqual(18)
+  expect(seen.inPane).toBe(true)
   // Another view keeps the content column (1200 px and its gutters).
   await goTo(page, 'Setup')
   expect(await page.locator('.wizard.page-col').evaluate((e) => e.getBoundingClientRect().width)).toBeLessThanOrEqual(1200 + 2 * 24 + 1)

@@ -142,6 +142,7 @@ const sumLine = (): string => document.querySelector('.recon-tables .report-sum'
 describe('Mass shifts › By residue, pooled', () => {
   it('Add tables… pools the picked tables: the caption names them, a Tables column, the counts summed', async () => {
     const mock = await openLens()
+    expect(screen.getByRole('group', { name: /^Mass-gap chart/ })).toBeTruthy()
     expect(screen.getByText('1,783 spectra with a gap under 0.5 Da (no shift) not listed.')).toBeTruthy()
     // The shown table picked again is not pooled twice.
     mock.nextPickFiles = [L2, L3, L4, L1]
@@ -157,8 +158,13 @@ describe('Mass shifts › By residue, pooled', () => {
     // Localized at least 0: every shifted spectrum of the four runs.
     await act(async () => void fireEvent.change(screen.getByRole('spinbutton', { name: 'Localized at least' }), { target: { value: '0' } }))
     expect(sumLine()).toMatch(/ with 6,648 spectra: /)
+    // The gap chart shows the opened run only: hidden while pooled, and said so.
+    expect(screen.queryByRole('group', { name: /^Mass-gap chart/ })).toBeNull()
+    expect(screen.getByText(/^The gap chart is hidden while By residue pools 4 mass-shift tables/)).toBeTruthy()
     await click(screen.getByRole('button', { name: 'This table only' }))
     expect(screen.queryByText(/^Pooled:/)).toBeNull()
+    expect(screen.getByRole('group', { name: /^Mass-gap chart/ })).toBeTruthy()
+    expect(screen.queryByText(/^The gap chart is hidden/)).toBeNull()
     expect(sumLine()).toMatch(/ with 2,474 spectra: /)
   })
 

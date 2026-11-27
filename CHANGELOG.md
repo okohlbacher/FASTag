@@ -13,7 +13,11 @@
   exact placements matched.
 - **Desktop app, full width for Mass shifts.** The Mass shifts tab uses the window's width instead of the
   1200 px content column, so the residue matrix shows its 22 site columns on a wide window; on a narrow one the
-  tables still scroll sideways in their own box.
+  tables still scroll sideways in their own box. Its tables (the Mass-shift table, By residue, the placements)
+  also grow with the window's height instead of a fixed 420 px box (420 px stays the minimum).
+- **Desktop app, no one-run chart over a pooled matrix.** While By residue shows a pooled matrix, the gap chart
+  and its caption, which show the opened run only, are hidden and a line says why; **This table only** brings
+  them back.
 - **Desktop app, pooled residue matrix.** Mass shifts › By residue pools the mass-shift tables of several runs
   into one matrix: **Add tables…** (several `<run>.delta.tsv` at once) and, after a batch, **Pool the batch**.
   Rows of different tables within 0.004 Da (the `-delta_group` default, or the runs' own when History records
