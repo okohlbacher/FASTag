@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Desktop app, By residue shading.** The cells of the residue matrix are shaded by the log of the spectral
+  count, so rare modifications stay visible beside frequent ones such as oxidation (suggested by D. Tabb).
 - **Desktop app, Mass shifts › By residue.** The mass-shift-by-residue matrix of a Mass-shift survey: beside the
   Mass-shift table, one row per mass shift (gap, best UniMod/PSI-MOD name, spectra, localized, unlocalized,
   localized %) and one column per residue, each cell the localized spectra from the `residues` column of
