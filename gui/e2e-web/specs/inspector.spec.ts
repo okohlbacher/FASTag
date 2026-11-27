@@ -7,7 +7,7 @@ import { test, expect, goTo, openApp, mockState, chooseTask, toStep } from './fi
 const checkNamed = (page: import('@playwright/test').Page, title: RegExp) =>
   page.locator('li.check').filter({ has: page.locator('strong', { hasText: title }) })
 
-test('ion-trap probe: the 0.3 Da red flag before the run, fixed in one click (focus moves on to Run); the stale index is a warning', async ({ page }) => {
+test('ion-trap probe: the Da red flag before the run, fixed in one click (focus moves on to Run); the stale index is a warning', async ({ page }) => {
   await openApp(page, 'iontrap-probe', 'defaults')
   await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
@@ -17,12 +17,12 @@ test('ion-trap probe: the 0.3 Da red flag before the run, fixed in one click (fo
   await expect(page.getByText(/Instrument: LTQ Orbitrap XL/)).toBeVisible()
   const run = page.getByRole('button', { name: 'Run', exact: true })
   await expect(run).toBeDisabled()
-  await expect(page.locator('#instrument option', { hasText: 'Ion trap CID 0.3 Da (detected)' })).toHaveCount(1)
+  await expect(page.locator('#instrument option', { hasText: 'Ion trap CID 0.5 Da (detected)' })).toHaveCount(1)
 
   await expect(run).toHaveAttribute('aria-describedby', 'run-held')
 
   // By keyboard: the fix button goes away with its check, focus does not.
-  await flag.getByRole('button', { name: 'Use Ion trap CID 0.3 Da' }).focus()
+  await flag.getByRole('button', { name: 'Use Ion trap CID 0.5 Da' }).focus()
   await page.keyboard.press('Enter')
   await expect(flag).toHaveCount(0)
   await expect(checkNamed(page, /^Warning: The mzML index does not match/)).toBeVisible()
@@ -32,7 +32,7 @@ test('ion-trap probe: the 0.3 Da red flag before the run, fixed in one click (fo
   await page.keyboard.press('Enter')
   await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
   const calls = await mockState<{ params: Record<string, unknown> }[]>(page, 'runCalls')
-  expect(calls[0].params).toMatchObject({ fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' })
+  expect(calls[0].params).toMatchObject({ fragment_tolerance: '0.5', fragment_tolerance_unit: 'Da' })
 })
 
 test('raw-DIA probe: Run is blocked, with the DIAspeXtract command and no Run anyway', async ({ page }) => {
@@ -47,7 +47,7 @@ test('raw-DIA probe: Run is blocked, with the DIAspeXtract command and no Run an
   await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeDisabled()
 })
 
-test('without the probe: "not checked" before the run; after it the ion-trap red flag and the re-run at 0.3 Da', async ({ page }) => {
+test('without the probe: "not checked" before the run; after it the ion-trap red flag and the re-run at 0.5 Da', async ({ page }) => {
   await openApp(page, 'iontrap')
   await chooseTask(page, 'Characterize a run')
   await toStep(page, 'Inputs')
@@ -67,10 +67,10 @@ test('without the probe: "not checked" before the run; after it the ion-trap red
   // Characterize a run has species on, and species calls are not validated
   // in Da: the re-run says so, leaves the species report out and starts at once.
   await expect(flag).toContainText('Species calls are not validated with a tolerance in Da')
-  await flag.getByRole('button', { name: 'Re-run with 0.3 Da, without species' }).click()
+  await flag.getByRole('button', { name: 'Re-run with 0.5 Da, without species' }).click()
   await expect.poll(async () => (await mockState<unknown[]>(page, 'runCalls')).length).toBe(2)
   const calls = await mockState<{ params: Record<string, unknown> }[]>(page, 'runCalls')
-  expect(calls[1].params).toMatchObject({ fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' })
+  expect(calls[1].params).toMatchObject({ fragment_tolerance: '0.5', fragment_tolerance_unit: 'Da' })
   expect(calls[1].params['species']).not.toBe(true)
 })
 
@@ -88,7 +88,7 @@ test('FASTag 1.12 refuses raw DIA (exit 11): a clear block naming DIAspeXtract, 
   await expect(alert.getByRole('button', { name: 'What to do' })).toHaveAttribute('data-help', 'faq-raw-dia')
 })
 
-test('a probe in flight holds Run (no 0.3 Da run slips through before the red flag); its answer then decides', async ({ page }) => {
+test('a probe in flight holds Run (no Da run slips through before the red flag); its answer then decides', async ({ page }) => {
   await page.goto('/?fixture=iontrap-probe&start=defaults&hold=probes')
   await expect(page.getByText('FASTag ready')).toBeVisible()
   await toStep(page, 'Inputs')

@@ -685,11 +685,25 @@ namespace FASTag::Probe
     if (im_vssc + im_drift + im_faims > 0)
       ion_mobility = im_vssc >= im_drift && im_vssc >= im_faims ? "1/K0" : im_drift >= im_faims ? "drift" : "FAIMS";
 
+    // 1.16.4: the analyser the probed MS2's Thermo filter strings name
+    // (ITMS / FTMS, RunQC::analyzerFromFilter), as -tolerance_by_analyzer
+    // classes a spectrum first: a hybrid's instrument configurations often
+    // do not say where its MS2 were read, its filter strings do.
+    std::size_t filter_itms = 0, filter_ftms = 0;
+    for (const MSSpectrum& s : heads)
+    {
+      if (!s.metaValueExists("filter string")) continue;
+      const RunQC::Analyzer a = RunQC::analyzerFromFilter(std::string(s.getMetaValue("filter string").toString()));
+      if (a == RunQC::Analyzer::ITMS) ++filter_itms;
+      else if (a == RunQC::Analyzer::FTMS) ++filter_ftms;
+    }
+
     JsonObject inst("instrument");
     inst.strOrNull("name", inst_name).strOrNull("model", inst_model).strOrNull("ms2_analyzer", analyzer);
     inst.strOrNull("ms2_analyzer_from", analyzer_from);
     if (ion_mobility) inst.str("ion_mobility", ion_mobility);
     else inst.null("ion_mobility");
+    inst.count("ms2_filter_itms", filter_itms).count("ms2_filter_ftms", filter_ftms);
     j += inst.line();
 
     namespace FC = FASTag::Centroid;

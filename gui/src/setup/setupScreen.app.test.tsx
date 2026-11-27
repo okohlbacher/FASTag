@@ -589,11 +589,11 @@ describe('Setup: presets as diffs', () => {
 
   it('a v1 preset (a full record) applies as it always did', async () => {
     const mock = installMockBridge()
-    mock.settings.presets = { old: { tag_length: '6', fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da', species: false } }
+    mock.settings.presets = { old: { tag_length: '6', fragment_tolerance: '0.5', fragment_tolerance_unit: 'Da', species: false } }
     await renderColdApp(mock)
     await change(document.getElementById('origin')!, 'old')
     expect(field('tag_length')!.value).toBe('6')
-    // 0.3 Da is the ion-trap preset.
+    // 0.5 Da is the ion-trap preset.
     expect((document.getElementById('instrument') as HTMLSelectElement).value).toBe('iontrap-cid')
     // Over the defaults, as it was saved: not over the landing workflow.
     await openGroup('Glycopeptides')

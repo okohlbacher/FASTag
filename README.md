@@ -1637,7 +1637,7 @@ listed in `--helphelp`, which is how the GUI detects them.
 
 - `-probe_input <file>` reads metadata only (mzML, mzPeak or MGF) and prints the
   records `probe` (format, version, input, file_format), `instrument` (name,
-  model, ms2_analyzer, ion_mobility), `spectra` (MS1 and MS2 counts, the
+  model, ms2_analyzer, ms2_analyzer_from, ion_mobility, and (1.16.4) ms2_filter_itms and ms2_filter_ftms, the probed MS2 whose filter string names ITMS or FTMS), `spectra` (MS1 and MS2 counts, the
   centroid/profile verdict of the probed MS2 and `will_pick`, whether
   `-pick_profile` as given would centroid them), `activation` (collisional,
   electron, hybrid, unknown), `index` (ok, stale, absent, not_applicable) and

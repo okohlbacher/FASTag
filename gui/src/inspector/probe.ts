@@ -27,7 +27,10 @@
 //                    configuration; "run_default": the run's default
 //                    configuration, which says nothing of where each MS2
 //                    was read; null),
-//                    ion_mobility ("1/K0" | "drift" | "FAIMS" | null)
+//                    ion_mobility ("1/K0" | "drift" | "FAIMS" | null),
+//                    ms2_filter_itms, ms2_filter_ftms (1.16.4: of the
+//                    probed MS2, those whose Thermo filter string names
+//                    ITMS / FTMS; absent from older probes)
 //       spectra      ms1, ms2 (whole file), ms2_probed, ms2_centroid,
 //                    ms2_profile, ms2_type_unknown (of the probed MS2)
 //       activation   of, collisional, electron, hybrid, unknown (of the
@@ -53,6 +56,10 @@ export interface ProbeInstrument {
   // 'spectra' | 'run_default' | null (older probes write no such field).
   ms2AnalyzerFrom: string | null
   ionMobility: string | null
+  // Probed MS2 whose filter string names ITMS / FTMS (1.16.4; undefined
+  // when the probe does not say).
+  ms2FilterItms?: number
+  ms2FilterFtms?: number
 }
 
 export interface ProbeSpectra {
@@ -142,7 +149,9 @@ export function parseProbe(stdout: string): ProbeReport {
           model: str(o, 'model'),
           ms2Analyzer: str(o, 'ms2_analyzer'),
           ms2AnalyzerFrom: str(o, 'ms2_analyzer_from'),
-          ionMobility: str(o, 'ion_mobility')
+          ionMobility: str(o, 'ion_mobility'),
+          ms2FilterItms: int(o, 'ms2_filter_itms') ?? undefined,
+          ms2FilterFtms: int(o, 'ms2_filter_ftms') ?? undefined
         }
         break
       case 'spectra':

@@ -77,7 +77,7 @@ describe('round 12: Database reduction says its recipe is not validated, and wha
     const mock = installMockBridge()
     await renderColdApp(mock)
     await chooseTask('Database reduction')
-    expect(document.querySelector('.settings-note')!.textContent).toMatch(/^The shortlist recipe this workflow sets .* is not validated/)
+    expect(document.querySelector('.settings-note')!.textContent).toMatch(/^The shortlist recipe this workflow sets .*E-value 100.* passed its held-out test with Sage on large metaproteome databases .* E-value 10, passed one held-out test with MSFragger and failed the next/)
     mock.nextPickInput = '/d/run.raw'
     await click(fileButton('Choose file…'))
     expect(document.getElementById('out-search_config_out-d')!.textContent).toMatch(/Sage cannot read: convert it to mzML/)

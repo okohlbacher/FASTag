@@ -120,7 +120,7 @@ describe('inspector before a run', () => {
     expect((runButton() as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('ion-trap MS2 at 20 ppm: the 0.3 Da red flag holds Run until fixed; the stale index is only a warning', async () => {
+  it('ion-trap MS2 at 20 ppm: the red flag holds Run until fixed; the stale index is only a warning', async () => {
     const mock = installMockBridge()
     withProbe(mock, iontrapProbe)
     await renderApp(mock)
@@ -136,9 +136,9 @@ describe('inspector before a run', () => {
     expect(runButton().getAttribute('aria-describedby')).toBe('run-held')
     expect(document.getElementById('run-held')?.textContent).toMatch(/^Run waits for the checks before the run/)
     // The preset list marks the detected one.
-    expect(screen.getByRole('option', { name: 'Ion trap CID 0.3 Da (detected)' })).toBeDefined()
+    expect(screen.getByRole('option', { name: 'Ion trap CID 0.5 Da (detected)' })).toBeDefined()
 
-    const fix = within(flag).getByRole('button', { name: 'Use Ion trap CID 0.3 Da' })
+    const fix = within(flag).getByRole('button', { name: 'Use Ion trap CID 0.5 Da' })
     fix.focus()
     await click(fix)
     await settle()
@@ -149,7 +149,7 @@ describe('inspector before a run', () => {
     expect(document.activeElement).toBe(runButton())
     expect(runButton().getAttribute('aria-describedby')).toBeNull()
     await click(runButton())
-    expect(mock.runCalls[0].params).toMatchObject({ fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' })
+    expect(mock.runCalls[0].params).toMatchObject({ fragment_tolerance: '0.5', fragment_tolerance_unit: 'Da' })
   })
 
   it('held on Settings: Review input checks goes to Inputs and focuses the red flag to answer', async () => {
@@ -337,7 +337,7 @@ describe('inspector after a run (real 1.12 reports and log)', () => {
     mock.reportFiles = { '/data/run01.digest.tsv': it20Digest, '/data/run01.label.tsv': it20Label }
   }
 
-  it('the ion-trap gate input at 20 ppm: the red flag from the meta rows and the log, and a re-run at 0.3 Da', async () => {
+  it('the ion-trap gate input at 20 ppm: the red flag from the meta rows and the log, and a re-run at 0.5 Da', async () => {
     const mock = installMockBridge()
     ionTrapRun(mock)
     // Characterize writes the digest report and has species on.
@@ -359,10 +359,10 @@ describe('inspector after a run (real 1.12 reports and log)', () => {
     // at 0.3 Da says so and leaves the species report out, and starts at
     // once (no Da red flag holds it on Setup).
     expect(flag.textContent).toContain('Species calls are not validated with a tolerance in Da')
-    await click(within(flag).getByRole('button', { name: 'Re-run with 0.3 Da, without species' }))
+    await click(within(flag).getByRole('button', { name: 'Re-run with 0.5 Da, without species' }))
     await flush()
     expect(mock.runCalls).toHaveLength(2)
-    expect(mock.runCalls[1].params).toMatchObject({ fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' })
+    expect(mock.runCalls[1].params).toMatchObject({ fragment_tolerance: '0.5', fragment_tolerance_unit: 'Da' })
     expect(mock.runCalls[1].params['species']).not.toBe(true)
     showView('setup')
     expect(screen.queryByText(/^Red flag: Species detection with a tolerance in Da/)).toBeNull()
@@ -382,10 +382,10 @@ describe('inspector after a run (real 1.12 reports and log)', () => {
     expect(mock.runCalls[0].params['species']).not.toBe(true) // guard: species off
     await playRun(mock, [it20Err], { ok: true, code: 0 })
     await goTo('results')
-    await click(screen.getByRole('button', { name: 'Re-run with 0.3 Da' }))
+    await click(screen.getByRole('button', { name: 'Re-run with 0.5 Da' }))
     await flush()
     expect(mock.runCalls).toHaveLength(2)
-    expect(mock.runCalls[1].params).toMatchObject({ fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' })
+    expect(mock.runCalls[1].params).toMatchObject({ fragment_tolerance: '0.5', fragment_tolerance_unit: 'Da' })
   })
 
   it('an Orbitrap HCD run shows no checks after it', async () => {

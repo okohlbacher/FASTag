@@ -179,11 +179,13 @@ export const WORKFLOWS: HelpPage = {
           </p>
           <p>
             The workflow sets the shortlist recipe of doc/SHORTLIST.md (tag length 4, extension 6, at least 1 spectrum per
-            shortlisted protein, gapped placements, E-value 10, shortest placed tag 6 residues, 2 missed cleavages) as its default recipe. It is <strong>not validated</strong>: with
+            shortlisted protein, gapped placements, E-value 100, shortest placed tag 6 residues, 2 missed cleavages) as its default recipe.
+            With E-value 100 it passed its held-out test on large metaproteome databases (PXD045390, Sage: 96% of the
+            full-search peptides kept with 20-33% of the proteins). FASTag&apos;s own recipe default, E-value 10, is <strong>not validated</strong>: with
             MSFragger and the tryptic shortlist it passed its second held-out test and failed the third (8 new runs:
             one run kept 53% of the full search, another had an entrapment FDP of 2.1%). From FASTag 1.15.4 the CLI
-            applies it by default only with MSFragger and the trypsin shortlist; the GUI also sets it for Sage, Comet
-            and other proteases, where it has no held-out test. With a protease other than trypsin only exact
+            applies the recipe by default to every tryptic shortlist run, any engine; the GUI also sets it for other
+            proteases, where it has no held-out test. With a protease other than trypsin only exact
             placements count; gapped placements are ignored. With MSFragger and trypsin, Count gapped placements stays
             on: FASTag cannot be told to leave them out. Change the rest under Advanced. Add the host proteome and
             contaminants as <strong>Background proteins</strong>, so they are always searched. Details: doc/SHORTLIST.md
@@ -287,7 +289,8 @@ export const WORKFLOWS: HelpPage = {
             1.15.1 or earlier) has no By residue view.
           </p>
           <ul>
-            <li>Each row gives the gap (Da), the best name (the first UniMod name that fits a site of the row, else the first PSI-MOD name, else an isotope error), its spectra, and the row totals <strong>Localized</strong>, <strong>Unlocalized</strong> and <strong>Localized %</strong>: the site columns of a row add up to its Localized count, so a shift with few localized spectra says little about where it sits.</li>
+            <li>Each row gives the gap (Da), the best name, its spectra, and the row totals <strong>Localized</strong>, <strong>Unlocalized</strong> and <strong>Localized %</strong>: the site columns of a row add up to its Localized count, so a shift with few localized spectra says little about where it sits.</li>
+            <li>The best name, as the Mass-shift table and the Overview&apos;s Top mass shift give it: an isotope error when the gap is 1, 2 or 3 × 1.00336 Da (the <code>isotope_error</code> column, or within 0.02 Da of it when the row lists no common modification), also added to a common modification (Deamidated + isotope error +1, within 0.005 Da); else the first common modification among the UniMod entries that fit a site of the row (Oxidation, Deamidated, Carbamidomethyl, Acetyl, Methyl, Phospho, Carbamyl, Formyl, Amidated, Dehydrated, Cation:Na, Cation:K, Ammonia-loss, Gln-&gt;pyro-Glu, Glu-&gt;pyro-Glu); else the first UniMod entry, else the first PSI-MOD name. The <code>unimod</code> column lists every entry; the first is often an exotic reading of a common shift (Label:15N(1) for an isotope error).</li>
             <li>The columns are the 20 residues, and <strong>N-term</strong> and <strong>C-term</strong> when the table has terminal-ambiguous sites (N-term|K: the N-terminus or the K side chain; Protein N-term|M). <strong>Terminal sites under their residue</strong> counts those under K or M instead. Hover a cell for the sites behind it. The shading follows the log of the count, so a rare modification still shows beside a frequent one such as oxidation.</li>
             <li><strong>Localized at least</strong> keeps the rows with that many localized spectra (1 at first); <strong>Hide empty residue columns</strong> leaves out the residues no row shown has. Click a heading to sort, by spectra (the first order) or by gap; in the table the arrow keys, Page Up/Down, Home and End move the active row.</li>
             <li><strong>Rows under 0.5 Da are left out.</strong> A row with a gap under 0.5 Da (the threshold of the Shifted count) is an unshifted placement: its localized sites are sequence-constrained by construction (the gap region is the residue the placement ends on, so C-term|K and C-term|R), not modification sites. The line under the matrix gives the spectra left out.</li>

@@ -102,7 +102,7 @@ test('search to field: "tolerance" focuses fragment_tolerance', async ({ page })
   await expect(box).toHaveCount(0)
 })
 
-test('presets: "Ion trap CID" sets 0.3 Da and nothing else', async ({ page }) => {
+test('presets: "Ion trap CID" sets 0.5 Da and nothing else', async ({ page }) => {
   await openApp(page, 'default', 'defaults')
   await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
@@ -110,16 +110,16 @@ test('presets: "Ion trap CID" sets 0.3 Da and nothing else', async ({ page }) =>
     'Orbitrap/TOF HCD 20 ppm',
     'Orbitrap ETD 20 ppm (unvalidated)',
     'Orbitrap EThcD 20 ppm (unvalidated)',
-    'Ion trap CID 0.3 Da',
+    'Ion trap CID 0.5 Da',
     'timsTOF 30 ppm (unvalidated)',
     'Astral 20 ppm (unvalidated)',
     'Custom'
   ])
   await expect(page.locator('#instrument')).toHaveValue('orbitrap-hcd')
-  await page.locator('#instrument').selectOption({ label: 'Ion trap CID 0.3 Da' })
+  await page.locator('#instrument').selectOption({ label: 'Ion trap CID 0.5 Da' })
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
   const runs = await mockState<{ params: Record<string, unknown> }[]>(page, 'runCalls')
   expect(runs).toHaveLength(1)
-  expect(runs[0].params).toMatchObject({ fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' })
+  expect(runs[0].params).toMatchObject({ fragment_tolerance: '0.5', fragment_tolerance_unit: 'Da' })
 })

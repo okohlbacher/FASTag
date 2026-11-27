@@ -25,6 +25,8 @@ import diaErr from '../fixtures/cli-1.12/dia_raw.stderr?raw'
 import diaOut from '../fixtures/cli-1.12/dia_raw.stdout?raw'
 import diaRc from '../fixtures/cli-1.12/dia_raw.rc?raw'
 import ecoliProbe from '../fixtures/probe/ecoli_ms2_small.probe.jsonl?raw'
+import ecoliProbe1164 from '../fixtures/probe/ecoli_ms2_small.1.16.4.probe.jsonl?raw'
+import ecoliFtmsProbe1164 from '../fixtures/probe/ecoli_ms2_small_ftms.1.16.4.probe.jsonl?raw'
 import ecoliDigest from '../fixtures/cli-1.15/ecoli_ms2_small_20ppm.digest.tsv?raw'
 import ecoliErr from '../fixtures/cli-1.15/ecoli_ms2_small_20ppm.stderr?raw'
 
@@ -37,13 +39,13 @@ const ids = (cs: { id: string; level: string }[]): string[] => cs.map((c) => `${
 const notes = (...logs: string[]): string[] => logs.flatMap((l) => l.split('\n')).filter((l) => NOTE_LINE.test(l))
 
 describe('preStartChecks (from the probe)', () => {
-  it('ion-trap MS2 at 20 ppm: a red flag whose fix is the 0.3 Da preset, and ion trap is detected', () => {
+  it('ion-trap MS2 at 20 ppm: a red flag whose fix is the 0.5 Da preset, and ion trap is detected', () => {
     const r = pre(iontrapProbe)
     expect(r.notChecked).toBeNull()
     expect(r.detected).toMatchObject({ family: 'ion-trap', preset: 'iontrap-cid', text: 'LTQ Orbitrap XL', source: 'the probe' })
     const flag = r.checks.find((c) => c.id === 'iontrap-ppm')!
     expect(flag.level).toBe('flag')
-    expect(flag.fix).toEqual({ label: 'Use Ion trap CID 0.3 Da', instrument: 'iontrap-cid' })
+    expect(flag.fix).toEqual({ label: 'Use Ion trap CID 0.5 Da', instrument: 'iontrap-cid' })
     expect(flag.detail).toContain('ion trap')
     // The stale index (as FASTag 1.12 reports it for this file) and the ETD
     // half of the run are warnings.
@@ -262,11 +264,11 @@ describe('preStartChecks (from the probe)', () => {
 describe('postRunChecks (from the reports and the log of a real 1.12 run)', () => {
   const rep = (t: string, p: string) => parseReport(t, p)
 
-  it('the ion-trap fixture at 20 ppm: the 0.3 Da red flag and the re-run offer', () => {
+  it('the ion-trap fixture at 20 ppm: the Da red flag and the re-run offer', () => {
     const r = postRunChecks({ reports: [rep(it20Digest, '/d/a.digest.tsv'), rep(it20Label, '/d/a.label.tsv')], notes: notes(it20Err) })
     const flag = r.checks.find((c) => c.id === 'iontrap-ppm')!
     expect(flag.level).toBe('flag')
-    expect(flag.fix).toEqual({ label: 'Re-run with 0.3 Da', instrument: 'iontrap-cid', rerun: true })
+    expect(flag.fix).toEqual({ label: 'Re-run with 0.5 Da', instrument: 'iontrap-cid', rerun: true })
     expect(flag.detail).toContain('LTQ Orbitrap XL')
     expect(flag.detail).toContain('0.600 Th')
     expect(flag.source).toBe("the digest report and FASTag's log")
@@ -346,9 +348,24 @@ describe('Ecoli_MS2_small.mzML: the checks before and after the run agree', () =
     const w = r.checks[0]
     expect(w.detail).toContain('do not say which')
     expect(w.detail).toContain('names the orbitrap, but no MS2 spectrum references it')
-    expect(w.fix).toEqual({ label: 'Use Ion trap CID 0.3 Da', instrument: 'iontrap-cid' })
+    expect(w.fix).toEqual({ label: 'Use Ion trap CID 0.5 Da', instrument: 'iontrap-cid' })
     // Nothing anywhere proposes the Orbitrap preset.
     expect(JSON.stringify(r)).not.toContain('orbitrap-hcd')
+  })
+
+  // FASTag 1.16.4's probe also counts the MS2 filter strings (ITMS / FTMS).
+  it('1.16.4 probe: ITMS filter strings make it ion trap, whatever the configuration names', () => {
+    const r = pre(ecoliProbe1164)
+    expect(r.detected).toMatchObject({ family: 'ion-trap', preset: 'iontrap-cid', text: 'LTQ Orbitrap XL' })
+    expect(ids(r.checks)).toEqual(['flag:iontrap-ppm'])
+    expect(r.checks[0].detail).toContain('the filter strings of 139 probed MS2 say ITMS')
+    expect(r.checks.some((c) => c.id === 'hybrid-ppm')).toBe(false)
+  })
+
+  it('1.16.4 probe of the FTMS twin: no ion-trap warning at 20 ppm, the Orbitrap preset is detected', () => {
+    const r = pre(ecoliFtmsProbe1164)
+    expect(r.detected).toMatchObject({ family: 'orbitrap', preset: 'orbitrap-hcd', text: 'LTQ Orbitrap XL' })
+    expect(r.checks).toEqual([])
   })
 
   it('before the run at 0.3 Da: nothing to question', () => {
@@ -361,14 +378,14 @@ describe('Ecoli_MS2_small.mzML: the checks before and after the run agree', () =
     const r = postRunChecks({ reports: [rep(ecoliDigest, '/d/e.digest.tsv')], notes: notes(ecoliErr) })
     expect(ids(r.checks)).toEqual(['flag:iontrap-ppm'])
     expect(r.checks[0].detail).toContain('closer than 0.600 Th')
-    expect(r.checks[0].fix).toEqual({ label: 'Re-run with 0.3 Da', instrument: 'iontrap-cid', rerun: true })
+    expect(r.checks[0].fix).toEqual({ label: 'Re-run with 0.5 Da', instrument: 'iontrap-cid', rerun: true })
     expect(r.detected).toMatchObject({ family: 'hybrid-ion-trap', preset: 'iontrap-cid' })
   })
 
   it('after a run with the species report: the re-run leaves it out and says why', () => {
     const r = postRunChecks({ reports: [rep(ecoliDigest, '/d/e.digest.tsv')], notes: notes(ecoliErr), species: true })
     const flag = r.checks[0]
-    expect(flag.fix).toEqual({ label: 'Re-run with 0.3 Da, without species', instrument: 'iontrap-cid', params: { species: false }, rerun: true })
+    expect(flag.fix).toEqual({ label: 'Re-run with 0.5 Da, without species', instrument: 'iontrap-cid', params: { species: false }, rerun: true })
     expect(flag.detail).toContain('Species calls are not validated with a tolerance in Da')
     // The re-run's settings raise no species check before it.
     const values = { ...ppm, species: true, ...flag.fix!.params, fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' }

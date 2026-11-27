@@ -13,7 +13,8 @@ FDR-controlled**. The search engine controls the FDR over the reduced database.
 
 Placement is the `-recon_out` reconciliation (TagReconciler over the tryptic
 ProteomeIndex), run whether or not `-recon_out` is written. A reported,
-non-entrapment tag with E <= `-shortlist_max_evalue` (provisional 0.1)
+non-entrapment tag with E <= `-shortlist_max_evalue` (provisional 0.1; 10 under
+the recipe default of a tryptic shortlist run, below)
 contributes each placement that is
 
 - **exact**: both flanks agree; or
@@ -383,11 +384,12 @@ default minimum length 8 on the right protein, or a tag with one flank off by
 an isotope or modification mass. `-shortlist_gapped` and a lower
 `-recon_min_length` admit these: 95 to 98% (mean 97%) with the recipe of the
 last row, at 2.7 times as many proteins (3,594 of 20,414 on average) and a
-search time 9% longer. After the second held-out test (below) they are the
-defaults under `-search_engine msfragger` with `-search_config_out` and the
+search time 9% longer. After the second held-out test (below) they became
+the defaults under `-search_engine msfragger` with `-search_config_out` and the
 tryptic shortlist
 (`-recon_min_length` and `-recon_missed_cleavages` then also change
-`-recon_out`); Sage and Comet keep 1.13.1's values. MSFragger's mass calibration (`calibrate_mass 2`) and `stricttrypsin`
+`-recon_out`); until 1.15.3 Sage and Comet kept 1.13.1's values. Since 1.15.4
+they are the defaults of every tryptic shortlist run (below). MSFragger's mass calibration (`calibrate_mass 2`) and `stricttrypsin`
 added nothing on the two first runs and are not exported; `calibrate_mass 2` later failed a held-out test
 (`acc115/msfcalib`: kept share +0.025, but not faster than the full search in 2 of 9 runs). All of this was
 set on development runs; the entrapment
@@ -424,9 +426,11 @@ of every tryptic shortlist run (`-shortlist_out`, `-fasta_out` or
 the values applied; the reconciler's line says `min tag length 6 (shortlist
 recipe default)`. On the
 development run PXD003531 the export without these options is
-byte-identical to the one with them. Sage, Comet, a run without
-`-search_config_out` and a `-shortlist_protease` other than trypsin (not
-tested held-out with these values) keep 1.13.1's values.
+byte-identical to the one with them. Only a `-shortlist_protease` other than
+trypsin keeps 1.13.1's values, and `-shortlist_defaults plain` restores them
+for any run. Sage and Comet, and runs without `-search_config_out`, take the
+recipe as well; their only held-out test with it is the metaproteome test
+below (Sage, with `-shortlist_max_evalue 100`).
 
 **Third held-out test: FAIL** (8 runs from 8 new PRIDE projects,
 PREREG-exactonly.md on `acc114/exactonly`, scored once on 2026-11-13; FASTag
@@ -570,8 +574,9 @@ Reduced: the same search on `-fasta_out`.
 Gates: recovery lower bound >= 0.95 in M1 and M2; every spiked organism >= 0.90; <= 25 % of the M1 proteins.
 
 At the plain recipe default (`-shortlist_max_evalue 10`) the development runs kept 17 % of the M1 proteins at
-0.952 recovery. That is too close to the gate, so the default stays 10 (validated with MSFragger) and metaproteomes
-take 100.
+0.952 recovery. That is too close to the gate, so the CLI's recipe default stays 10 (the value of the MSFragger
+tests: PASS, then FAIL) and metaproteomes take 100. The app's Database reduction workflow, which is for large or
+multi-species databases, sends `-shortlist_max_evalue 100` since 1.16.4 (with MSFragger chosen it shows the CLI's 10).
 
 **Limits.**
 - The reduced search reports 2-4 times as many entrapment hits per entrapment residue as the full search, and

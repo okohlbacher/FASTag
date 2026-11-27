@@ -161,7 +161,7 @@ describe('shiftMatrix: other recorded tables', () => {
     expect(m.columns).toEqual(['K', 'M', 'W'])
     expect(m.terminal).toBe(false)
     expect(m.rows[0].name).toBe('MOD:00719 oxidation to L-methionine sulfoxide@M')
-    expect(m.rows[1].name).toBe('13C+1')
+    expect(m.rows[1].name).toBe('isotope error +1')
     // 1 of 3 localized spectra has a site: said, not hidden.
     expect(m.mismatched).toEqual([1])
   })

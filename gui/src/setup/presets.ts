@@ -29,7 +29,11 @@ export const INSTRUMENTS: readonly InstrumentPreset[] = [
   // still read as b/y; the EThcD preset adds ion_series_hybrid both.
   { id: 'orbitrap-etd', label: 'Orbitrap ETD', tolerance: '20', unit: 'ppm', ions: 'auto', validated: false },
   { id: 'orbitrap-ethcd', label: 'Orbitrap EThcD', tolerance: '20', unit: 'ppm', ions: 'auto', hybrid: 'both', validated: false },
-  { id: 'iontrap-cid', label: 'Ion trap CID', tolerance: '0.3', unit: 'Da', validated: true },
+  // 0.5 Da since 1.16.4: the tolerance -tolerance_by_analyzer gives ion-trap
+  // MS2 (-fragment_tolerance_itms, PREREG-lowres-defaults PASS), and on the
+  // ion-trap benchmark (output/lowres-benchmark) 0.5 Da was as good as 0.3
+  // or better (rank 1 0.544 vs 0.542 CPTAC, 0.457 vs 0.447 PXD001819).
+  { id: 'iontrap-cid', label: 'Ion trap CID', tolerance: '0.5', unit: 'Da', validated: true },
   { id: 'timstof', label: 'timsTOF', tolerance: '30', unit: 'ppm', validated: false },
   { id: 'astral', label: 'Astral', tolerance: '20', unit: 'ppm', validated: false }
 ]

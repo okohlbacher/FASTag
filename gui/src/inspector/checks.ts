@@ -512,7 +512,9 @@ export function preStartChecks(o: {
       id: 'iontrap-ppm',
       level: 'flag',
       title: `Ion-trap MS2 with a ${tolOf(values)} ppm tolerance`,
-      detail: `The probe says the MS2 of ${instrumentText(facts) ?? 'this instrument'} are read in the ion trap. A ppm tolerance finds almost no tags on ion-trap spectra; ${presetText(IONTRAP)} is the preset for them.`,
+      detail: `The probe says the MS2 of ${instrumentText(facts) ?? 'this instrument'} are read in the ion trap${
+        facts.ms2FilterItms ? ` (the filter strings of ${facts.ms2FilterItms} probed MS2 say ITMS)` : ''
+      }. A ppm tolerance finds almost no tags on ion-trap spectra; ${presetText(IONTRAP)} is the preset for them.`,
       faq: 'faq-tolerance-warning',
       source: 'the probe',
       fix: { label: `Use ${presetText(IONTRAP)}`, instrument: IONTRAP.id }

@@ -27,7 +27,7 @@ backend has to satisfy.
    checks before the run read mzML, mzPeak and MGF only. Raw DIA needs conversion to
    pseudo-DDA spectra; see **Checks before the run** below the input.
 3. Review those checks and the **Instrument** preset under **About these spectra**. It sets
-   the fragment tolerance: 20 ppm for high-resolution MS2, 0.3 Da for ion-trap MS2. MS2
+   the fragment tolerance: 20 ppm for high-resolution MS2, 0.5 Da for ion-trap MS2. MS2
    spectra that the file marks as ion-trap (Thermo filter string `ITMS`, or the spectrum's
    instrument configuration) are tagged at 0.5 Da whatever the preset (Advanced › **Fragment
    tolerance by analyzer**); the preset sets the tolerance of all other spectra and of the
@@ -463,7 +463,7 @@ entry.
   1.12 refuses with exit code 11 (the check shows the DIAspeXtract command to
   run first).
 - **Red flag** (Run waits for the fix or "Run anyway"): ion-trap MS2 with a
-  ppm tolerance (fix: Ion trap CID 0.3 Da), profile MS2 in mzML or MGF input
+  ppm tolerance (fix: Ion trap CID 0.5 Da), profile MS2 in mzML or MGF input
   (FASTag centroids mzPeak input itself; for mzML it names `-pick_profile
   auto`), species detection with a tolerance in Da.
 - **Warning**: a stale or missing mzML index (FASTag scans the file instead;
@@ -476,7 +476,11 @@ FASTag…": `--helphelp`, then the probe). A probe error or its 60 s timeout
 releases Run as "Not checked before the run". The spectra file is probed once
 per input; the FASTA is probed separately, once its field has stayed
 unchanged for 0.7 s and names a FASTA file, and a newer probe kills the
-superseded CLI child in the backend. The instrument family is the CLI's
+superseded CLI child in the backend. The MS2's Thermo filter strings decide
+first (1.16.4: the probe's `ms2_filter_itms` and `ms2_filter_ftms`): when
+most probed MS2 say `ITMS` the run is ion trap, when most say `FTMS` it is
+high-resolution and gets no ion-trap warning, whatever the instrument
+configurations name. Otherwise the instrument family is the CLI's
 `ms2_analyzer` where it names one; by name only an instrument without a
 second analyser (LTQ XL, LTQ Velos) is an ion trap, while the hybrids (LTQ
 Orbitrap, Orbitrap Elite, the Tribrids, LTQ FT, LTQ FT Ultra) need the
@@ -492,7 +496,7 @@ The instrument the probe or the digest report names proposes a preset,
 marked "(detected)" in the instrument list; nothing is applied until it is
 chosen. After a run, the digest report's `meta instrument` rows and FASTag's
 low-resolution warning flag an ion-trap run at ppm, with "Re-run with
-0.3 Da". FASTag warns only when ion-trap spectra were tagged at the ppm
+0.5 Da". FASTag warns only when ion-trap spectra were tagged at the ppm
 tolerance: those the file does not mark as ion-trap, or all of them with
 `-tolerance_by_analyzer off`. A run FASTag refuses as raw DIA (exit 11, `FASTAG_REFUSED
 reason=raw_dia`) shows that reason and the DIAspeXtract command instead of a
@@ -520,7 +524,7 @@ fixtures are `src/fixtures/probe/`):
 | record | fields |
 |---|---|
 | `probe` | `format`, `version`, `input`, `file_format` (`mzML`, `mzPeak`, `MGF`) |
-| `instrument` | `name`, `model` (CV names or null), `ms2_analyzer` (CV name of the analyzer of the instrument configuration most MS2 reference, or null), `ms2_analyzer_from` (`spectra`, `run_default` or null), `ion_mobility` (`1/K0`, `drift`, `FAIMS` or null) |
+| `instrument` | `name`, `model` (CV names or null), `ms2_analyzer` (CV name of the analyzer of the instrument configuration most MS2 reference, or null), `ms2_analyzer_from` (`spectra`, `run_default` or null), `ion_mobility` (`1/K0`, `drift`, `FAIMS` or null), `ms2_filter_itms`, `ms2_filter_ftms` (1.16.4: probed MS2 whose filter string names ITMS / FTMS) |
 | `spectra` | `ms1`, `ms2` (whole file), `ms2_probed`, `ms2_centroid`, `ms2_profile`, `ms2_type_unknown` (of the probed MS2) |
 | `activation` | `of`, `collisional`, `electron`, `hybrid`, `unknown` (the RunMeta activation classes, of the probed MS2) |
 | `index` | `state`: `ok`, `stale`, `absent` or `not_applicable` |

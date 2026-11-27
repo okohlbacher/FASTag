@@ -164,7 +164,7 @@ for (const [i, w] of WORKFLOWS.entries()) {
     // The example's MS2 are ion trap CID, as the recorded runs were.
     await page.locator('#instrument').selectOption('iontrap-cid')
     if (w.fasta) await page.locator('#p-recon_fasta').fill(w.fasta)
-    // Species at 0.3 Da is a red flag of the checks before the run: answered.
+    // Species at a Da tolerance is a red flag of the checks before the run: answered.
     const anyway = page.getByRole('button', { name: 'Run anyway' })
     if ((await anyway.count()) > 0) await anyway.first().click()
     const run = page.locator('.view-setup .runbar').getByRole('button', { name: /^Run$/ })

@@ -268,7 +268,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     positive: true,
     help: {
       text: 'How far a peak may lie from the mass FASTag expects and still count. The unit beside the number is ppm (parts per million of the mass) or Da.',
-      tip: 'Set it to match the instrument that measured the MS2: 20 ppm for Orbitrap, Astral and TOF data; 0.3 Da for an ion trap. A ppm tolerance on ion-trap data gives almost no tags.'
+      tip: 'Set it to match the instrument that measured the MS2: 20 ppm for Orbitrap, Astral and TOF data; 0.5 Da for an ion trap. A ppm tolerance on ion-trap data gives almost no tags.'
     }
   },
   fragment_tolerance_unit: {

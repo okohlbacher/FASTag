@@ -26,16 +26,18 @@ Setup goes through four steps: **Task**, **Inputs**, **Settings** and **Outputs 
    report the run's quality or rank spectra by how identifiable they are. Click
    **Continue with Generate tags ›**.
 2. **Inputs**: **Checks before the run** reads the file's metadata. Here the instrument is an LTQ
-   Orbitrap XL, which can read MS2 in either analyser; its instrument configuration does not say
-   which, so the app does not guess and warns that the MS2 may be ion-trap.
+   Orbitrap XL, which can read MS2 in either analyser. Its instrument configuration does not say
+   which, but the MS2's filter strings say `ITMS`: since 1.16.4 the app detects ion-trap MS2 from
+   them and raises a red flag for the 20 ppm default (the screenshot, from 1.16.2, shows the older
+   warning that the MS2 may be ion-trap).
 3. The **Instrument** preset under **About these spectra** sets the fragment tolerance. MS2
    spectra that the file marks as ion-trap (in the Thermo filter string, `ITMS`, or in the
    spectrum's instrument configuration) are tagged at 0.5 Da whatever the preset (Advanced ›
    Fragment tolerance by analyzer › **Tolerance by analyzer**, on by default). The preset's tolerance applies to all
    other spectra and to the placement and mass-shift reports, so it must match the analyser that
-   read the MS2: about 20 ppm for Orbitrap, Astral or TOF MS2, 0.3 Da for ion-trap MS2. This
+   read the MS2: about 20 ppm for Orbitrap, Astral or TOF MS2, 0.5 Da for ion-trap MS2. This
    file's spectra are marked `ITMS`, so its tags are read at 0.5 Da with any preset; choose
-   **Ion trap CID 0.3 Da**, which also clears the warning and gives the reports of the other
+   **Ion trap CID 0.5 Da**, which also clears the warning and gives the reports of the other
    tasks a Da tolerance.
 4. **Settings** keeps the task's values (tag length 3, extension 3).
 5. **Outputs & run**: by default the tags TSV is written beside the input, named after the run.

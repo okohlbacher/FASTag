@@ -17,6 +17,12 @@
 // analyser a converter happened to list (often the Orbitrap of an LTQ
 // Orbitrap whose MS2 were read in the ion trap: test/fixtures/
 // Ecoli_MS2_small.mzML), so a hybrid stays undecided then.
+//
+// The MS2's Thermo filter strings (ITMS / FTMS, the probe's
+// ms2_filter_itms and ms2_filter_ftms, 1.16.4) come first: they say where
+// each MS2 was read, as -tolerance_by_analyzer reads them. The analyser
+// most probed MS2 name decides, whatever the configurations say; a tie
+// leaves it to them.
 
 import { value, type Report } from '../digestReport'
 
@@ -30,6 +36,9 @@ export interface InstrumentFacts {
   // (null: a probe that does not say, read as before).
   ms2AnalyzerFrom?: string | null
   ionMobility?: string | null
+  /// Probed MS2 whose filter string names ITMS / FTMS (the probe, 1.16.4).
+  ms2FilterItms?: number | null
+  ms2FilterFtms?: number | null
 }
 
 // The CLI writes '-' for a row whose metadata are absent.
@@ -55,6 +64,10 @@ function familyByName(text: string): Family {
 export function familyOf(f: InstrumentFacts): Family {
   const text = `${named(f.name)} ${named(f.model)}`
   const byName = familyByName(text)
+  const itms = f.ms2FilterItms ?? 0
+  const ftms = f.ms2FilterFtms ?? 0
+  if (itms > ftms) return 'ion-trap'
+  if (ftms > itms) return /astral/i.test(text) ? 'astral' : 'orbitrap'
   // A hybrid's run-default analyser does not say where its MS2 were read.
   const a = byName === 'hybrid-ion-trap' && f.ms2AnalyzerFrom === 'run_default' ? '' : named(f.ms2Analyzer).toLowerCase()
   if (a) {

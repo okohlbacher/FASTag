@@ -87,7 +87,7 @@ export function CheckItem(p: {
   )
 }
 
-/// "Instrument: LTQ Orbitrap XL (detected from the probe): Ion trap CID 0.3 Da".
+/// "Instrument: LTQ Orbitrap XL (detected from the probe): Ion trap CID 0.5 Da".
 function DetectedLine(p: { detected: Detected; chosen: string; onUse?(id: string): void }): JSX.Element | null {
   const { detected } = p
   const preset = INSTRUMENTS.find((x) => x.id === detected.preset)

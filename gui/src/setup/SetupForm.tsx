@@ -1058,7 +1058,7 @@ export default function SetupForm({
             <HelpPopover
               name="fragment_tolerance"
               label="Instrument"
-              description="A preset sets four options at once: the fragment tolerance, its unit, the ion series the MS/MS spectra are read as, and how hybrid (EThcD) spectra are read. Orbitrap and TOF HCD: 20 ppm, b/y ions. Orbitrap ETD: 20 ppm, c/z ions for electron-activated spectra (ion series auto). Orbitrap EThcD: as ETD, and hybrid spectra read as both b/y and c/z. Ion trap CID: 0.3 Da. timsTOF: 30 ppm. Astral: 20 ppm. Custom shows the tolerance and its unit."
+              description="A preset sets four options at once: the fragment tolerance, its unit, the ion series the MS/MS spectra are read as, and how hybrid (EThcD) spectra are read. Orbitrap and TOF HCD: 20 ppm, b/y ions. Orbitrap ETD: 20 ppm, c/z ions for electron-activated spectra (ion series auto). Orbitrap EThcD: as ETD, and hybrid spectra read as both b/y and c/z. Ion trap CID: 0.5 Da. timsTOF: 30 ppm. Astral: 20 ppm. Custom shows the tolerance and its unit."
               deflt=""
               more="The tolerance is the largest m/z error accepted between a fragment peak and a residue mass step. Too tight loses tags; too loose admits wrong ones. Species calls are unreliable at Da tolerances. Ion-trap MS2 spectra the file marks as such are tagged at the ion-trap tolerance (0.5 Da, Advanced › Fragment tolerance by analyzer), whatever the preset; the reports use this tolerance."
               flags={['fragment_tolerance', 'fragment_tolerance_unit', 'ion_series', 'ion_series_hybrid'].map((n) => ({
