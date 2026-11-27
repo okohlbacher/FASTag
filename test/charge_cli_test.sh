@@ -22,6 +22,10 @@
 #     and enumerate (TSV prec_charge and census charge_used);
 #   - refusals: -charge_min above -charge_max, -isotope_error outside -1..3,
 #     -isotope_error 1 at a 0.5 Da fragment tolerance, the options in -stream.
+# The optional 7th argument runs one part (ctest runs the four in parallel,
+# CMakeLists.txt): defaults, calls (infer, candidates, header charges,
+# refusals), threads (with the selected-row reports that read their
+# outputs) or species; "all" (the default) runs every part in order.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -30,6 +34,9 @@ MGF="$3"      # test/fixtures/Ecoli_MS2_small.mgf
 DB="$4"       # test/fixtures/Ecoli_MS2_small.fasta
 DATA="$5"     # data/digest
 TAXDIR="$6"   # data/taxonomy
+PART="${7:-all}"
+case "$PART" in all|defaults|calls|threads|species) ;; *) echo "unknown part $PART" >&2; exit 2 ;; esac
+part() { [ "$PART" = all ] || [ "$PART" = "$1" ]; }
 
 if ! "$BIN" --help >/dev/null 2>&1; then
   echo "SKIP: binary cannot initialize (OpenMS share data unreachable?)" >&2
@@ -70,7 +77,10 @@ full() {  # dir input args...
     -digest_out "$d/t.digest.tsv" -label_out "$d/t.label.tsv" -massgap_out "$d/t.massgap.tsv" "$@" \
     > "$d/log" 2>&1 || { cat "$d/log" >&2; fail "run $d failed"; }
 }
+# The options this binary has (the threads and species parts test some only when present).
+HELPHELP=$("$BIN" --helphelp 2>&1)
 
+if part defaults; then
 # ---- defaults: absent == spelled out == FASTag 1.11.0 ----------------------
 full "$TMP/absent" "$TMP/noz.mgf" -threads 2
 full "$TMP/spelled" "$TMP/noz.mgf" -threads 2 -unknown_charge assume2 -charge_min 2 -charge_max 4 \
@@ -146,6 +156,8 @@ cmp -s <(mzml_masked "$TMP/oa/s.mzML") <(mzml_masked "$TMP/oe/s.mzML") \
 grep -Eq 'parameter: (unknown_charge|charge_min|charge_max|charge_infer_margin|isotope_error)' "$TMP/oa/s.mzML" \
   && fail "a default #6 option is listed in -out_spectra"
 
+fi
+if part calls; then
 # ---- infer: the charge call ------------------------------------------------
 # A low-resolution fixture: the complement window follows its fragment
 # accuracy (0.3 Da), not the 0.02 Da high-resolution default.
@@ -209,6 +221,8 @@ tr -d '\r' < "$MGF" | awk '/^TITLE=/ { n++ } /^CHARGE=/ { sub(/^CHARGE=/, ""); s
 awk -F'\t' 'NR == FNR { z[$1] = $2; next } FNR > 1 && $13 != z[$1] { bad++ } END { exit bad > 0 }' \
   "$TMP/hdr.tsv" "$TMP/c_infer/t.tsv" || fail "infer: a row's prec_charge is not its header charge"
 
+fi
+if part threads; then
 # ---- threads ---------------------------------------------------------------
 for m in enumerate infer; do
   for t in 1 3 8; do full "$TMP/th_${m}_$t" "$TMP/noz.mgf" -threads $t -unknown_charge $m; done
@@ -237,7 +251,6 @@ done
 # same tags as the digest report -- the selected hypothesis' ungapped rows
 # with E <= 1 (PLAN-INTEGRATION 2.3 contract 1; alk_tag needs "&& sel").
 # Skipped while the binary has no -alkylation_out.
-HELPHELP=$("$BIN" --helphelp 2>&1)
 if grep -q -- '-alkylation_out' <<< "$HELPHELP"; then
   "$BIN" -in "$TMP/noz.mgf" -out "$TMP/alk_e.tsv" "${COMMON[@]}" -subsume_tags off -unknown_charge enumerate -threads 2 \
     -alkylation_out "$TMP/alk_e.alk.tsv" -alkylation_proteome "$DB" > "$TMP/alk_e.log" 2>&1 \
@@ -250,6 +263,8 @@ else
   echo "charge_cli_test: no -alkylation_out in this binary; the #3g selected-row check is skipped"
 fi
 
+fi
+if part species; then
 # ---- species: losing hypotheses add no taxon --------------------------------
 SPC=(-tag_length 7 -extension 1 -fragment_tolerance 600 -fragment_tolerance_unit ppm -max_evalue 0 -max_tags 200)
 "$BIN" -in "$TMP/noz.mgf" -out "$TMP/sp0.tsv" "${SPC[@]}" -unknown_charge enumerate -threads 2 > "$TMP/sp0.log" 2>&1 \
@@ -365,6 +380,8 @@ else
   echo "charge_cli_test: no -species_orientation or -species_call in this binary; the D10 check is skipped"
 fi
 
+fi
+if part calls; then
 # ---- refusals --------------------------------------------------------------
 refused() {  # name args...
   local n=$1; shift
@@ -390,4 +407,5 @@ done
 "$BIN" -in "$TMP/noz.mgf" -out "$TMP/iso0.tsv" -isotope_error 0 -fragment_tolerance 0.5 -fragment_tolerance_unit Da \
   > "$TMP/iso0.log" 2>&1 || { cat "$TMP/iso0.log" >&2; fail "-isotope_error 0 at 0.5 Da was refused"; }
 
-echo "charge_cli_test: all checks passed"
+fi
+echo "charge_cli_test ($PART): all checks passed"

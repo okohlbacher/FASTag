@@ -708,14 +708,20 @@ if(FASTAG_BUILD_TESTS)
   # #6: -unknown_charge, -charge_*, -isotope_error on the fixture MGF with its
   # charges stripped: defaults equal 1.11.0, the infer call, header charges
   # kept, threads, losing hypotheses add no species, refusals.
-  add_test(NAME charge_cli_test
-           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/charge_cli_test.sh $<TARGET_FILE:FASTag>
-                   $<TARGET_FILE:buildtaxdb>
-                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf
-                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
-                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
-                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
-  set_tests_properties(charge_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # Four tests, one per part of the script (its header names them), so that
+  # ctest -j runs them side by side: the whole script was the suite's longest
+  # test by far.
+  foreach(_part defaults calls threads species)
+    add_test(NAME charge_cli_test_${_part}
+             COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/charge_cli_test.sh $<TARGET_FILE:FASTag>
+                     $<TARGET_FILE:buildtaxdb>
+                     ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf
+                     ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                     ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                     ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy
+                     ${_part})
+    set_tests_properties(charge_cli_test_${_part} PROPERTIES SKIP_RETURN_CODE 77)
+  endforeach()
   # 1.13 (backlog #14): -check_header_charge on the fixture MGF and on a copy
   # whose 3+/4+ headers are given as 2+: off and warn change no output, the
   # wrong headers are found, both tags them under two charges, threads, refusals.
@@ -1094,7 +1100,8 @@ if(FASTAG_BUILD_TESTS)
   # so ctest would start tests in number order and the slowest ones, near the
   # end of the list, would finish last on their own. COST (about their serial
   # seconds on the CI runners, 1.16.4) starts them first.
-  foreach(_cost charge_cli_test:200 species_call_cli_test:150 species_orientation_cli_test:80
+  foreach(_cost charge_cli_test_species:60 charge_cli_test_threads:60 charge_cli_test_defaults:50
+                charge_cli_test_calls:40 species_call_cli_test:150 species_orientation_cli_test:80
                 species_dump_cli_test:55 subsume_cli_test:55 digest_cli_test:45 msfragger_cli_test:40
                 threads_test:40 shortlist_cli_test:40 proteomes_cli_test:40 cli_guards_test:35
                 census_ids_cli_test:35 gui_cli_test:30)
@@ -1103,6 +1110,15 @@ if(FASTAG_BUILD_TESTS)
     list(GET _cost 1 _c)
     if(TEST ${_t})
       set_tests_properties(${_t} PROPERTIES COST ${_c})
+    endif()
+  endforeach()
+  # The two tests whose point is FASTag's own threading (threads_test, and the
+  # 1/3/8-thread identity of charge_cli_test's threads part) get four of
+  # ctest's -j slots, so they run their -threads 8 on real cores rather than
+  # beside three other tests.
+  foreach(_t threads_test charge_cli_test_threads)
+    if(TEST ${_t})
+      set_tests_properties(${_t} PROPERTIES PROCESSORS 4)
     endif()
   endforeach()
 endif()

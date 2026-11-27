@@ -500,7 +500,12 @@ jobs:
           # One test per core: the tests are independent (their own temp
           # directories; fixtures, RUN_SERIAL and COST in CMakeLists.txt).
           NJ="${NUMBER_OF_PROCESSORS:-$(nproc 2>/dev/null || echo 2)}"
-          echo "ctest -j $NJ"
+          # Idle OpenMP workers sleep instead of spinning: with -j tests side by
+          # side, each FASTag's spinning workers (libomp: 200 ms after every
+          # parallel region) take the cores the other tests need. Output is
+          # unchanged; only the wait between regions differs.
+          export OMP_WAIT_POLICY=PASSIVE KMP_BLOCKTIME=0
+          echo "ctest -j $NJ (OMP_WAIT_POLICY=$OMP_WAIT_POLICY)"
           ctest --test-dir fastag/build --output-on-failure -j "$NJ" 2>&1 | tee ctest.log
           # The mzPeak tests SKIP themselves in a build without mzPeak support
           # or without the validator. This job has both, so a skip here would
@@ -512,7 +517,9 @@ jobs:
           # bruker_cli_test and thermo_cli_test: the vendor readers (1.15.2).
           # gui_cli_test and shipped_data_test: the shipped data in every
           # layout and the build tree's copy staging (they skip without Python).
-          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test indexed_mzml_test mimalloc_redirect_test bruker_cli_test thermo_cli_test gui_cli_test shipped_data_test; do
+          # The four parts of charge_cli_test (#6), which skip on a binary that
+          # cannot start.
+          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test indexed_mzml_test mimalloc_redirect_test bruker_cli_test thermo_cli_test gui_cli_test shipped_data_test charge_cli_test_defaults charge_cli_test_calls charge_cli_test_threads charge_cli_test_species; do
             grep -E "Test +#[0-9]+: $t " ctest.log | grep -q 'Passed' \
               || { echo "::error::$t did not pass (skipped, not run or missing)"; grep -E "$t" ctest.log || true; exit 1; }
           done
