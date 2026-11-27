@@ -6,10 +6,8 @@
 // the longest frame the page went without while it read them.
 //
 // LENS_DIR=<dir of *.delta.tsv> SHOT_DIR=<dir> also pools every table in
-// LENS_DIR and writes pooled-matrix-{light,dark}.png (1800 px wide, the
-// content column widened to show every site column, the table box 40 rows
-// high; the By residue section only) to SHOT_DIR (Chromium
-// only); skipped without them.
+// LENS_DIR and writes pooled-matrix-{light,dark}.png (1800x1300, the app's
+// own layout) to SHOT_DIR (Chromium only); skipped without them.
 import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { Page } from '@playwright/test'
@@ -177,7 +175,8 @@ test('Pooled screenshots: every lens table in LENS_DIR, light and dark', async (
     .filter((f) => f.endsWith('.delta.tsv'))
     .sort()
     .map((f) => ({ path: `/data/PXD045734/${f}`, text: readFileSync(`${dir}/${f}`, 'utf8') }))
-  await page.setViewportSize({ width: 1800, height: 2100 })
+  // The app as it is: the Mass shifts tab takes the window's width.
+  await page.setViewportSize({ width: 1800, height: 1300 })
   for (const scheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: scheme })
     await openPool(page, files)
@@ -185,12 +184,7 @@ test('Pooled screenshots: every lens table in LENS_DIR, light and dark', async (
     await expect(page.locator('.pool-files')).toHaveText(`${files.length} mass-shift tables`, { timeout: 60_000 })
     await page.getByRole('spinbutton', { name: 'Localized at least' }).fill('100')
     await page.getByRole('checkbox', { name: /Hide empty residue columns/ }).uncheck()
-    // The app's content column is 1200 px (--col-max) at any window width, so
-    // the 22 site columns scroll sideways in their box; for this picture the
-    // column is widened to the window (a test style, not the app's).
-    // The table box is 420 px high in the app; here it shows 40 rows.
-    await page.addStyleTag({ content: ':root { --col-max: 1720px; } .recon-tables .dt-wrap { max-height: 1500px; }' })
     await page.locator('.recon-tables').evaluate((e) => e.scrollIntoView({ block: 'start' }))
-    await page.locator('.recon-tables').screenshot({ path: `${process.env.SHOT_DIR}/pooled-matrix-${scheme}.png` })
+    await page.screenshot({ path: `${process.env.SHOT_DIR}/pooled-matrix-${scheme}.png` })
   }
 })
