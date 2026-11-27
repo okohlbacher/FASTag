@@ -276,7 +276,9 @@ describe('ReconView', () => {
     expect(screen.queryByRole('status')).toBeNull() // 475 >= LOW_PLACED: no warning
     expect(screen.getByRole('group', { name: /^Mass-gap chart/ })).toBeTruthy()
     // Round 11: the mass-shift table leads; the placements are one click away.
-    expect(screen.getByRole('grid', { name: 'Mass-shift table' }).getAttribute('aria-rowcount')).toBe('274')
+    // The 3 rows under 0.5 Da (141 spectra, awk) are not listed: 270 rows.
+    expect(screen.getByRole('grid', { name: 'Mass-shift table' }).getAttribute('aria-rowcount')).toBe('271')
+    expect(screen.getByText('141 spectra with a gap under 0.5 Da (no shift) not listed.')).toBeTruthy()
     await click(screen.getByRole('button', { name: 'Placements' }))
     const grid = screen.getByRole('grid', { name: 'Placements' })
     expect(grid.getAttribute('aria-rowcount')).toBe('4707')
@@ -291,7 +293,7 @@ describe('ReconView', () => {
     expect(screen.getByText(/^3 of 4,706 rows/)).toBeTruthy()
     // The shared table: the gap peaks.
     await click(screen.getByRole('button', { name: 'Mass-shift table' }))
-    expect(screen.getByRole('grid', { name: 'Mass-shift table' }).getAttribute('aria-rowcount')).toBe('274')
+    expect(screen.getByRole('grid', { name: 'Mass-shift table' }).getAttribute('aria-rowcount')).toBe('271')
   })
 
   it('warns when too few spectra are placed: 0 (ext2) and 8 (E. coli)', async () => {

@@ -4,15 +4,20 @@
 // column, shiftMatrix.ts). The row totals say how much of each shift is
 // localized at all. The shared DataTable sorts, pages and moves by keyboard;
 // "Export matrix…" writes the rows and columns shown, in the order shown.
+// The unshifted rows (|gap| under 0.5 Da) are left out and counted in the
+// caption. "Add tables…" and "Pool the batch" pool other runs' tables into
+// the matrix (shiftMatrix.ts poolTables, read by poolLoad.ts).
 
-import { useMemo, useRef, useState, type JSX } from 'react'
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import DataTable, { type Column } from './DataTable'
 import { baseName } from '../digestReport'
 import { stripExt } from '../app/paths'
 import { pathKey } from '../run/batch'
 import { useSticky } from './tableStore'
 import type { DeltaTable } from './tables'
-import { C_TERM, N_TERM, RESIDUE_NAME, delimited, localizedPct, pivotResidues, shownColumns, type MatrixRow, type TerminalMode } from './shiftMatrix'
+import { SHIFT_MIN_DA } from './overview'
+import { readPool, recordedGroup, type PoolRead, type PoolTable } from './poolLoad'
+import { C_TERM, N_TERM, RESIDUE_NAME, delimited, localizedPct, poolTables, poolTolerance, shownColumns, sourceOf, type MatrixRow, type TerminalMode } from './shiftMatrix'
 
 const en = (n: number): string => n.toLocaleString('en-US')
 
@@ -20,6 +25,17 @@ const en = (n: number): string => n.toLocaleString('en-US')
 /// count shown, so a rare modification still shows beside a frequent one
 /// (oxidation can outnumber the others a hundredfold).
 export const heatOf = (n: number, top: number): number => (n > 0 && top > 0 ? Math.log1p(n) / Math.log1p(top) : 0)
+
+/// The line under a mass-shift table: the spectra it leaves out, those of
+/// the rows with a gap under SHIFT_MIN_DA (no shift); none when there are none.
+export function UnshiftedLine({ spectra }: { spectra: number }): JSX.Element | null {
+  if (spectra <= 0) return null
+  return (
+    <p className="hint unshifted-note">
+      {en(spectra)} {spectra === 1 ? 'spectrum' : 'spectra'} with a gap under {SHIFT_MIN_DA} Da (no shift) not listed.
+    </p>
+  )
+}
 
 /// The tooltip of a site column's heading.
 function columnTitle(c: string, mode: TerminalMode): string {
@@ -35,12 +51,43 @@ interface MatrixColumn extends Column {
   raw(i: number): string
 }
 
-export default function ResidueMatrix({ t }: { t: DeltaTable }): JSX.Element {
+/// The tables pooled with the one shown: their rows, the files left out,
+/// and the -delta_group of the shown table's run (null: not recorded).
+interface Pool extends PoolRead {
+  own: number | null
+}
+
+/// At most this many files named in the "Not pooled" line.
+const FAILED_SHOWN = 3
+
+const plural = (n: number, one: string, many = `${one}s`): string => `${en(n)} ${n === 1 ? one : many}`
+
+export interface ResidueMatrixProps {
+  t: DeltaTable
+  /// The mass-shift tables of the batch's finished jobs (Pool the batch).
+  batch?: readonly string[]
+}
+
+export default function ResidueMatrix({ t, batch = [] }: ResidueMatrixProps): JSX.Element {
   const [minLoc, setMinLoc] = useSticky(t, 'matrixMin', '1')
   const [hideEmpty, setHideEmpty] = useSticky(t, 'matrixHideEmpty', true)
   const [byResidue, setByResidue] = useSticky(t, 'matrixByResidue', false)
+  // Kept with the table shown, as its filters are: a tab switch keeps the pool.
+  const [pool, setPool] = useSticky<Pool | null>(t, 'matrixPool', null)
+  const [reading, setReading] = useState<{ done: number; of: number } | null>(null)
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
   const mode: TerminalMode = byResidue ? 'residue' : 'terminus'
-  const m = useMemo(() => pivotResidues(t, mode), [t, mode])
+  const own = useMemo(() => sourceOf(t), [t])
+  const tol = useMemo(() => (pool ? poolTolerance([pool.own, ...pool.tables.map((x) => x.group)]) : null), [pool])
+  // One table: its own rows (tolerance 0 merges nothing); pooled: merged by mass.
+  const m = useMemo(() => (own ? poolTables([own, ...(pool?.tables.map((x) => x.source) ?? [])], mode, tol ? tol.tolerance : 0) : null), [own, pool, mode, tol])
+  const pooled = !!pool && pool.tables.length > 0
   const min = minLoc.trim() !== '' && Number.isFinite(Number(minLoc)) ? Number(minLoc) : 0
   const ids = useMemo(() => {
     if (!m) return new Uint32Array(0)
@@ -57,17 +104,75 @@ export default function ResidueMatrix({ t }: { t: DeltaTable }): JSX.Element {
   const rowAt = (i: number): MatrixRow => m.rows[i]
   const count = (i: number, c: string): number => rowAt(i).counts.get(c) ?? 0
   const file = baseName(t.path)
+  const paths = [t.path, ...(pool?.tables.map((x) => x.source.path) ?? [])]
+  const inPool = new Set(paths.map(pathKey))
+  const batchNew = batch.filter((p) => !inPool.has(pathKey(p)))
+  const batchAll = new Set([pathKey(t.path), ...batch.map(pathKey)]).size
+
+  /// Pool @p add with the tables shown, a few files at a time.
+  async function addTables(add: readonly string[]): Promise<void> {
+    const fresh = add.filter((p) => !inPool.has(pathKey(p)))
+    if (fresh.length === 0) return
+    setSaved(null)
+    setReading({ done: 0, of: fresh.length })
+    let shown = 0
+    const read = await readPool(fresh, (done, of) => {
+      // The progress line, at most ten times a second.
+      const now = performance.now()
+      if (mounted.current && (done === of || now - shown > 100)) {
+        shown = now
+        setReading({ done, of })
+      }
+    })
+    const ownGroup = pool ? pool.own : await recordedGroup(t.path)
+    const before = pool ?? { own: ownGroup, tables: [] as PoolTable[], failed: [] }
+    setPool({ own: ownGroup, tables: [...before.tables, ...read.tables], failed: [...before.failed, ...read.failed] })
+    if (mounted.current) setReading(null)
+  }
+
+  async function pickTables(): Promise<void> {
+    const picked = await window.fastag.pickFiles(['tsv'])
+    if (picked.length) await addTables(picked)
+  }
 
   const cols: MatrixColumn[] = [
-    { id: 'delta', label: 'Gap (Da)', num: true, title: 'The mass shift, as -delta_out prints it', text: (i) => rowAt(i).key, key: (i) => rowAt(i).delta, raw: (i) => rowAt(i).key },
+    {
+      id: 'delta',
+      label: 'Gap (Da)',
+      num: true,
+      title: pooled ? 'The mass shift: the gap of the pooled row with the most spectra, as -delta_out prints it' : 'The mass shift, as -delta_out prints it',
+      text: (i) => rowAt(i).key,
+      key: (i) => rowAt(i).delta,
+      cellTitle: (i) => {
+        const r = rowAt(i)
+        if (r.members < 2) return undefined
+        return `Pooled from ${plural(r.members, 'row')} of ${plural(r.tables, 'table')}, gaps ${r.lo.toFixed(4)} to ${r.hi.toFixed(4)} Da`
+      },
+      raw: (i) => rowAt(i).key
+    },
     {
       id: 'name',
       label: 'Best name',
-      title: 'The first UniMod name that fits a site of the row, else the first PSI-MOD name, else the isotope error; without its mass error',
+      title: pooled
+        ? "The best name the most of the row's spectra carry, over the pooled rows (each row's: the first UniMod name that fits a site, else the first PSI-MOD name, else the isotope error); without its mass error"
+        : 'The first UniMod name that fits a site of the row, else the first PSI-MOD name, else the isotope error; without its mass error',
       text: (i) => rowAt(i).name,
       cellTitle: (i) => rowAt(i).names || undefined,
       raw: (i) => rowAt(i).name
     },
+    ...(pooled
+      ? [
+          {
+            id: 'tables',
+            label: 'Tables',
+            num: true,
+            title: 'The pooled tables with a row at this mass shift',
+            text: (i: number) => en(rowAt(i).tables),
+            key: (i: number) => rowAt(i).tables,
+            raw: (i: number) => String(rowAt(i).tables)
+          }
+        ]
+      : []),
     { id: 'spectra', label: 'Spectra', num: true, title: 'Spectra in the row', text: (i) => en(rowAt(i).spectra), key: (i) => rowAt(i).spectra, raw: (i) => String(rowAt(i).spectra) },
     { id: 'localized', label: 'Localized', num: true, title: 'Spectra whose shift is placed on one site class: the sum of the site columns', text: (i) => en(rowAt(i).localized), key: (i) => rowAt(i).localized, raw: (i) => String(rowAt(i).localized) },
     { id: 'unlocalized', label: 'Unlocalized', num: true, title: 'Spectra with a shift and no site-determining evidence', text: (i) => en(rowAt(i).unlocalized), key: (i) => rowAt(i).unlocalized, raw: (i) => String(rowAt(i).unlocalized) },
@@ -109,16 +214,20 @@ export default function ResidueMatrix({ t }: { t: DeltaTable }): JSX.Element {
 
   async function exportMatrix(): Promise<void> {
     setSaved(null)
-    const dest = await window.fastag.saveFile(`${stripExt(t.path)}.by_residue.tsv`, ['tsv', 'csv'])
+    const dest = await window.fastag.saveFile(`${stripExt(t.path)}${pooled ? '.pooled' : ''}.by_residue.tsv`, ['tsv', 'csv'])
     if (!dest) return
     const format = /\.csv$/i.test(dest) ? 'csv' : /\.tsv$/i.test(dest) ? 'tsv' : null
     if (!format) {
       setSaved({ ok: false, text: `Not written: name the file .tsv or .csv (${dest}).` })
       return
     }
-    if (pathKey(dest) === pathKey(t.path)) {
-      setSaved({ ok: false, text: `Not written: ${dest} is the mass-shift table shown. Choose another name.` })
-      return
+    // A pooled matrix names its tables in a sidecar beside it: <name>.sources.tsv.
+    const side = pooled ? `${stripExt(dest)}.sources.tsv` : null
+    for (const out of side ? [dest, side] : [dest]) {
+      if (inPool.has(pathKey(out))) {
+        setSaved({ ok: false, text: `Not written: ${out} is ${pathKey(out) === pathKey(t.path) ? 'the mass-shift table shown' : 'a pooled mass-shift table'}. Choose another name.` })
+        return
+      }
     }
     const rows = order.current && order.current.length === ids.length ? order.current : Array.from(ids)
     const text = delimited(
@@ -127,8 +236,18 @@ export default function ResidueMatrix({ t }: { t: DeltaTable }): JSX.Element {
       format
     )
     try {
-      await window.fastag.writeSummary(dest, text, [t.path])
-      setSaved({ ok: true, text: `${en(rows.length)} ${rows.length === 1 ? 'row' : 'rows'} and ${en(sites.length)} site ${sites.length === 1 ? 'column' : 'columns'} written to ${dest}, in the order shown.` })
+      await window.fastag.writeSummary(dest, text, paths)
+      const written = `${plural(rows.length, 'row')} and ${en(sites.length)} site ${sites.length === 1 ? 'column' : 'columns'} written to ${dest}, in the order shown`
+      if (side && pool && tol) {
+        const groups = [pool.own, ...pool.tables.map((x) => x.group)]
+        const sources = delimited(
+          ['source', 'shift_rows', 'shift_spectra', 'unshifted_rows', 'unshifted_spectra', 'delta_group'],
+          m!.parts.map((p, k) => [p.path, String(p.rows), String(p.spectra), String(p.unshiftedRows), String(p.unshiftedSpectra), groups[k] == null ? '-' : String(groups[k])]),
+          format
+        )
+        await window.fastag.writeSummary(side, sources, paths)
+        setSaved({ ok: true, text: `${written}; the ${plural(paths.length, 'table')} pooled (rows within ${tol.tolerance} Da merged) listed in ${side}.` })
+      } else setSaved({ ok: true, text: `${written}.` })
     } catch (e) {
       setSaved({ ok: false, text: `Could not write the matrix: ${e instanceof Error ? e.message : String(e)}` })
     }
@@ -136,9 +255,20 @@ export default function ResidueMatrix({ t }: { t: DeltaTable }): JSX.Element {
 
   return (
     <>
+      {pooled && tol && (
+        <p className="caveat pool-sum">
+          Pooled:{' '}
+          <span className="pool-files" tabIndex={0} title={paths.join('\n')}>
+            {plural(paths.length, 'mass-shift table')}
+          </span>{' '}
+          (hover for the files); rows of different tables within {tol.tolerance} Da of each other are one row ({tol.recorded ? 'the -delta_group of their runs' : 'the -delta_group default: the tables do not record their own'}), their counts summed.
+        </p>
+      )}
       <p className="caveat">
-        Localized spectra only: the <code>residues</code> column of {file}, each spectrum counted once on its site; the shading follows the log of the count.
+        Localized spectra only: the <code>residues</code> column of {pooled ? 'each table' : file}, each spectrum counted once on its site; the shading follows the log of the count.
         {m.terminal && !byResidue && ' N-term and C-term hold the terminal-ambiguous sites (N-term|K: the N-terminus or the K side chain).'}{' '}
+        {m.unshiftedRows > 0 &&
+          `Rows with a gap under ${SHIFT_MIN_DA} Da (unshifted placements) are left out: their site is the residue the placement ends on, not a modification site. `}
         Candidates, not identifications.
       </p>
       <div className="dt-filters" role="group" aria-label="Matrix filters">
@@ -154,10 +284,34 @@ export default function ResidueMatrix({ t }: { t: DeltaTable }): JSX.Element {
             <input type="checkbox" checked={byResidue} onChange={(e) => setByResidue(e.target.checked)} /> Terminal sites under their residue
           </label>
         )}
-        <button type="button" className="secondary small" disabled={ids.length === 0} onClick={() => void exportMatrix()}>
+        <button type="button" className="secondary small" disabled={ids.length === 0 || !!reading} onClick={() => void exportMatrix()}>
           Export matrix…
         </button>
+        <button type="button" className="secondary small" disabled={!!reading} title="Pool other runs' mass-shift tables (<run>.delta.tsv) with this one into one matrix" onClick={() => void pickTables()}>
+          Add tables…
+        </button>
+        {batchNew.length > 0 && (
+          <button type="button" className="secondary small" disabled={!!reading} title="Pool the mass-shift tables of the batch's finished jobs into one matrix" onClick={() => void addTables(batchNew)}>
+            Pool the batch ({plural(batchAll, 'table')})
+          </button>
+        )}
+        {pool && (
+          <button type="button" className="secondary small" disabled={!!reading} onClick={() => setPool(null)}>
+            This table only
+          </button>
+        )}
       </div>
+      {reading && (
+        <p className="hint" role="status">
+          Reading mass-shift tables: {en(reading.done)} of {en(reading.of)}…
+        </p>
+      )}
+      {pool && pool.failed.length > 0 && (
+        <p className="warn" role="status">
+          Not pooled: {pool.failed.slice(0, FAILED_SHOWN).map((f) => `${f.path} (${f.why})`).join('; ')}
+          {pool.failed.length > FAILED_SHOWN && `; and ${plural(pool.failed.length - FAILED_SHOWN, 'more file')}`}.
+        </p>
+      )}
       <p className="report-sum" aria-live="polite">
         {ids.length === 0
           ? 'No mass shift has that many localized spectra.'
@@ -165,7 +319,7 @@ export default function ResidueMatrix({ t }: { t: DeltaTable }): JSX.Element {
       </p>
       {m.mismatched.length > 0 && (
         <p className="warn" role="status">
-          In {en(m.mismatched.length)} {m.mismatched.length === 1 ? 'row' : 'rows'} the sites do not add up to the localized column: the file may be cut or edited.
+          In {en(m.mismatched.length)} {m.mismatched.length === 1 ? 'row' : 'rows'} the sites do not add up to the localized column: {pooled ? 'a file' : 'the file'} may be cut or edited.
         </p>
       )}
       {saved && (
@@ -186,6 +340,7 @@ export default function ResidueMatrix({ t }: { t: DeltaTable }): JSX.Element {
           order.current = o
         }}
       />
+      <UnshiftedLine spectra={m.unshiftedSpectra} />
     </>
   )
 }

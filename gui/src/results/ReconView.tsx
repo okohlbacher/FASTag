@@ -21,7 +21,7 @@ import { FASTA_EXTENSION, SHIFT_MIN_DA, type TileAction } from './overview'
 import { longestSeed, shortestSeed } from '../paramLayout'
 import ReportHeader from './ReportHeader'
 import ProductFiles, { type ProductFile } from './ProductFiles'
-import ResidueMatrix from './ResidueMatrix'
+import ResidueMatrix, { UnshiftedLine } from './ResidueMatrix'
 import './viewers.css'
 
 /// Below this many placed spectra the gap distribution supports no
@@ -49,6 +49,8 @@ export interface ReconViewProps {
   /// null: not offered.
   extend?: { label: string; run(): void; disabled: boolean } | null
   onOpen(): void
+  /// The mass-shift tables of the batch's finished jobs: By residue offers to pool them.
+  batchDeltas?: readonly string[]
 }
 
 const given = (v: unknown): boolean => (typeof v === 'string' ? v.trim() !== '' : v === true)
@@ -175,7 +177,7 @@ const DATASET_TITLE: Partial<Record<Dataset, string>> = {
 
 const signed = (v: number, d = 4): string => (Number.isNaN(v) ? '' : v > 0 ? `+${v.toFixed(d)}` : v < 0 ? `−${(-v).toFixed(d)}` : (0).toFixed(d))
 
-export default function ReconView({ massgap, tables, gen = {}, notice, action, extend, onOpen }: ReconViewProps): JSX.Element {
+export default function ReconView({ massgap, tables, gen = {}, notice, action, extend, onOpen, batchDeltas }: ReconViewProps): JSX.Element {
   const recon = useTable(tables.recon, 'recon', gen.recon)
   const delta = useTable(tables.delta, 'delta', gen.delta)
   // Only an mzTab -recon_id_out is read here. An idXML or mzid one (the
@@ -339,12 +341,12 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
       ) : (
         !loading && <p className="muted">No gap rows to draw.</p>
       )}
-      <ReconTables recon={recon.table} delta={delta.table} ids={ids.table} loading={loading} />
+      <ReconTables recon={recon.table} delta={delta.table} ids={ids.table} loading={loading} batch={batchDeltas} />
     </div>
   )
 }
 
-function ReconTables({ recon, delta, ids, loading }: { recon: ReconTable | null; delta: DeltaTable | null; ids: ReconIdTable | null; loading: boolean }): JSX.Element | null {
+function ReconTables({ recon, delta, ids, loading, batch }: { recon: ReconTable | null; delta: DeltaTable | null; ids: ReconIdTable | null; loading: boolean; batch?: readonly string[] }): JSX.Element | null {
   // The survey's answer first: the mass-shift table with sites and UniMod
   // names, and the same by residue (a table with a residues column, 1.15.2
   // on); the placements behind it are the detail.
@@ -367,7 +369,7 @@ function ReconTables({ recon, delta, ids, loading }: { recon: ReconTable | null;
       )}
       {ds === 'recon' && recon && <PlacementTable t={recon} />}
       {ds === 'delta' && delta && <DeltaPeaks t={delta} />}
-      {ds === 'residues' && delta && <ResidueMatrix t={delta} />}
+      {ds === 'residues' && delta && <ResidueMatrix t={delta} batch={batch} />}
       {ds === 'reconIds' && ids && <IdTable t={ids} />}
     </section>
   )
@@ -480,12 +482,19 @@ const DELTA_EXTRA: { id: string; label: string; title: string; num?: true }[] = 
 function DeltaPeaks({ t }: { t: DeltaTable }): JSX.Element {
   const [minSpectra, setMinSpectra] = useSticky(t, 'minSpectra', '')
   const min = minSpectra.trim() !== '' && Number.isFinite(Number(minSpectra)) ? Number(minSpectra) : 0
-  const rows = useMemo(() => {
+  // The rows with a shift: a gap under SHIFT_MIN_DA is the unshifted
+  // placement (the file keeps it: it is the share the Overview counts).
+  const { shifted, unshifted } = useMemo(() => {
     const out = new Uint32Array(t.rows)
     let k = 0
-    for (let i = 0; i < t.rows; i++) if (t.spectra[i] >= min) out[k++] = i
-    return out.slice(0, k)
-  }, [t, min])
+    let none = 0
+    for (let i = 0; i < t.rows; i++) {
+      if (Math.abs(t.delta[i]) >= SHIFT_MIN_DA) out[k++] = i
+      else if (!Number.isNaN(t.delta[i])) none += t.spectra[i]
+    }
+    return { shifted: out.slice(0, k), unshifted: none }
+  }, [t])
+  const rows = useMemo(() => shifted.filter((i) => t.spectra[i] >= min), [t, shifted, min])
   const cols: Column[] = [
     { id: 'delta', label: 'Gap (Da)', num: true, text: (i) => t.keys[i], key: (i) => t.delta[i] },
     { id: 'spectra', label: 'Spectra', num: true, text: (i) => fmt(t.spectra[i]), key: (i) => t.spectra[i] },
@@ -514,7 +523,8 @@ function DeltaPeaks({ t }: { t: DeltaTable }): JSX.Element {
           <input type="number" min={0} step={1} value={minSpectra} onChange={(e) => setMinSpectra(e.target.value)} />
         </label>
       </div>
-      <DataTable label="Mass-shift table" columns={cols} ids={rows} total={t.rows} sort={{ column: 'spectra', desc: true }} keep={t} />
+      <DataTable label="Mass-shift table" columns={cols} ids={rows} total={shifted.length} sort={{ column: 'spectra', desc: true }} keep={t} />
+      <UnshiftedLine spectra={unshifted} />
     </>
   )
 }
