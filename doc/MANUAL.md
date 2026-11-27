@@ -85,7 +85,9 @@ reports. The screenshots use PXD000001 (an *Erwinia carotovora* lysate, trypsin,
 The **Alkylation report** (step 4, on by default) needs no protein database and no shipped
 proteome: it reads the cysteine forms in the tags. Its votes need a cysteine inside a tag, so a
 larger Extension gives more; with Spectra to read set to 10% at Extension 2 it often says "no call"
-with the counts. On all of PXD000001 at Extension 2 it calls Methylthio (MMTS), 52 of 69 votes.
+with the counts. On all of PXD000001 at Extension 2 it calls Methylthio (MMTS): the Overview tile
+reads "75.36% of 69 tag votes (57 for a form, 1 conflicted, 11 abstained)", that is 52 of the 69
+votes for Methylthio.
 
 ![Setup for a survey](images/manual-05-setup-characterize.png)
 
