@@ -1759,6 +1759,7 @@ jobs:
   # Linux GUI jobs do not wait for them (release-complete still needs both).
   build-macos:
     name: ${{ matrix.name }} build
+    if: false  # EXPERIMENT ONLY: no macOS runner for the Linux experiment
     runs-on: ${{ matrix.runner }}
     needs: [version]
     env:
@@ -1873,6 +1874,7 @@ jobs:
 
   test-macos:
     name: ${{ matrix.name }}
+    if: false  # EXPERIMENT ONLY: no macOS runner for the Linux experiment
     runs-on: ${{ matrix.runner }}
     needs: [version]
     permissions:
