@@ -16,6 +16,11 @@ import { C_TERM, N_TERM, RESIDUE_NAME, delimited, localizedPct, pivotResidues, s
 
 const en = (n: number): string => n.toLocaleString('en-US')
 
+/// A cell's shade, 0 to 1: the log of its count against the log of the largest
+/// count shown, so a rare modification still shows beside a frequent one
+/// (oxidation can outnumber the others a hundredfold).
+export const heatOf = (n: number, top: number): number => (n > 0 && top > 0 ? Math.log1p(n) / Math.log1p(top) : 0)
+
 /// The tooltip of a site column's heading.
 function columnTitle(c: string, mode: TerminalMode): string {
   if (c === N_TERM) return 'N-term: terminal-ambiguous sites at the peptide or protein N-terminus (N-term|K: the N-terminus or the K side chain)'
@@ -43,7 +48,7 @@ export default function ResidueMatrix({ t }: { t: DeltaTable }): JSX.Element {
   }, [m, min])
   const shown = useMemo(() => (m ? Array.from(ids, (i) => m.rows[i]) : []), [m, ids])
   const sites = useMemo(() => (m ? shownColumns(m, shown, hideEmpty, mode) : []), [m, shown, hideEmpty, mode])
-  // The shade of a cell: its count against the largest cell shown.
+  // The shade of a cell: the log of its count against the largest cell shown (heatOf).
   const top = useMemo(() => shown.reduce((x, r) => Math.max(x, ...sites.map((c) => r.counts.get(c) ?? 0)), 0), [shown, sites])
   const order = useRef<readonly number[] | null>(null)
   const [saved, setSaved] = useState<{ ok: boolean; text: string } | null>(null)
@@ -92,7 +97,7 @@ export default function ResidueMatrix({ t }: { t: DeltaTable }): JSX.Element {
           if (!d) return undefined
           return `${c} at ${rowAt(i).key} Da: ${en(count(i, c))} localized (${d.map((s) => `${s.site} ${en(s.n)}`).join(', ')})`
         },
-        heat: (i) => (top > 0 ? count(i, c) / top : 0),
+        heat: (i) => heatOf(count(i, c), top),
         raw: (i) => String(count(i, c))
       })
     )
@@ -132,7 +137,7 @@ export default function ResidueMatrix({ t }: { t: DeltaTable }): JSX.Element {
   return (
     <>
       <p className="caveat">
-        Localized spectra only: the <code>residues</code> column of {file}, each spectrum counted once on its site.
+        Localized spectra only: the <code>residues</code> column of {file}, each spectrum counted once on its site; the shading follows the log of the count.
         {m.terminal && !byResidue && ' N-term and C-term hold the terminal-ambiguous sites (N-term|K: the N-terminus or the K side chain).'}{' '}
         Candidates, not identifications.
       </p>
