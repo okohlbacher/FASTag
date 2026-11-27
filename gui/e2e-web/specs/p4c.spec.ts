@@ -71,7 +71,8 @@ test('Mass shifts: figures equal the oracles of the PXD014764 recon run', async 
   // Enough placed spectra: no warning.
   await expect(page.locator('.recon-view .banner.warn')).toHaveCount(0)
   // The mass-shift table leads; the placements are one click away.
-  await expect(page.getByRole('grid', { name: 'Mass-shift table' })).toHaveAttribute('aria-rowcount', String(o.deltaRows + 1))
+  // Rows with a gap under 0.5 Da are not listed.
+  await expect(page.getByRole('grid', { name: 'Mass-shift table' })).toHaveAttribute('aria-rowcount', String(o.shiftRows + 1))
   await page.getByRole('button', { name: 'Placements', exact: true }).click()
   const grid = page.getByRole('grid', { name: 'Placements' })
   await expect(grid).toHaveAttribute('aria-rowcount', String(o.placements + 1))
@@ -79,7 +80,8 @@ test('Mass shifts: figures equal the oracles of the PXD014764 recon run', async 
   await expect(page.locator('.dt-count').first()).toHaveText(`${en(o.gapped)} of ${en(o.placements)} rows · showing 1–100`)
   // The shared table: the gap peaks.
   await page.getByRole('button', { name: 'Mass-shift table', exact: true }).click()
-  await expect(page.getByRole('grid', { name: 'Mass-shift table' })).toHaveAttribute('aria-rowcount', String(o.deltaRows + 1))
+  // Rows with a gap under 0.5 Da are not listed.
+  await expect(page.getByRole('grid', { name: 'Mass-shift table' })).toHaveAttribute('aria-rowcount', String(o.shiftRows + 1))
 })
 
 test('the mass-gap chart: thin sticks, UniMod marks, legend, hover and keyboard tooltips, and a table view', async ({ page }) => {
@@ -201,7 +203,9 @@ test('Open report… opens a delta table in Mass shifts', async ({ page }) => {
   await goTo(page, 'Results')
   await page.getByRole('button', { name: 'Open report…' }).click()
   await expect(page.getByRole('tab', { name: 'Mass shifts' })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByRole('grid', { name: 'Mass-shift table' })).toHaveAttribute('aria-rowcount', '274')
+  // 273 rows, 3 of them under 0.5 Da (141 spectra): not listed, and said so.
+  await expect(page.getByRole('grid', { name: 'Mass-shift table' })).toHaveAttribute('aria-rowcount', '271')
+  await expect(page.getByText('141 spectra with a gap under 0.5 Da (no shift) not listed.')).toBeVisible()
   await expect(page.locator('.mg-stick')).not.toHaveCount(0)
 })
 

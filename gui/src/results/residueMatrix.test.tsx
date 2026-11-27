@@ -223,6 +223,8 @@ describe('the residue matrix is findable', () => {
     expect(searchHelp('residue matrix')[0].id).toBe('workflow-shift-residues')
     expect(searchHelp('mass shifts by residue')[0].id).toBe('workflow-shift-residues')
     expect(searchHelp('residue matrix').some((h) => h.id === 'param-delta_out')).toBe(true)
+    // Pooling is found there too.
+    expect(searchHelp('pool mass-shift tables')[0].id).toBe('workflow-shift-residues')
   })
 
   it('the parameter search finds the Mass-shift table by "residue matrix"', () => {
