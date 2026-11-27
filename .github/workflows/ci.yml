@@ -1095,7 +1095,8 @@ jobs:
       # that took the signed branch was the gui_dry_run dispatch of PR #12.
       # Without them a tag build takes the "not configured" branch and ships
       # unsigned. doc/SIGNING-macos-gui.md names the secrets.
-      - name: Detect macOS signing readiness
+      - &m-detect
+        name: Detect macOS signing readiness
         if: runner.os == 'macOS' && (startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run)
         id: mac-signing
         shell: bash
@@ -1109,7 +1110,8 @@ jobs:
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Import Apple Developer ID cert into CI keychain (macOS)
+      - &m-import
+        name: Import Apple Developer ID cert into CI keychain (macOS)
         if: steps.mac-signing.outputs.enabled == 'true'
         shell: bash
         env:
@@ -1162,19 +1164,12 @@ jobs:
             || { cat "$RUNNER_TEMP/signed-raw.log"; echo "::error::the signed CLI cannot read a Thermo .raw"; exit 1; }
           grep -E "scans indexed" "$RUNNER_TEMP/signed-raw.log"
 
-      - name: Submit to Apple notary + wait (macOS)
-        if: steps.mac-signing.outputs.enabled == 'true'
-        timeout-minutes: 60
-        shell: bash
-        env:
-          MACOS_APPLE_ID: ${{ secrets.MACOS_APPLE_ID }}
-          MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
-          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
-        run: |
-          ditto -c -k --keepParent dist/FASTag "${RUNNER_TEMP}/FASTag-notarize.zip"
-          xcrun notarytool submit "${RUNNER_TEMP}/FASTag-notarize.zip" \
-            --apple-id "$MACOS_APPLE_ID" --team-id "$MACOS_TEAM_ID" \
-            --password "$MACOS_NOTARY_PASSWORD" --wait
+      # No notarization of the bare CLI folder here (it was submitted as a zip
+      # up to 1.16.4): a signed release ships the CLI only inside its disk
+      # image (job macos-cli) and inside the app (job macos-app), and each
+      # of those is notarized, with the CLI's Mach-Os in it, and stapled. A
+      # build without the signing secrets ships the unsigned tarball, which
+      # was never notarized.
 
       # MOVED AHEAD OF THE DESKTOP APP, and that is the whole point: the app's
       # resources are staged from dist/FASTag, so embedding the index after that
@@ -1183,10 +1178,9 @@ jobs:
       # taxonomy dumps are present ... but the k-mer index (tax_k7.taxdb) is
       # not" -- reported from /Applications/FASTag.app on 2026-09-09.
       #
-      # The original reason for placing it late still holds for the CLI: the
-      # index is unsigned data and embedding it before notarization would add
-      # ~450 MB to that upload. It does not conflict, because the CLI is
-      # notarized further up, before this point.
+      # The index is unsigned data, embedded after the codesign step; the
+      # disk images that carry it are notarized with it (jobs macos-app and
+      # macos-cli).
       # Embed the full taxonomy index into the tarball -- tag builds only;
       # main pushes keep the fast dumps-only bundles nobody installs.
       #
@@ -1279,6 +1273,123 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+      # The signed (or, without the secrets, unsigned) bundle with the index
+      # embedded, for jobs macos-app and macos-cli: they start from these
+      # exact files and run side by side, so the app's and the CLI image's
+      # notarizations overlap. A tar keeps the dylib symlinks, the exec bits
+      # and the signatures.
+      - name: Pack the signed bundle for the app and the CLI image (macOS)
+        if: runner.os == 'macOS' && (startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run)
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -C dist -cf "$RUNNER_TEMP/FASTag-dist-${{ matrix.name }}.tar" FASTag
+          ls -l "$RUNNER_TEMP/FASTag-dist-${{ matrix.name }}.tar"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: runner.os == 'macOS' && (startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run)
+        with:
+          name: FASTag-dist-${{ matrix.name }}
+          path: ${{ runner.temp }}/FASTag-dist-${{ matrix.name }}.tar
+          compression-level: 1
+          retention-days: 3
+          if-no-files-found: error
+
+      # Placed last on purpose: everything above that needs the identity has
+      # run. `always()` so a failure earlier still tears the keychain down.
+      - &m-delete
+        name: Delete signing keychain (macOS)
+        if: always() && steps.mac-signing.outputs.enabled == 'true'
+        shell: bash
+        run: security delete-keychain "${RUNNER_TEMP}/fastag-signing.keychain-db" || true
+
+      - name: Attach binary to the GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') && runner.os == 'Linux'
+        shell: bash -el {0}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --notes "Automated binary upload; the release notes follow from CHANGELOG.md (job release-notes)." \
+            2>/dev/null || true
+          # macOS ships the DISK IMAGE ONLY. The tarball cannot carry a
+          # notarization ticket -- Apple staples one to disk images, installers
+          # and app bundles, never a plain folder -- so shipping both meant
+          # offering a second artifact that was strictly worse and warned on a
+          # machine with no network. One artifact, one behaviour.
+          #
+          # The tarball is still built and uploaded when signing is NOT
+          # configured, because an unsigned .dmg cannot be produced at all and
+          # shipping nothing for macOS would be worse than shipping a tarball.
+          if [ -f "FASTag-${ASSET_VERSION}-${{ matrix.name }}.dmg" ]; then
+            gh release upload "${{ github.ref_name }}" "FASTag-${ASSET_VERSION}-${{ matrix.name }}.dmg" --clobber
+          else
+            tar -C dist -czf "FASTag-${ASSET_VERSION}-${{ matrix.name }}.tar.gz" FASTag
+            bash tools/check_no_appledouble.sh "FASTag-${ASSET_VERSION}-${{ matrix.name }}.tar.gz"
+            gh release upload "${{ github.ref_name }}" "FASTag-${ASSET_VERSION}-${{ matrix.name }}.tar.gz" --clobber
+          fi
+
+  # The macOS legs of build: the same steps, a job of their own so that the
+  # Linux GUI jobs do not wait for them (release-complete still needs both).
+  build-macos:
+    name: ${{ matrix.name }} build
+    runs-on: ${{ matrix.runner }}
+    needs: [version]
+    env:
+      ASSET_VERSION: ${{ needs.version.outputs.version }}
+      FASTAG_BUILD_TARGET: FASTag
+    permissions:
+      contents: write
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.version.outputs.macos_legs) }}
+    steps: *build-steps
+
+  # ------------------------------------------- macOS: the app, the CLI image
+  # Two jobs on two runners after build-macos, from its signed bundle: the
+  # desktop app (Tauri build, signed and notarized by Tauri; its dmg
+  # recompressed as ULMO, signed, notarized, stapled, mounted and its app
+  # started), and the CLI's own signed, notarized, stapled disk image. Side
+  # by side, so neither waits for the other's notarization, and a notary
+  # failure reruns only its own job. Separate runners also keep the two
+  # images' volumes apart (both are named FASTag).
+  macos-app:
+    name: ${{ matrix.name }} app
+    runs-on: ${{ matrix.runner }}
+    needs: [version, build-macos]
+    if: ${{ !cancelled() && needs.build-macos.result == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run) }}
+    env:
+      ASSET_VERSION: ${{ needs.version.outputs.version }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.version.outputs.macos_legs) }}
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - *m-detect
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        timeout-minutes: 10
+        with:
+          name: FASTag-dist-${{ matrix.name }}
+          path: ${{ runner.temp }}/dist
+      - name: Unpack the signed bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          tar -C dist -xf "$RUNNER_TEMP/dist/FASTag-dist-${{ matrix.name }}.tar"
+          rm -rf "$RUNNER_TEMP/dist"
+          test -x dist/FASTag/FASTag.bin
+          if [ "${{ steps.mac-signing.outputs.enabled }}" = true ]; then codesign --verify --strict dist/FASTag/FASTag.bin; fi
+      - *s10
+      - *m-import
       # ------------------------------------------------- desktop app (macOS)
       # The .app is a SECOND artifact needing its OWN signature: notarization
       # rejects a bundle containing any unsigned Mach-O, and the CLI plus its
@@ -1493,11 +1604,7 @@ jobs:
           if [ "$SIGNED" = "true" ]; then
             codesign --force --sign "$MACOS_SIGNING_IDENTITY" --timestamp "$DMG"
             codesign --verify --strict --verbose=2 "$DMG"
-            xcrun notarytool submit "$DMG" \
-              --apple-id "$MACOS_APPLE_ID" --team-id "$MACOS_TEAM_ID" \
-              --password "$MACOS_NOTARY_PASSWORD" --wait
-            xcrun stapler staple "$DMG"
-            xcrun stapler validate "$DMG"
+            bash .github/scripts/notarize.sh "$DMG" app-dmg
             spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG"
           else
             echo "::warning::unsigned dry run: the ULMO dmg is neither signed nor notarized"
@@ -1614,6 +1721,42 @@ jobs:
           path: FASTag-${{ env.ASSET_VERSION }}-gui-${{ matrix.name }}.dmg
           if-no-files-found: error
 
+      - *m-delete
+
+  macos-cli:
+    name: ${{ matrix.name }} CLI image
+    runs-on: ${{ matrix.runner }}
+    needs: [version, build-macos]
+    if: ${{ !cancelled() && needs.build-macos.result == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run) }}
+    env:
+      ASSET_VERSION: ${{ needs.version.outputs.version }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.version.outputs.macos_legs) }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - *m-detect
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        timeout-minutes: 10
+        with:
+          name: FASTag-dist-${{ matrix.name }}
+          path: ${{ runner.temp }}/dist
+      - name: Unpack the signed bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          tar -C dist -xf "$RUNNER_TEMP/dist/FASTag-dist-${{ matrix.name }}.tar"
+          rm -rf "$RUNNER_TEMP/dist"
+          test -x dist/FASTag/FASTag.bin
+          if [ "${{ steps.mac-signing.outputs.enabled }}" = true ]; then codesign --verify --strict dist/FASTag/FASTag.bin; fi
+      - *m-import
       # Filenames carry the version (FASTag-<version>-<platform>.<ext>, from
       # job version), so a downloaded file says which release it is. Up to
       # 1.14.0 they carried none, for /releases/latest/download/<name> links;
@@ -1645,7 +1788,7 @@ jobs:
       # -species-capable install, and BEFORE the keychain teardown because
       # signing the image needs the identity.
       - name: Package the CLI as a signed, notarized disk image (macOS)
-        if: steps.mac-signing.outputs.enabled == 'true' && startsWith(github.ref, 'refs/tags/v')
+        if: steps.mac-signing.outputs.enabled == 'true' && (startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload))
         timeout-minutes: 90
         shell: bash
         env:
@@ -1681,13 +1824,10 @@ jobs:
           python3 tools/dmg_license.py "$DMG" gui/src-tauri/installer-license.txt
 
           codesign --force --timestamp --sign "$MACOS_SIGNING_IDENTITY" "$DMG"
-          xcrun notarytool submit "$DMG" \
-            --apple-id "$MACOS_APPLE_ID" --team-id "$MACOS_TEAM_ID" \
-            --password "$MACOS_NOTARY_PASSWORD" --wait
-          xcrun stapler staple "$DMG"
-          # Refuse to ship an image whose ticket is not attached -- that is the
-          # entire reason this artifact exists.
-          xcrun stapler validate "$DMG"
+          # Submitted, waited for by submission ID and stapled; a stapled,
+          # validated ticket or a red step -- that is the entire reason this
+          # artifact exists (.github/scripts/notarize.sh).
+          bash .github/scripts/notarize.sh "$DMG" cli-dmg
           # The pinned taxonomy index in the final image itself, mounted
           # read-only as a user gets it (the licence agreement answered).
           CMNT="$RUNNER_TEMP/fastag-cli-dmg-mnt"
@@ -1698,16 +1838,18 @@ jobs:
           hdiutil detach "$CMNT" -force > /dev/null 2>&1 || true
           [ "$pinned" = yes ] || { echo "::error::the CLI disk image does not carry the pinned taxonomy index"; exit 1; }
 
-      # Placed last on purpose: everything above that needs the identity has
-      # run. `always()` so a failure earlier still tears the keychain down.
-      - name: Delete signing keychain (macOS)
-        if: always() && steps.mac-signing.outputs.enabled == 'true'
-        shell: bash
-        run: security delete-keychain "${RUNNER_TEMP}/fastag-signing.keychain-db" || true
+      # A full-payload dry run's CLI image, as the release would attach it.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: inputs.gui_dry_run && inputs.gui_full_payload && steps.mac-signing.outputs.enabled == 'true'
+        with:
+          name: FASTag-${{ matrix.name }}-cli-dmg
+          path: FASTag-${{ env.ASSET_VERSION }}-${{ matrix.name }}.dmg
+          compression-level: 0
+          if-no-files-found: error
 
       - name: Attach binary to the GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash -el {0}
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -1732,23 +1874,7 @@ jobs:
             gh release upload "${{ github.ref_name }}" "FASTag-${ASSET_VERSION}-${{ matrix.name }}.tar.gz" --clobber
           fi
 
-  # The macOS legs of build: the same steps, a job of their own so that the
-  # Linux GUI jobs do not wait for them (release-complete still needs both).
-  build-macos:
-    name: ${{ matrix.name }} build
-    runs-on: ${{ matrix.runner }}
-    needs: [version]
-    env:
-      ASSET_VERSION: ${{ needs.version.outputs.version }}
-      FASTAG_BUILD_TARGET: FASTag
-    permissions:
-      contents: write
-    timeout-minutes: 330
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.version.outputs.macos_legs) }}
-    steps: *build-steps
+      - *m-delete
 
   # ---------------------------------------------------------------- tests
   # ctest, in jobs of their own that start with the build jobs below rather
@@ -3001,7 +3127,7 @@ jobs:
     # would otherwise turn the cancelled run's completeness check red for
     # uploads the NEW run will finish.
     if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
-    needs: [version, test, test-macos, build, build-macos, taxonomy-asset, release-notes, gui-linux-release, gui-linux-arm64-release, gui-cli-consistency]
+    needs: [version, test, test-macos, build, build-macos, macos-app, macos-cli, taxonomy-asset, release-notes, gui-linux-release, gui-linux-arm64-release, gui-cli-consistency]
     runs-on: ubuntu-24.04
     env:
       V: ${{ needs.version.outputs.version }}
@@ -3026,6 +3152,7 @@ jobs:
           RESULTS: >-
             test=${{ needs.test.result }} test-macos=${{ needs.test-macos.result }}
             build=${{ needs.build.result }} build-macos=${{ needs.build-macos.result }}
+            macos-app=${{ needs.macos-app.result }} macos-cli=${{ needs.macos-cli.result }}
         run: |
           echo "$RESULTS"
           for r in $RESULTS; do
