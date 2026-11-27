@@ -1167,19 +1167,11 @@ jobs:
             || { cat "$RUNNER_TEMP/signed-raw.log"; echo "::error::the signed CLI cannot read a Thermo .raw"; exit 1; }
           grep -E "scans indexed" "$RUNNER_TEMP/signed-raw.log"
 
-      - name: Submit to Apple notary + wait (macOS)
-        if: steps.mac-signing.outputs.enabled == 'true'
-        timeout-minutes: 60
-        shell: bash
-        env:
-          MACOS_APPLE_ID: ${{ secrets.MACOS_APPLE_ID }}
-          MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
-          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
-        run: |
-          ditto -c -k --keepParent dist/FASTag "${RUNNER_TEMP}/FASTag-notarize.zip"
-          xcrun notarytool submit "${RUNNER_TEMP}/FASTag-notarize.zip" \
-            --apple-id "$MACOS_APPLE_ID" --team-id "$MACOS_TEAM_ID" \
-            --password "$MACOS_NOTARY_PASSWORD" --wait
+      # No notarization of the bare CLI folder here (it was submitted as a zip
+      # up to 1.16.4): a signed release ships the CLI only inside its disk
+      # image and inside the app, and each of those is notarized, with the
+      # CLI's Mach-Os in it, and stapled (below). A build without the signing
+      # secrets ships the unsigned tarball, which was never notarized.
 
       # MOVED AHEAD OF THE DESKTOP APP, and that is the whole point: the app's
       # resources are staged from dist/FASTag, so embedding the index after that
@@ -1188,10 +1180,8 @@ jobs:
       # taxonomy dumps are present ... but the k-mer index (tax_k7.taxdb) is
       # not" -- reported from /Applications/FASTag.app on 2026-09-09.
       #
-      # The original reason for placing it late still holds for the CLI: the
-      # index is unsigned data and embedding it before notarization would add
-      # ~450 MB to that upload. It does not conflict, because the CLI is
-      # notarized further up, before this point.
+      # The index is unsigned data, embedded after the codesign step; the disk
+      # images that carry it are notarized with it.
       # Embed the full taxonomy index into the tarball -- tag builds only;
       # main pushes keep the fast dumps-only bundles nobody installs.
       #
@@ -1283,6 +1273,63 @@ jobs:
           compression-level: 0
           retention-days: 14
           if-no-files-found: error
+
+      # A signed, notarized, STAPLED disk image of the CLI.
+      #
+      # Why a .dmg when the tarball already carries the same signed binaries:
+      # Apple staples a notarization ticket only to app bundles, installers and
+      # DISK IMAGES -- never a lone Mach-O or a plain folder. The tarball is
+      # therefore verified by an ONLINE Gatekeeper lookup on first run, which
+      # fails for a user who is offline or behind a proxy that blocks Apple.
+      # The disk image can carry its ticket, so it opens with no network at all.
+      # Both ship: the .dmg for people installing by hand, the tarball for
+      # scripts and CI, where mounting an image is a nuisance.
+      #
+      # Built AFTER the taxonomy embed so the image contains a complete,
+      # -species-capable install, and BEFORE the desktop app: the image goes to
+      # Apple's notary here and is stapled after the app's build, so the two
+      # notarizations overlap instead of queueing one after the other. On a
+      # tag and on a full-payload dry run (the release candidate, which keeps
+      # the image as an artifact).
+      - name: Make the CLI disk image and submit it for notarization (macOS)
+        if: steps.mac-signing.outputs.enabled == 'true' && (startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload))
+        timeout-minutes: 30
+        shell: bash
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          MACOS_APPLE_ID: ${{ secrets.MACOS_APPLE_ID }}
+          MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          DMG="FASTag-${ASSET_VERSION}-${{ matrix.name }}.dmg"
+          STAGE="${RUNNER_TEMP}/dmgroot"
+          rm -rf "$STAGE"; mkdir -p "$STAGE"
+          cp -R dist/FASTag "$STAGE/FASTag"
+          python3 tools/check_taxonomy_manifest.py --pinned "data/taxonomy/manifests/$TAXDB_TAG.json" "$STAGE/FASTag/share-FASTag-taxonomy" \
+            || { echo "::error::the CLI disk image would not carry the pinned taxonomy index"; exit 1; }
+
+          # A custom volume icon needs THREE things, and missing any one leaves
+          # the generic white disk: the icon at the volume root named
+          # .VolumeIcon.icns, the volume's "has custom icon" Finder flag, and a
+          # writable image while both are set -- a UDZO image is read-only, so
+          # this builds UDRW first and converts afterwards.
+          cp gui/src-tauri/icons/icon.icns "$STAGE/.VolumeIcon.icns"
+          RW="${RUNNER_TEMP}/FASTag-rw.dmg"
+          rm -f "$RW"
+          hdiutil create -volname "FASTag" -srcfolder "$STAGE" -ov -format UDRW "$RW"
+          MNT=$(hdiutil attach -readwrite -noverify -noautoopen "$RW" | grep -o '/Volumes/.*' | head -1)
+          SetFile -a C "$MNT" || echo "::warning::SetFile unavailable; the disk image will use the generic icon"
+          hdiutil detach "$MNT" -quiet
+          rm -f "$DMG"
+          hdiutil convert "$RW" -format UDZO -o "$DMG"
+          rm -f "$RW"
+          # The licence agreement (Thermo's RawFileReader terms, section 3.3).
+          python3 tools/dmg_license.py "$DMG" gui/src-tauri/installer-license.txt
+
+          codesign --force --timestamp --sign "$MACOS_SIGNING_IDENTITY" "$DMG"
+          # To Apple now; job time goes on with the app while it is checked.
+          bash .github/scripts/notarize.sh submit "$DMG" cli-dmg
 
       # ------------------------------------------------- desktop app (macOS)
       # The .app is a SECOND artifact needing its OWN signature: notarization
@@ -1535,11 +1582,9 @@ jobs:
           if [ "$SIGNED" = "true" ]; then
             codesign --force --sign "$MACOS_SIGNING_IDENTITY" --timestamp "$DMG"
             codesign --verify --strict --verbose=2 "$DMG"
-            xcrun notarytool submit "$DMG" \
-              --apple-id "$MACOS_APPLE_ID" --team-id "$MACOS_TEAM_ID" \
-              --password "$MACOS_NOTARY_PASSWORD" --wait
-            xcrun stapler staple "$DMG"
-            xcrun stapler validate "$DMG"
+            # Submitted, waited for by submission ID, stapled, validated
+            # (.github/scripts/notarize.sh).
+            bash .github/scripts/notarize.sh "$DMG" app-dmg
             spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG"
           else
             echo "::warning::unsigned dry run: the ULMO dmg is neither signed nor notarized"
@@ -1620,6 +1665,44 @@ jobs:
           echo "ULMO dmg: $size bytes ($(mb "$size") MB), was $before bytes"
           echo "### Desktop dmg: $(mb "$size") MB (ULMO), from $(mb "$before") MB (UDZO)" >> "$GITHUB_STEP_SUMMARY"
 
+      # The CLI image's notarization, submitted before the app: waited for by
+      # its submission ID, stapled -- a stapled, validated ticket or a red
+      # step, that is the entire reason this artifact exists -- and checked as
+      # a user gets it, mounted read-only with the licence answered: the
+      # pinned taxonomy index in it and its CLI reporting this version.
+      - name: Staple the CLI disk image and check it (macOS)
+        if: steps.mac-signing.outputs.enabled == 'true' && (startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload))
+        timeout-minutes: 75
+        shell: bash
+        env:
+          MACOS_APPLE_ID: ${{ secrets.MACOS_APPLE_ID }}
+          MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          DMG="FASTag-${ASSET_VERSION}-${{ matrix.name }}.dmg"
+          bash .github/scripts/notarize.sh wait "$DMG" cli-dmg
+          CMNT="$RUNNER_TEMP/fastag-cli-dmg-mnt"
+          mkdir -p "$CMNT"
+          env PAGER=cat hdiutil attach "$DMG" -readonly -nobrowse -noautoopen -mountpoint "$CMNT" < <(yes) > /dev/null
+          pinned=yes; runs=yes
+          python3 tools/check_taxonomy_manifest.py --pinned "data/taxonomy/manifests/$TAXDB_TAG.json" "$CMNT/FASTag/share-FASTag-taxonomy" || pinned=no
+          want=$(sed -n 's/^project(FASTag VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          env -i HOME="$HOME" PATH=/usr/bin:/bin "$CMNT/FASTag/FASTag" --help 2>&1 | grep -q "^Version: $want" || runs=no
+          hdiutil detach "$CMNT" -force > /dev/null 2>&1 || true
+          [ "$pinned" = yes ] || { echo "::error::the CLI disk image does not carry the pinned taxonomy index"; exit 1; }
+          [ "$runs" = yes ] || { echo "::error::the CLI in the disk image does not run or does not report version $want"; exit 1; }
+          echo "- ${{ matrix.name }}: the CLI disk image is notarized, stapled, carries the pinned index and runs" >> "$GITHUB_STEP_SUMMARY"
+      # A full-payload dry run's CLI image, as the release would attach it.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: inputs.gui_dry_run && inputs.gui_full_payload && steps.mac-signing.outputs.enabled == 'true'
+        with:
+          name: FASTag-${{ matrix.name }}-cli-dmg
+          path: FASTag-${{ env.ASSET_VERSION }}-${{ matrix.name }}.dmg
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
+
       # The release file name, given on a tag and on a dry run alike, so the
       # dry run's artifact holds the very name a release would attach.
       - name: Name the desktop app's disk image (macOS)
@@ -1672,74 +1755,6 @@ jobs:
       # Archives the WHOLE dist/FASTag/ folder now, not a single file: users
       # run FASTag/FASTag (the wrapper), not the FASTag.bin it execs.
       # ---------------------------------------------------------------------
-      # A signed, notarized, STAPLED disk image of the CLI.
-      #
-      # Why a .dmg when the tarball already carries the same signed binaries:
-      # Apple staples a notarization ticket only to app bundles, installers and
-      # DISK IMAGES -- never a lone Mach-O or a plain folder. The tarball is
-      # therefore verified by an ONLINE Gatekeeper lookup on first run, which
-      # fails for a user who is offline or behind a proxy that blocks Apple.
-      # The disk image can carry its ticket, so it opens with no network at all.
-      # Both ship: the .dmg for people installing by hand, the tarball for
-      # scripts and CI, where mounting an image is a nuisance.
-      #
-      # Built AFTER the taxonomy embed so the image contains a complete,
-      # -species-capable install, and BEFORE the keychain teardown because
-      # signing the image needs the identity.
-      - name: Package the CLI as a signed, notarized disk image (macOS)
-        if: steps.mac-signing.outputs.enabled == 'true' && startsWith(github.ref, 'refs/tags/v')
-        timeout-minutes: 90
-        shell: bash
-        env:
-          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
-          MACOS_APPLE_ID: ${{ secrets.MACOS_APPLE_ID }}
-          MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
-          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          DMG="FASTag-${ASSET_VERSION}-${{ matrix.name }}.dmg"
-          STAGE="${RUNNER_TEMP}/dmgroot"
-          rm -rf "$STAGE"; mkdir -p "$STAGE"
-          cp -R dist/FASTag "$STAGE/FASTag"
-          python3 tools/check_taxonomy_manifest.py --pinned "data/taxonomy/manifests/$TAXDB_TAG.json" "$STAGE/FASTag/share-FASTag-taxonomy" \
-            || { echo "::error::the CLI disk image would not carry the pinned taxonomy index"; exit 1; }
-
-          # A custom volume icon needs THREE things, and missing any one leaves
-          # the generic white disk: the icon at the volume root named
-          # .VolumeIcon.icns, the volume's "has custom icon" Finder flag, and a
-          # writable image while both are set -- a UDZO image is read-only, so
-          # this builds UDRW first and converts afterwards.
-          cp gui/src-tauri/icons/icon.icns "$STAGE/.VolumeIcon.icns"
-          RW="${RUNNER_TEMP}/FASTag-rw.dmg"
-          rm -f "$RW"
-          hdiutil create -volname "FASTag" -srcfolder "$STAGE" -ov -format UDRW "$RW"
-          MNT=$(hdiutil attach -readwrite -noverify -noautoopen "$RW" | grep -o '/Volumes/.*' | head -1)
-          SetFile -a C "$MNT" || echo "::warning::SetFile unavailable; the disk image will use the generic icon"
-          hdiutil detach "$MNT" -quiet
-          rm -f "$DMG"
-          hdiutil convert "$RW" -format UDZO -o "$DMG"
-          rm -f "$RW"
-          # The licence agreement (Thermo's RawFileReader terms, section 3.3).
-          python3 tools/dmg_license.py "$DMG" gui/src-tauri/installer-license.txt
-
-          codesign --force --timestamp --sign "$MACOS_SIGNING_IDENTITY" "$DMG"
-          xcrun notarytool submit "$DMG" \
-            --apple-id "$MACOS_APPLE_ID" --team-id "$MACOS_TEAM_ID" \
-            --password "$MACOS_NOTARY_PASSWORD" --wait
-          xcrun stapler staple "$DMG"
-          # Refuse to ship an image whose ticket is not attached -- that is the
-          # entire reason this artifact exists.
-          xcrun stapler validate "$DMG"
-          # The pinned taxonomy index in the final image itself, mounted
-          # read-only as a user gets it (the licence agreement answered).
-          CMNT="$RUNNER_TEMP/fastag-cli-dmg-mnt"
-          mkdir -p "$CMNT"
-          env PAGER=cat hdiutil attach "$DMG" -readonly -nobrowse -noautoopen -mountpoint "$CMNT" < <(yes) > /dev/null
-          pinned=yes
-          python3 tools/check_taxonomy_manifest.py --pinned "data/taxonomy/manifests/$TAXDB_TAG.json" "$CMNT/FASTag/share-FASTag-taxonomy" || pinned=no
-          hdiutil detach "$CMNT" -force > /dev/null 2>&1 || true
-          [ "$pinned" = yes ] || { echo "::error::the CLI disk image does not carry the pinned taxonomy index"; exit 1; }
-
       # Placed last on purpose: everything above that needs the identity has
       # run. `always()` so a failure earlier still tears the keychain down.
       - name: Delete signing keychain (macOS)
@@ -1878,7 +1893,12 @@ jobs:
           # The required-test checks below read the per-test result lines,
           # which ctest prints the same way with -j.
           NJ=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
-          echo "ctest -j $NJ"
+          # Idle OpenMP workers sleep instead of spinning: with -j tests side by
+          # side, each FASTag's spinning workers (libomp: 200 ms after every
+          # parallel region) take the cores the other tests need. Output is
+          # unchanged; only the wait between regions differs.
+          export OMP_WAIT_POLICY=PASSIVE KMP_BLOCKTIME=0
+          echo "ctest -j $NJ (OMP_WAIT_POLICY=$OMP_WAIT_POLICY)"
           ctest --test-dir build --output-on-failure -j "$NJ" 2>&1 | tee ctest.log
           # The mzPeak tests SKIP themselves in a build without mzPeak support
           # or without the validator. This job has both, so a skip here would
@@ -1889,7 +1909,9 @@ jobs:
           # and notice (its data part needs a peptide .raw, which CI has not).
           # gui_cli_test and shipped_data_test: the shipped data in every
           # layout and the build tree's staging (they skip without Python).
-          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test bruker_cli_test thermo_cli_test gui_cli_test shipped_data_test; do
+          # The six parts of charge_cli_test (#6), which skip on a binary that
+          # cannot start.
+          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test bruker_cli_test thermo_cli_test gui_cli_test shipped_data_test charge_cli_test_defaults charge_cli_test_calls charge_cli_test_threads charge_cli_test_species charge_cli_test_species_ion charge_cli_test_species_call; do
             grep -E "Test +#[0-9]+: $t " ctest.log | grep -q 'Passed' \
               || { echo "::error::$t did not pass (skipped, not run or missing)"; grep -E "$t" ctest.log || true; exit 1; }
           done
@@ -3121,6 +3143,7 @@ jobs:
             --title "${{ github.ref_name }}" \
             --notes "Automated binary upload; the release notes follow from CHANGELOG.md (job release-notes)." \
             2>/dev/null || true
+          sudo apt-get install -y -q pigz > /dev/null || echo "::warning::no pigz; the .tar.gz is made by gzip"
           gh release download "$TAXDB_TAG" -p 'FASTag-taxonomy-k7.tar.gz' -D "$RUNNER_TEMP/pinned"
           got=$(sha256sum "$RUNNER_TEMP/pinned/FASTag-taxonomy-k7.tar.gz" | cut -d' ' -f1)
           [ "$got" = "$TAXDB_SHA256" ] || { echo "taxonomy sha256 mismatch: $got"; exit 1; }
