@@ -1030,10 +1030,29 @@ namespace FASTag::Digest
   //     >= DigestSettings::silac_min (50, prose-auto's SILAC_MIN_TAGS);
   //     strong when both shares are >= HEAVY_STRONG;
   //   - every label that passes is listed (isobaric first); none is
-  //     label-free.
+  //     label-free. The label row names TMTpro "TMTpro/iTRAQ8" when
+  //     iTRAQ8plex lies inside the window (labelCallName(), 1.16.3).
   inline constexpr std::uint64_t LABEL_TAG_MIN = 175;
   inline constexpr double LABEL_MIN_SHARE = 0.01, LABEL_BACKGROUND_FOLD = 20.0;
   inline constexpr double HEAVY_MIN = 0.2, HEAVY_STRONG = 0.3, KR_TRYPTIC = 0.8;
+  /// 1.16.3: the iTRAQ8plex label (Unimod 730, monoisotopic 304.205360 Da),
+  /// 1.786 mDa below TMTpro (labelKeys(), 304.207146 Da). It has no
+  /// labelKeys() entry of its own: inside the label window its tag ends are
+  /// counted as TMTpro.
+  inline constexpr double ITRAQ8_MASS = 304.20536;
+  /**
+    @brief The label_call name of a labelKeys() entry.
+
+    The key's name, except TMTpro when iTRAQ8plex lies inside its label
+    window (|TMTpro - ITRAQ8_MASS| <= @p s.window, always at the default
+    0.008 Da): "TMTpro/iTRAQ8", as the tag ends cannot tell the two apart;
+    the reporter ions (-qc_out reporter_kit) can.
+
+    @param[in] l Index into labelKeys().
+    @param[in] s Digest settings (the window).
+    @return The name written in the label_call label row.
+  */
+  std::string labelCallName(std::size_t l, const DigestSettings& s);
 
   /**
     @brief The label call over the tag-end counts.
@@ -1042,7 +1061,7 @@ namespace FASTag::Digest
   {
     bool called = false;              ///< a call was made
     std::string reason;               ///< no call: low_resolution or few_tags
-    std::vector<std::string> labels;  ///< labelKeys() names that passed, then "SILAC"
+    std::vector<std::string> labels;  ///< labelKeys() names that passed, then "SILAC" (the label row writes labelCallName())
     bool isobaric = false;            ///< an isobaric label passed
     bool silac = false, silac_strong = false;  ///< SILAC passed, and passed strongly
     double kr_rounded = 0.0;          ///< krShare() rounded to 3 decimals; 0 when tot() is 0

@@ -383,6 +383,9 @@ namespace FASTag::RunQC
     std::array<std::uint64_t, Digest::NUM_LABELS> ends{};        ///< per labelKeys(): N- and C-terminal ends near the label
     std::array<std::uint64_t, Digest::NUM_LABELS> background{};  ///< the same at label + 0.5 Da
     std::array<bool, Digest::NUM_LABELS> passed{};               ///< the label passed the call
+    /// 1.16.3: per labelKeys(), the label_call name (Digest::labelCallName():
+    /// TMTpro/iTRAQ8 for the 304.2 Da mass); empty when not counted.
+    std::array<std::string, Digest::NUM_LABELS> names{};
   };
   /**
     @brief The label-mass evidence from tag-end counts.

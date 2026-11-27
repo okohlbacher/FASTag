@@ -817,6 +817,7 @@ void channelCounts()
   CHECK(!lr.da_tagged, "labelEvidence: a Da tolerance is not da_tagged");
   // 1.16.3: a ppm run whose tags mostly come from ion-trap MS2 tagged at 0.5 Da.
   ds.low_resolution = false;
+  CHECK(le.names[1] == "TMTpro/iTRAQ8" && le.names[0] == "TMT", "labelEvidence: label_call names %s", le.names[1].c_str());
   FASTag::Digest::TerminusCounter tc_da = tc;
   tc_da.tags_da = 151;  // of 300
   const Q::LabelEvidence ld = Q::labelEvidence(tc_da, ds);

@@ -68,6 +68,14 @@ namespace FASTag::Digest
     }
   }
 
+  std::string labelCallName(std::size_t l, const DigestSettings& s)
+  {
+    const auto& labs = labelKeys();
+    const std::string name = labs[l].name;
+    if (name == "TMTpro" && std::abs(labs[l].mass - ITRAQ8_MASS) <= s.window) return "TMTpro/iTRAQ8";
+    return name;
+  }
+
   double median(std::vector<double> v)
   {
     if (v.empty()) return std::numeric_limits<double>::quiet_NaN();
@@ -652,8 +660,16 @@ namespace FASTag::Digest
       r.add(sec, "reason", c.reason, "-", "The first no-call rule that applies is " + c.reason + ".");
       return out;
     }
+    // 1.16.3: an isobaric label by its label_call name (TMTpro/iTRAQ8 when
+    // the window holds both masses); c.labels keeps the labelKeys() names.
+    const auto& labs = labelKeys();
+    auto callName = [&](const std::string& l) {
+      for (std::size_t k = 0; k < labs.size(); ++k)
+        if (l == labs[k].name) return labelCallName(k, s);
+      return l;
+    };
     std::string label;
-    for (const std::string& l : c.labels) label += (label.empty() ? "" : "+") + l;
+    for (const std::string& l : c.labels) label += (label.empty() ? "" : "+") + callName(l);
     if (label.empty()) label = "label-free";
     r.add(sec, "status", "call", u(tot),
           "A label call is made from " + u(tot) + " C-terminal tag ends and " + u(tc.tags) + " filtered tags.");
@@ -664,8 +680,13 @@ namespace FASTag::Digest
     else
     {
       desc = "The run is labelled " + label + ".";
-      for (const std::string& l : c.labels)
-        if (l == "TMTpro") desc += " TMTpro and iTRAQ8plex have the same mass; the reporter ions decide.";
+      for (std::size_t k = 0; k < labs.size(); ++k)
+        if (std::string(labs[k].name) == "TMTpro" && std::find(c.labels.begin(), c.labels.end(), labs[k].name) != c.labels.end())
+          desc += labelCallName(k, s) == "TMTpro"
+                      ? " iTRAQ8plex (" + f(ITRAQ8_MASS, 4) + " Da) lies outside the " + num(s.window) + " Da label window."
+                      : " TMTpro (" + f(labs[k].mass, 4) + " Da) and iTRAQ8plex (" + f(ITRAQ8_MASS, 4) +
+                            " Da) both lie inside the " + num(s.window) +
+                            " Da label window, so the tag ends cannot tell them apart; the reporter ions decide (-qc_out reporter_kit).";
     }
     r.add(sec, "label", label, u(tc.tags), desc);
     std::string basis = c.isobaric ? "nterm_gap" : "";

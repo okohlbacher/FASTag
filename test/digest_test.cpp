@@ -654,9 +654,10 @@ int main()
     check(callOf(labelCounter(1000, kr, {200, 0, 0}, {11, 0, 0})) == "call label-free none none -", "label_call: TMT below 20x background");
     check(callOf(labelCounter(1000, kr, {19, 0, 0})) == "call label-free none none -", "label_call: 19 gaps are below 20 x max(0, 1)");
     check(callOf(labelCounter(1000, kr, {20, 0, 0})) == "call TMT nterm_gap none -", "label_call: 20 gaps reach 20 x max(0, 1) and 1%");
-    check(callOf(labelCounter(1000, kr, {0, 60, 0})) == "call TMTpro nterm_gap none -", "label_call: TMTpro, not TMT");
+    // 1.16.3: the 304.2 Da mass is TMTpro or iTRAQ8plex (1.786 mDa apart, inside the 0.008 Da window)
+    check(callOf(labelCounter(1000, kr, {0, 60, 0})) == "call TMTpro/iTRAQ8 nterm_gap none -", "label_call: TMTpro/iTRAQ8, not TMT");
     check(callOf(labelCounter(1000, kr, {0, 0, 60})) == "call iTRAQ4 nterm_gap none -", "label_call: iTRAQ4");
-    check(callOf(labelCounter(1000, kr, {60, 60, 0})) == "call TMT+TMTpro nterm_gap none -", "label_call: both hits listed, labelKeys() order");
+    check(callOf(labelCounter(1000, kr, {60, 60, 0})) == "call TMT+TMTpro/iTRAQ8 nterm_gap none -", "label_call: both hits listed, labelKeys() order");
     {
       const D::TerminusCounter pro = labelCounter(1000, kr, {0, 60, 0});
       const auto rows = D::labelCallRows(D::labelCall(pro, s), pro, s);
@@ -664,6 +665,31 @@ int main()
       for (const D::Row& r : rows)
         if (r.section == "label_call" && r.key == "label") itraq8 = r.description.find("iTRAQ8plex") != std::string::npos;
       check(itraq8, "label_call: the TMTpro row says iTRAQ8plex has the same mass");
+    }
+    // 1.16.3 (iTRAQ8): the label row names both reagents while the window holds both masses
+    {
+      check(std::fabs(D::labelKeys()[1].mass - D::ITRAQ8_MASS - 0.001786) < 1e-9, "iTRAQ8plex is 1.786 mDa below TMTpro");
+      D::DigestSettings w = s;
+      check(D::labelCallName(1, w) == "TMTpro/iTRAQ8", "labelCallName: TMTpro/iTRAQ8 at the default window");
+      check(D::labelCallName(0, w) == "TMT" && D::labelCallName(2, w) == "iTRAQ4", "labelCallName: TMT and iTRAQ4 keep their names");
+      w.window = 0.0018;
+      check(D::labelCallName(1, w) == "TMTpro/iTRAQ8", "labelCallName: a 0.0018 Da window still holds iTRAQ8plex");
+      w.window = 0.0017;
+      check(D::labelCallName(1, w) == "TMTpro", "labelCallName: a 0.0017 Da window leaves iTRAQ8plex out");
+      const D::TerminusCounter pro = labelCounter(1000, kr, {0, 60, 0});
+      check(callOf(pro, w) == "call TMTpro nterm_gap none -", "label_call: TMTpro at a window that leaves iTRAQ8plex out");
+      check(value(D::labelCallRows(D::labelCall(pro, w), pro, w), "label_call", "label") == "TMTpro" &&
+                description(D::labelCallRows(D::labelCall(pro, w), pro, w), "label_call", "label").find("outside") != std::string::npos,
+            "label_call: the narrow-window TMTpro row says iTRAQ8plex lies outside the window");
+      check(description(D::labelCallRows(D::labelCall(pro, s), pro, s), "label_call", "label").find("cannot tell them apart") !=
+                std::string::npos,
+            "label_call: the TMTpro/iTRAQ8 row says the tag ends cannot tell them apart");
+      // the mass rows keep their 1.11 keys (TMTpro.count etc.)
+      check(value(D::labelRows(pro, s), "nlabel", "TMTpro.count") == "60", "label rows: TMTpro.count unchanged");
+      // SILAC with it: TMTpro/iTRAQ8+SILAC
+      check(callOf(labelCounter(1000, {{"K", 100}, {"K+8", 50}, {"R", 100}, {"R+10", 50}}, {0, 60, 0})) ==
+                "call TMTpro/iTRAQ8+SILAC nterm_gap+heavy_share strong -",
+            "label_call: TMTpro/iTRAQ8 and SILAC");
     }
 
     // 1.16.3 (ion-trap MS2 tagged at 0.5 Da on a ppm run): most filtered tags Da-tagged is low_resolution
@@ -682,7 +708,7 @@ int main()
       // exactly half is not most: the call is made, and the row says how many
       pro.tags_da = 500;
       check(!D::mostlyDaTagged(pro), "mostlyDaTagged: 500 of 1000 is not most");
-      check(callOf(pro) == "call TMTpro nterm_gap none -", "label_call: 500 of 1000 tags Da-tagged still calls");
+      check(callOf(pro) == "call TMTpro/iTRAQ8 nterm_gap none -", "label_call: 500 of 1000 tags Da-tagged still calls");
       check(value(D::labelRows(pro, s), "run", "low_resolution") == "no" && field(D::labelRows(pro, s), "run", "low_resolution") == "500" &&
                 description(D::labelRows(pro, s), "run", "low_resolution").find("fewer than half") != std::string::npos,
             "label rows: a minority of Da-tagged tags is stated, low_resolution no");
