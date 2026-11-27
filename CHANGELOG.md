@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.16.3 (2026-11-27)
 
 - **Desktop app, By residue shading.** The cells of the residue matrix are shaded by the log of the spectral
   count, so rare modifications stay visible beside frequent ones such as oxidation (suggested by D. Tabb).
