@@ -257,7 +257,8 @@ export const WORKFLOWS: HelpPage = {
             <li>Switch the gap plot between <strong>Chart</strong> and <strong>Bins</strong> (a table of the plotted bins; the Mass-shift table below has sites and UniMod names). Change the gap range to inspect outlying peaks; the chart reports peaks outside the shown range and any clipped zero peak. Arrow keys step through peaks when the chart is focused.</li>
             <li>UniMod marks (all of them with <strong>All UniMod marks</strong>) show known mass changes near a peak. A nearby mark or a CLI explanation is a hypothesis, not an identified modification. Opening a delta table without its mass-gap report uses an explicitly labelled, assumed 0.5 Da matching window.</li>
             <li>In the placement table, <strong>Contains</strong> searches spectrum, tag, protein or peptide. <strong>|Δ| at least (Da)</strong> filters by the size of the gap in either direction. <strong>Interpretation</strong> selects modification, substitution or unexplained rows; <strong>One flank off</strong> keeps placements with a gap localized to one side of the tag.</li>
-            <li><strong>By residue</strong>, beside the Mass-shift table, shows the same mass shifts as a matrix over the residues: see <L to="workflow-shift-residues">Mass shifts by residue</L>.</li>
+            <li>The <strong>Mass-shift table</strong> lists the rows with a gap of 0.5 Da or more; the rows nearer 0 Da (unshifted placements, no modification) are not listed, and a line under the table gives their spectra. The file keeps them: the Shifted (≥ 0.5 Da) count and the Overview use them.</li>
+            <li><strong>By residue</strong>, beside the Mass-shift table, shows the same mass shifts as a matrix over the residues, for one run or several pooled: see <L to="workflow-shift-residues">Mass shifts by residue</L>.</li>
           </ul>
           <p>
             Table filters and sort order are kept when switching tabs. Reconciliation identifications are
@@ -288,7 +289,21 @@ export const WORKFLOWS: HelpPage = {
             <li>Each row gives the gap (Da), the best name (the first UniMod name that fits a site of the row, else the first PSI-MOD name, else an isotope error), its spectra, and the row totals <strong>Localized</strong>, <strong>Unlocalized</strong> and <strong>Localized %</strong>: the site columns of a row add up to its Localized count, so a shift with few localized spectra says little about where it sits.</li>
             <li>The columns are the 20 residues, and <strong>N-term</strong> and <strong>C-term</strong> when the table has terminal-ambiguous sites (N-term|K: the N-terminus or the K side chain; Protein N-term|M). <strong>Terminal sites under their residue</strong> counts those under K or M instead. Hover a cell for the sites behind it. The shading follows the log of the count, so a rare modification still shows beside a frequent one such as oxidation.</li>
             <li><strong>Localized at least</strong> keeps the rows with that many localized spectra (1 at first); <strong>Hide empty residue columns</strong> leaves out the residues no row shown has. Click a heading to sort, by spectra (the first order) or by gap; in the table the arrow keys, Page Up/Down, Home and End move the active row.</li>
+            <li><strong>Rows under 0.5 Da are left out.</strong> A row with a gap under 0.5 Da (the threshold of the Shifted count) is an unshifted placement: its localized sites are sequence-constrained by construction (the gap region is the residue the placement ends on, so C-term|K and C-term|R), not modification sites. The line under the matrix gives the spectra left out.</li>
             <li><strong>Export matrix…</strong> writes the rows and columns shown, in the order shown, as TSV, or as CSV when the file is named .csv: <code>delta</code>, <code>name</code>, <code>spectra</code>, <code>localized</code>, <code>unlocalized</code>, <code>localized_pct</code>, then one column per site (0 where the matrix is blank).</li>
+          </ul>
+          <p>
+            <strong>Pooling several runs.</strong> <strong>Add tables…</strong> picks more mass-shift tables (<code>&lt;run&gt;.delta.tsv</code>, several at once)
+            and pools them with the one shown into one matrix; after a batch, <strong>Pool the batch</strong> pools the
+            tables of its finished jobs. <strong>This table only</strong> goes back. Hundreds of tables are read a few at
+            a time, with a progress line.
+          </p>
+          <ul>
+            <li>Rows of different tables are merged by mass, as <L to="param-delta_group">-delta_group</L> merges one run&apos;s bins: the row with the most spectra takes every row not yet taken within the tolerance of its gap, then the next, without chaining, so a pooled row is at most twice the tolerance wide. The tolerance is the -delta_group the runs used when the app&apos;s History records every run with the same value, else its default, 0.004 Da (a table does not record its own); the caption says which.</li>
+            <li>A pooled row has the gap of its row with the most spectra; its spectra, localized, unlocalized and site counts are the sums of its rows. <strong>Tables</strong> counts the runs with the shift.</li>
+            <li>The best name is the entry (the name before @) the most of the row&apos;s spectra carry, each run&apos;s row voting with its best name; it is written with the sites the runs named, most localized spectra first, the first three shown (hover for all names, with their spectra and tables).</li>
+            <li>The caption names how many tables are pooled; hover it for the files. A file that is not a mass-shift table, or has no residues column, is named and left out.</li>
+            <li><strong>Export matrix…</strong> of a pooled matrix adds a <code>tables</code> column and writes <code>&lt;name&gt;.sources.tsv</code> (or .csv) beside it: one line per table pooled, with its shifted rows and spectra, the unshifted ones left out, and its run&apos;s -delta_group (<code>-</code> when not recorded).</li>
           </ul>
           <p>
             The counts are candidates, not identifications: localization is by fragment ions, nothing is

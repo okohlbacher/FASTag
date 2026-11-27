@@ -89,6 +89,8 @@ export interface MockBridge extends FastagApi {
   settingsWritable: boolean
   nextPickInput: string | null
   nextPickInputs: string[]
+  // What pickFiles answers (By residue's Add tables…).
+  nextPickFiles: string[]
   // exampleInput's answer; null: the install has no example data.
   nextExampleInput: string | null
   nextPickOutput: string | null
@@ -392,6 +394,7 @@ export function installMockBridge(): MockBridge {
     settingsWritable: true,
     nextPickInput: null,
     nextPickInputs: [],
+    nextPickFiles: [],
     nextExampleInput: '/local/examples/Ecoli_MS2_small.mzML',
     nextPickOutput: null,
     pickFileCalls: [],
@@ -609,6 +612,10 @@ export function installMockBridge(): MockBridge {
     pickFile: (formats) => {
       mock.pickFileCalls.push({ kind: 'open', formats })
       return Promise.resolve(mock.nextPickInput)
+    },
+    pickFiles: (formats) => {
+      mock.pickFileCalls.push({ kind: 'open', formats })
+      return Promise.resolve(mock.nextPickFiles.slice())
     },
     saveFile: (_defaultPath, formats) => {
       mock.pickFileCalls.push({ kind: 'save', formats })

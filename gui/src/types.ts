@@ -399,6 +399,9 @@ export interface FastagApi extends FeedbackApi {
   // A parameter's file: filtered by the extensions its manifest entry
   // declares (none = no filter), so a FASTA or an idXML can be picked.
   pickFile: (formats?: string[]) => Promise<string | null>
+  // Several files at once, filtered the same way (By residue's Add tables…);
+  // none when the dialog is cancelled.
+  pickFiles: (formats?: string[]) => Promise<string[]>
   saveFile: (defaultPath?: string, formats?: string[]) => Promise<string | null>
   pickResults: () => Promise<string | null>
   pickReport: () => Promise<string | null>

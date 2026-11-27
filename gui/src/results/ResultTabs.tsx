@@ -75,6 +75,9 @@ export interface ResultTabsProps {
   evidence: Evidence
   reports: Reports
   batchMiss: { input: string; done?: string } | null
+  // The mass-shift tables of the batch's finished jobs (Mass shifts › By
+  // residue pools them); none outside a batch.
+  batchDeltas?: readonly string[]
   results: Results | null
   setResults: Dispatch<SetStateAction<Results | null>>
   running: boolean
@@ -447,7 +450,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
           <div className="tablewrap">
             {(hasRecon || (!wr.deltaSpectra && !wr.deltaCounts)) && (
               <SpectrumLinkContext.Provider value={linkFor(reconFile)}>
-                <ReconView massgap={massgap} tables={tables} gen={reports.gen} notice={reports.notice} action={p.reconAction} extend={p.reconExtend} onOpen={p.openReport} />
+                <ReconView massgap={massgap} tables={tables} gen={reports.gen} notice={reports.notice} action={p.reconAction} extend={p.reconExtend} onOpen={p.openReport} batchDeltas={p.batchDeltas} />
               </SpectrumLinkContext.Provider>
             )}
             {wr.deltaSpectra && (

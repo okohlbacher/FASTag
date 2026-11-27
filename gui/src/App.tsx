@@ -687,6 +687,9 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
   const topicRef = useRef(helpTopic)
   topicRef.current = helpTopic
 
+  // The mass-shift tables of the batch's finished jobs: By residue pools them.
+  const batchDeltas = useMemo(() => jobs.flatMap((j) => (j.status === 'done' && j.outputs?.delta_out ? [j.outputs.delta_out] : [])), [jobs])
+
   // A done batch job's results, in Results.
   function showBatchJob(j: (typeof jobs)[number]): void {
     run.showJob(j)
@@ -964,6 +967,7 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
                 evidence={run.evidence}
                 reports={run.reports}
                 batchMiss={run.batchMiss}
+                batchDeltas={batchDeltas}
                 results={run.results}
                 setResults={run.setResults}
                 running={running}

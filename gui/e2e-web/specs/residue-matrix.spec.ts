@@ -14,13 +14,14 @@ const FILE = fileURLToPath(new URL('../../src/fixtures/cli-1.16/pxd000001-survey
 const TEXT = readFileSync(FILE, 'utf8')
 const PATH = '/data/pxd000001.delta.tsv'
 
-/// The matrix as the README defines it: rows with at least @p min localized
-/// spectra, most spectra first (ties in file order), a terminal site under
-/// N-term or C-term.
+/// The matrix as the README defines it: rows with a gap of 0.5 Da or more
+/// (nearer 0 is the unshifted placement, not listed) and at least @p min
+/// localized spectra, most spectra first (ties in file order), a terminal
+/// site under N-term or C-term.
 function oracle(min: number) {
   const [head, ...lines] = TEXT.trim().split('\n').map((l) => l.split('\t'))
   const col = (name: string): number => head.indexOf(name)
-  const rows = lines
+  const all = lines
     .map((f, i) => {
       const cells: Record<string, number> = {}
       if (f[col('residues')] !== '-')
@@ -31,9 +32,10 @@ function oracle(min: number) {
         }
       return { i, delta: f[col('delta')], spectra: Number(f[col('spectra')]), localized: Number(f[col('localized')]), unlocalized: Number(f[col('unlocalized')]), unimod: f[col('unimod')], cells }
     })
-    .filter((r) => r.localized >= min)
-    .sort((a, b) => b.spectra - a.spectra || a.i - b.i)
-  return { rows, total: lines.length }
+  const shifted = all.filter((r) => Math.abs(Number(r.delta)) >= 0.5)
+  const rows = shifted.filter((r) => r.localized >= min).sort((a, b) => b.spectra - a.spectra || a.i - b.i)
+  const unshifted = all.filter((r) => Math.abs(Number(r.delta)) < 0.5).reduce((n, r) => n + r.spectra, 0)
+  return { rows, total: shifted.length, unshifted }
 }
 
 async function openMatrix(page: Page): Promise<void> {
@@ -61,6 +63,7 @@ test('By residue: the rows and totals of the survey, most spectra first', async 
   await openMatrix(page)
   await expect(grid(page)).toHaveAttribute('aria-rowcount', String(o.rows.length + 1))
   await expect(page.locator('.recon-tables .dt-count')).toHaveText(`${o.rows.length} of ${o.total} rows`)
+  await expect(page.locator('.recon-tables .unshifted-note')).toHaveText(`${o.unshifted} spectra with a gap under 0.5 Da (no shift) not listed.`)
   const heads = (await grid(page).getByRole('columnheader').allInnerTexts()).map((h) => h.replace(/[↑↓]/g, '').trim())
   expect(heads).toEqual(['Gap (Da)', 'Best name', 'Spectra', 'Localized', 'Unlocalized', 'Localized %', 'N-term', 'C-term'])
   const top = o.rows[0]

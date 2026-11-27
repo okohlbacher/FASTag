@@ -94,6 +94,10 @@ const api: FastagApi = {
     return typeof r === 'string' ? r : null
   },
   pickFile: (formats?: string[]) => openOne(fileFilters(formats)),
+  pickFiles: async (formats?: string[]) => {
+    const r = await open({ multiple: true, filters: fileFilters(formats) })
+    return Array.isArray(r) ? r : typeof r === 'string' ? [r] : []
+  },
   saveFile: async (defaultPath?: string, formats?: string[]) => {
     const r = await save({ defaultPath, filters: fileFilters(formats) })
     return typeof r === 'string' ? r : null

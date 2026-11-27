@@ -157,11 +157,13 @@ test.describe('the reports of a Mass-shift survey (workflows)', () => {
     expect(titles).toEqual(['Spectra per mass shift', 'Mass-shift accounting'])
   })
 
-  test('database-13: counts of one are singular (1 row, 1 gap peak)', async ({ page }) => {
-    await expect(page.getByRole('grid', { name: 'Mass-shift table' })).toHaveAttribute('aria-rowcount', '2')
+  test('database-13: counts of one are singular (1 gap peak); the one 0 Da row is not listed', async ({ page }) => {
+    // The survey's one row is at 0.0000 Da (5 spectra): no shift, so the table lists none and says why.
+    await expect(page.getByText('No mass shift: every row has a gap under 0.5 Da.')).toBeVisible()
+    await expect(page.locator('.recon-tables .unshifted-note')).toHaveText('5 spectra with a gap under 0.5 Da (no shift) not listed.')
     const count = (await page.locator('.recon-tables .dt-count').innerText()).trim()
     const chart = (await page.locator('.mg-chart').innerText()).replace(/\s+/g, ' ')
-    expect(`${count} | ${/\d+ placed spectr(a|um) in \d+ gap peaks?/.exec(chart)?.[0]}`).toBe('1 row | 5 placed spectra in 1 gap peak')
+    expect(`${count} | ${/\d+ placed spectr(a|um) in \d+ gap peaks?/.exec(chart)?.[0]}`).toBe('0 rows | 5 placed spectra in 1 gap peak')
   })
 })
 
