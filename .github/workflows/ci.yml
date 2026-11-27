@@ -204,6 +204,7 @@ jobs:
 
   build:
     name: ${{ matrix.name }} build
+    if: false  # EXPERIMENT ONLY: no Linux legs for the macOS experiment
     runs-on: ${{ matrix.runner }}
     needs: [version]
     env:
@@ -1886,6 +1887,7 @@ jobs:
   # step. release-complete needs these jobs.
   test:
     name: ${{ matrix.name }}
+    if: false  # EXPERIMENT ONLY: no Linux legs for the macOS experiment
     runs-on: ${{ matrix.runner }}
     needs: [version]
     permissions:
