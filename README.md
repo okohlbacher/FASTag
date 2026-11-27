@@ -809,7 +809,7 @@ vendored.
 | `-delta_isobar_tolerance <Da>` | 0.001 | Advanced: `-delta_out`'s `isobars` column takes the members within this many Da of the row's best name |
 | `-delta_counts_out <file>` | none | Advanced: the run's survey reconciliation as `key value` TSV: MS2 read, tagged (a selected-hypothesis tag reached placement), placed, clamped, samples (exact, gapped, terminal gap), the gaps' evidence classes, precursor-flank and charge-assumed counts, observation classes, rows and their spectra, and `check_*` rows (`ok`/`FAIL`) for the sums that must hold. Requires `-delta_out` |
 | `-digest_out <file>` | none | Terminal residues of the tags (ungapped, E-value ≤ 1) at P4..P1 and P1'..P4', and the protease call they support with its margin, or `no_call` with the reason (see Digest, label and mass-gap reports) |
-| `-label_out <file>` | none | TMT, TMTpro and iTRAQ4 gaps at either tag end (N- and C-terminal counts pooled, each given in the description) and the heavy Lys8/Arg10 shares |
+| `-label_out <file>` | none | TMT, TMTpro and iTRAQ4 gaps at either tag end (N- and C-terminal counts pooled, each given in the description), the heavy Lys8/Arg10 shares and a label call (TMT, TMTpro/iTRAQ8, iTRAQ4, SILAC, label-free or `no_call`) |
 | `-label_discovery_out <file>`, `-label_discovery_max_flank`, `-label_discovery_depth`, `-label_discovery_min_spectra`, `-label_discovery_min_share`, `-label_discovery_window_n`, `-label_discovery_window_c`, `-label_discovery_unimod_top` | none | Removed in 1.14 (failed its held-out tests, see Held-out acceptance): accepted with a warning, no effect |
 | `-massgap_out <file>` | none | The `-delta_out` gap distribution with Cys alkylation counts, gap peaks explained as combinations of up to 3 Unimod modifications, and SILAC labels among them. Requires `-recon_out` |
 | `-digest_models <file>` | shipped | Protease model table for `-digest_out` (columns `model`, `class`, `end`, `residue`, `freq`); its `background` rows win over a FASTA |
@@ -1434,7 +1434,9 @@ options and their values.
   Glu-C, Chymotrypsin, Asp-N, Lys-N) and `unspecific`, over the human
   reference proteome composition, or over the composition of `-recon_fasta` /
   `-fasta` when given. HLA or proteasome models need a `-digest_models` table.
-  No call is made, and the reason is written, on Da tolerances, timsTOF input,
+  No call is made, and the reason is written, on Da tolerances (also on a
+  ppm run when most counted tags come from ion-trap MS2 tagged at 0.5 Da
+  under `-tolerance_by_analyzer`, 1.16.3), timsTOF input,
   a median MS2 scan window or a median first MS2 peak above y1 of K plus 0.1
   (147.21), ion-count intensities without instrument metadata, fewer than 100
   tag ends, a residue at probability 0 under the call or the runner-up, or an
@@ -1459,9 +1461,17 @@ options and their values.
 - **`-label_out`** counts tag ends that are a bare TMT, TMTpro or iTRAQ4 mass,
   against the same count 0.5 Da higher, and the Lys8 and Arg10 shares of the
   C-terminal K and R. Its last five rows (section `label_call`) give a label
-  call from these counts with prose-auto's thresholds: TMT, TMTpro, iTRAQ4,
-  SILAC or label-free, or no call on a Da tolerance or below 175 C-terminal
-  tag ends. The experimental `-label_call_min_tags 0` (1.13), which called
+  call from these counts with prose-auto's thresholds: TMT, TMTpro/iTRAQ8,
+  iTRAQ4, SILAC or label-free, or no call on a Da tolerance or below 175
+  C-terminal tag ends. A run whose tags mostly come from ion-trap MS2 tagged
+  at 0.5 Da (`-tolerance_by_analyzer`, the default) counts as a Da tolerance
+  (1.16.3): its tag-end masses are as coarse as on a Da run, so it gets no
+  call (`low_resolution`), and the `run` row `low_resolution` gives the
+  number of Da-tagged tags. The 304.2 Da mass is written `TMTpro/iTRAQ8`
+  (1.16.3; before, `TMTpro`): iTRAQ8plex (304.2054 Da) lies 1.8 mDa from
+  TMTpro (304.2071 Da), inside the 0.008 Da label window, so the tag ends
+  cannot tell them apart; `-qc_out`'s `reporter_kit` decides from the
+  reporter ions. The experimental `-label_call_min_tags 0` (1.13), which called
   every ppm run, failed its held-out test (149/172, 0.866, against the
   threshold 0.922) and was removed in 1.14 (doc/DESIGN-digest.md, "Label call
   minimum").
@@ -1909,8 +1919,8 @@ adds little to a run. With `-subsample_*` every count covers the spectra read
   (229.162932 Da, TMT 6/10/11) or TMTpro (304.207146 Da, TMTpro 16/18; for
   iTRAQ reporters the same mass is iTRAQ8, 144.102063 Da iTRAQ4), by the
   `-label_out` label call over the tags of the run (the tag ends are counted
-  for `-qc_out` too; the call needs a ppm fragment tolerance and 175
-  C-terminal tag ends). The kit is then the smallest kit of that label that
+  for `-qc_out` too; the call needs a ppm fragment tolerance, most tags
+  tagged at it, and 175 C-terminal tag ends). The kit is then the smallest kit of that label that
   holds every observed channel: TMT channels without 131C are `tmt10plex`
   (with both channels of an N/C pair, such as 127N and 127C; `tmt6plex`
   when they are one 6-plex generation's), with 131C

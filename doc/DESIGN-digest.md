@@ -109,7 +109,7 @@ Checked in this order; `reason` is the first that fires, and `nocall` lists all 
 
 | Rule | Fires when | Source |
 |---|---|---|
-| `low_resolution` | `-fragment_tolerance_unit Da` | option; the file is still written |
+| `low_resolution` | `-fragment_tolerance_unit Da`, or (1.16.3) a ppm run where more than half of the filtered tags come from spectra tagged at a Da tolerance (ion-trap MS2 at `-fragment_tolerance_itms` under `-tolerance_by_analyzer on`; `Digest::reportSettings`); `n` is then the number of Da-tagged tags, also when fewer than half are (the row stays `no` and says so) | option, per-spectrum tolerance; the file is still written |
 | `timstof` | instrument name or model contains "timsTOF", or the native ID format is Bruker TDF (MS:1002818/MS:1002819), or MS2 ion mobility is in 1/K0 | metadata |
 | `ms2_scan_window` | median MS2 scan-window lower limit > y1(K) + 0.1 = 147.2128 m/z (`Y1_K`); not 0.1.3's gate | metadata |
 | `ms2_first_peak` | median m/z of the lowest peak of each MS2 > 147.2128 (0.1.3's gate, `external.py` `ms2_low_mz > Y1_K + 0.1`, there over a sample of 20,000 MS2) | peaks |
@@ -303,20 +303,27 @@ table. Tests use synthetic tables.
 
 | Section | Keys | Value |
 |---|---|---|
-| `run` | as above, plus `window_da`, `low_resolution` (`yes` on a Da tolerance, where the label windows do not hold), `silac_min` | |
+| `run` | as above, plus `window_da`, `low_resolution` (`yes` on a Da tolerance, where the label windows do not hold, and (1.16.3) on a ppm run whose filtered tags come mostly from spectra tagged at a Da tolerance; `n` = those tags whenever there are any), `silac_min` | |
 | `count` | `tags_filtered` | integer |
 | `nlabel` | `<L>.count` = `near(n, m) + near(c, m)`, `<L>.background` = the same at `m + 0.5` Da, `<L>.share` = count / `tags_filtered`, for L = `TMT` (229.162932), `TMTpro` (304.207146), `iTRAQ4` (144.102063) (`_NLABEL`) | integer, decimal |
 | `heavy` | `K8.share` = `s(K+8) / max(s(K+8) + s(K), 1e-9)`, `R10.share` likewise, with `s = res / tot` as in 0.1.3; `K.tags` = `res[K] + res[K+8]`, `R.tags` = `res[R] + res[R+10]`; `gate` = `yes` when both are ≥ `-digest_silac_min` (50, `SILAC_MIN_TAGS`) | decimal, integer, word |
-| `label_call` (1.12, appended last; the rows above are byte-identical to 1.11) | `status` (`call`, `no_call`), `label` (`TMT`, `TMTpro`, `iTRAQ4`, `SILAC`, joined with `+` when several pass, isobaric first; `label-free` when none passes; `-` on a no call), `basis` (`nterm_gap`, `heavy_share`, `nterm_gap+heavy_share`, `none`), `silac` (`none`, `weak`, `strong`), `reason` (`low_resolution`, `few_tags` (not at the experimental `-label_call_min_tags 0`, 1.13); `-` on a call) | word |
+| `label_call` (1.12, appended last; the rows above are byte-identical to 1.11) | `status` (`call`, `no_call`), `label` (`TMT`, `TMTpro/iTRAQ8` (1.16.3; `TMTpro` before, and when `-digest_window` is below the 1.786 mDa between them), `iTRAQ4`, `SILAC`, joined with `+` when several pass, isobaric first; `label-free` when none passes; `-` on a no call), `basis` (`nterm_gap`, `heavy_share`, `nterm_gap+heavy_share`, `none`), `silac` (`none`, `weak`, `strong`), `reason` (`low_resolution`, `few_tags` (not at the experimental `-label_call_min_tags 0`, 1.13); `-` on a call) | word |
 
 `label_call` is prose-auto 0.1.10's termini label rule (`prose_auto/external.py` `fastag_termini` /
 `termini_evidence`, commit e15aaf7), ported rule for rule (`FASTag::Digest::labelCall`):
 
-- no call on a Da tolerance (`low_resolution`; prose-auto runs the termini only on ppm runs) and below
+- no call on a Da tolerance (`low_resolution`; prose-auto runs the termini only on ppm runs; since 1.16.3
+  also when more than half of the filtered tags come from spectra tagged at a Da tolerance, the ion-trap
+  MS2 that `-tolerance_by_analyzer` (1.15.5, default on) tags at 0.5 Da: their tag-end masses are as
+  coarse as on a Da run, and before 1.16.3 such a run was called, mostly label-free) and below
   175 C-terminal tag ends, `count.tot` of `-digest_out` (`few_tags`; prose-auto's `TAG_MIN`; see
   "Label call minimum" below);
 - an isobaric label when `<L>.count` ≥ 0.01 × `tags_filtered` and ≥ 20 × max(`<L>.background`, 1);
-  the TMTpro row says that iTRAQ8plex has the same mass;
+  the TMTpro row says that iTRAQ8plex has the same mass; since 1.16.3 the label is written
+  `TMTpro/iTRAQ8` (`Digest::labelCallName`) while iTRAQ8plex (Unimod 730, 304.205360 Da, 1.786 mDa below
+  TMTpro) lies inside the label window (`-digest_window`, 0.008 Da), since the tag ends cannot tell the two
+  apart; `-qc_out`'s `reporter_kit` decides between them from the reporter ions (on PXD031575, 262 of 265
+  iTRAQ8 runs `itraq8plex`, where the 1.16.2 label call said `TMTpro` on 254);
 - SILAC (Lys8/Arg10) when `K8.share` and `R10.share` are both ≥ 0.2, the K/R share (`share.kr` of
   `-digest_out`) rounded to 3 decimals is ≥ 0.8 (`KR_TRYPTIC`; prose-auto compares the rounded value),
   and `heavy.gate` is `yes`; `strong` when both shares are ≥ 0.3, else `weak`.
