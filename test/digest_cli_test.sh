@@ -161,6 +161,26 @@ same "$TMP/plabel_112.cmp" "$TMP/plabel_def.cmp" "the default -label_out is not 
   || fail "-label_call_min_tags: not exactly one removal warning"
 same "$TMP/plabel.tsv" "$TMP/plabel0.tsv" "-label_call_min_tags 0 changed -label_out"
 same "$TMP/p.tsv" "$TMP/p0.tsv" "-label_call_min_tags 0 changed the tags"
+# 1.16.3: the defaults (-tolerance_by_analyzer on) tag the fixture's ion-trap MS2 at 0.5 Da on a 20 ppm run:
+# every filtered tag is Da-tagged, so -label_out and -digest_out make no call (low_resolution), as on a Da run,
+# and say why; the tags and every count row are those of the same run without the reports
+run -in "$IN" -tag_length 4 -out "$TMP/it0.tsv"
+run -in "$IN" -tag_length 4 -out "$TMP/it.tsv" -digest_out "$TMP/itdigest.tsv" -label_out "$TMP/itlabel.tsv"
+same "$TMP/it0.tsv" "$TMP/it.tsv" "-digest_out/-label_out changed the tags of the ion-trap run"
+grep -q "ion-trap MS2 tagged at 0.5 Da" "$TMP/log" || fail "the default run did not tag the ion-trap MS2 at 0.5 Da"
+[ "$(lcall "$TMP/itlabel.tsv")" = "no_call low_resolution" ] \
+  || fail "label_call: a ppm run of Da-tagged ion-trap MS2 gave '$(lcall "$TMP/itlabel.tsv")', not no_call low_resolution"
+itags=$(val "$TMP/itlabel.tsv" count tags_filtered)
+[ "$(val "$TMP/itlabel.tsv" run low_resolution)" = yes ] || fail "-label_out: low_resolution is not yes on the Da-tagged run"
+tr -d '\r' < "$TMP/itlabel.tsv" | awk -F'\t' -v t="$itags" '$1 == "run" && $2 == "low_resolution" && $4 == t' | grep -q . \
+  || fail "-label_out: the low_resolution row's n is not the $itags Da-tagged tags"
+tr -d '\r' < "$TMP/itlabel.tsv" | grep -q "^label_call	status	no_call	.*$itags of $itags filtered tags come from MS2 tagged at a Da tolerance" \
+  || fail "-label_out: the no call does not say that the tags were Da-tagged"
+[ "$(val "$TMP/itdigest.tsv" call status) $(val "$TMP/itdigest.tsv" call reason)" = "no_call low_resolution" ] \
+  || fail "-digest_out: a ppm run of Da-tagged ion-trap MS2 is not no_call low_resolution"
+[ "$(val "$TMP/itdigest.tsv" nocall low_resolution)" = yes ] || fail "-digest_out: nocall low_resolution is not yes on the Da-tagged run"
+# -tolerance_by_analyzer off (every MS2 at 20 ppm) keeps the 1.12.0 rows above (plabel.tsv)
+[ "$(val "$TMP/plabel.tsv" run low_resolution)" = no ] || fail "-label_out: low_resolution is not no at 20 ppm for every MS2"
 # label_call reads the tag ends only: the same with and without -recon_out/-massgap_out, at 1, 2 and 3
 # threads (all with R's empty -fixed_modifications, which changes the tags themselves)
 run "${COMMON[@]}" -out "$TMP/l0.tsv" -fixed_modifications -label_out "$TMP/label0.tsv"
@@ -240,7 +260,9 @@ same "$TMP/label.tsv" "$TMP/vlabel0.tsv" "-label_out changed with the 1.12 D opt
 same "$TMP/base.tsv" "$TMP/v0.tsv" "the tag TSV changed with the 1.12 D options at their defaults"
 # A wide ppm tolerance gives filtered tags; the fixture's first MS2 peak is
 # above y1 (ms2_first_peak), so the 1.11 call is withheld there.
-PPM=(-in "$IN" -tag_length 4 -digest_tag_min 5 -fragment_tolerance 300 -fragment_tolerance_unit ppm)
+# 1.16.3: -tolerance_by_analyzer off keeps every MS2 at this ppm tolerance (on, the ion-trap MS2 are
+# tagged at 0.5 Da and the reports make no call, low_resolution; checked above).
+PPM=(-in "$IN" -tag_length 4 -digest_tag_min 5 -fragment_tolerance 300 -fragment_tolerance_unit ppm -tolerance_by_analyzer off)
 run "${PPM[@]}" -out "$TMP/v1.tsv" -digest_out "$TMP/vdigest1.tsv"
 [ "$(val "$TMP/vdigest1.tsv" call status) $(val "$TMP/vdigest1.tsv" call reason)" = "no_call ms2_first_peak" ] \
   || fail "the ppm fixture run is not no_call ms2_first_peak at the defaults"

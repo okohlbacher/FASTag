@@ -136,8 +136,9 @@ namespace FASTag::Digest
   }
 
   Quality reportQuality(const TerminusCounter& tc, const ModelTable& table, const std::vector<Row>& report,
-                        const std::string& option, const DigestSettings& s)
+                        const std::string& option, const DigestSettings& s0)
   {
+    const DigestSettings s = reportSettings(s0, tc);  // 1.16.3: Da-tagged runs are low_resolution
     const bool is_auto = option == "auto";
     Quality q;
     q.basis = is_auto ? "call" : "named";
@@ -180,7 +181,10 @@ namespace FASTag::Digest
     if (!q.measured)
     {
       add("status", "not_measured", "-", "Digestion quality is not measured.");
-      const std::string why = q.reason == "low_resolution" ? "the fragment tolerance is in Da, so the tag-end windows do not hold"
+      const std::string why = q.reason == "low_resolution"
+                                  ? (s.da_tagged ? "most filtered tags come from MS2 tagged at a Da tolerance (ion trap, "
+                                                   "-tolerance_by_analyzer), so the tag-end windows do not hold"
+                                                 : "the fragment tolerance is in Da, so the tag-end windows do not hold")
                               : q.reason == "no_call" ? "the report makes no protease call"
                               : q.reason == "no_specific_end" ? "every end of the enzyme's model is the background"
                                                               : "fewer than " + std::to_string(s.tag_min) + " tag ends are at the enzyme's cleaving end";

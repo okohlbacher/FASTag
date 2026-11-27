@@ -162,6 +162,7 @@ namespace FASTag::Digest
   void TerminusCounter::merge(const TerminusCounter& o)
   {
     tags += o.tags;
+    tags_da += o.tags_da;  // 1.16.3
     auto add = [](auto& a, const auto& b) { for (std::size_t i = 0; i < a.size(); ++i) a[i] += b[i]; };
     add(c_near, o.c_near);
     add(n_h2o, o.n_h2o);
@@ -177,6 +178,19 @@ namespace FASTag::Digest
       if (!bins_) { bins_ = o.bins_; dip.assign(o.dip.size(), 0); }
       if (dip.size() == o.dip.size()) add(dip, o.dip);
     }
+  }
+
+  bool mostlyDaTagged(const TerminusCounter& tc) { return tc.tags_da > tc.tags - tc.tags_da; }
+
+  DigestSettings reportSettings(const DigestSettings& s, const TerminusCounter& tc)
+  {
+    DigestSettings r = s;
+    if (!s.low_resolution && mostlyDaTagged(tc))
+    {
+      r.low_resolution = true;
+      r.da_tagged = true;
+    }
+    return r;
   }
 
   std::uint64_t TerminusCounter::tot() const

@@ -376,10 +376,16 @@ namespace FASTag::RunQC
     bool counted = false;  ///< tag ends were counted; false: no evidence
     bool called = false;   ///< Digest::labelCall() made a call
     std::string reason;    ///< no call: low_resolution or few_tags
+    /// 1.16.3: low_resolution because most tags were tagged at a Da
+    /// tolerance on a ppm run (Digest::reportSettings()).
+    bool da_tagged = false;
     std::uint64_t tags = 0;  ///< filtered tags counted
     std::array<std::uint64_t, Digest::NUM_LABELS> ends{};        ///< per labelKeys(): N- and C-terminal ends near the label
     std::array<std::uint64_t, Digest::NUM_LABELS> background{};  ///< the same at label + 0.5 Da
     std::array<bool, Digest::NUM_LABELS> passed{};               ///< the label passed the call
+    /// 1.16.3: per labelKeys(), the label_call name (Digest::labelCallName():
+    /// TMTpro/iTRAQ8 for the 304.2 Da mass); empty when not counted.
+    std::array<std::string, Digest::NUM_LABELS> names{};
   };
   /**
     @brief The label-mass evidence from tag-end counts.

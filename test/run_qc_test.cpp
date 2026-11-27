@@ -814,6 +814,16 @@ void channelCounts()
   ds.low_resolution = true;
   const Q::LabelEvidence lr = Q::labelEvidence(tc, ds);
   CHECK(lr.counted && !lr.called && lr.reason == "low_resolution", "labelEvidence: Da tolerance");
+  CHECK(!lr.da_tagged, "labelEvidence: a Da tolerance is not da_tagged");
+  // 1.16.3: a ppm run whose tags mostly come from ion-trap MS2 tagged at 0.5 Da.
+  ds.low_resolution = false;
+  CHECK(le.names[1] == "TMTpro/iTRAQ8" && le.names[0] == "TMT", "labelEvidence: label_call names %s", le.names[1].c_str());
+  FASTag::Digest::TerminusCounter tc_da = tc;
+  tc_da.tags_da = 151;  // of 300
+  const Q::LabelEvidence ld = Q::labelEvidence(tc_da, ds);
+  CHECK(ld.counted && !ld.called && ld.reason == "low_resolution" && ld.da_tagged, "labelEvidence: mostly Da-tagged");
+  tc_da.tags_da = 150;
+  CHECK(Q::labelEvidence(tc_da, ds).called, "labelEvidence: half Da-tagged still calls");
 }
 
 // Run metadata: what OpenMS's readers put into ExperimentalSettings.

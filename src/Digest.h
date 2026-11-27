@@ -177,6 +177,12 @@ namespace FASTag::Digest
     void merge(const TerminusCounter& o);
 
     std::uint64_t tags = 0;                         ///< number of tags counted
+    /// 1.16.3: of @c tags, the tags of spectra tagged at a Da tolerance (an
+    /// ion-trap MS2 under -tolerance_by_analyzer on, or every tag of a run
+    /// with a Da -fragment_tolerance_unit). Counted by the caller (the
+    /// counter does not know the spectrum's tolerance); read by
+    /// mostlyDaTagged() and reportSettings(), never by the counts above.
+    std::uint64_t tags_da = 0;
     std::array<std::uint64_t, NUM_KEYS> c_near{};   ///< tags whose C-terminal flank mass is near key k's mass
     std::array<std::uint64_t, NUM_KEYS> n_h2o{};    ///< tags whose N-terminal flank mass is near key k's mass + H2O
     std::array<std::uint64_t, NUM_KEYS> n_near{};   ///< tags whose N-terminal flank mass is near key k's mass
@@ -772,6 +778,10 @@ namespace FASTag::Digest
     double background_share = 0.05;            ///< background share mixed into each model
     int silac_min = 50;                        ///< minimum K- and R-terminal ends for SILAC
     bool low_resolution = false;               ///< fragment tolerance in Da
+    /// 1.16.3: low_resolution is set because most filtered tags come from
+    /// spectra tagged at a Da tolerance on a ppm run (reportSettings()); the
+    /// reports then say so instead of "the fragment tolerance is in Da".
+    bool da_tagged = false;
     std::string models = "shipped", background = "shipped_human";  ///< model table and background sources
     bool background_pseudocount = false;       ///< one count added per residue of the FASTA
     // ---- 1.12 D: chemistry v2 (#3c-#3f), all off by default ----
@@ -797,6 +807,36 @@ namespace FASTag::Digest
     }
     // ---- end 1.12 D ----
   };
+
+  // ---- 1.16.3: Da-tagged spectra on a ppm run ----
+  /**
+    @brief Whether most filtered tags come from spectra tagged at a Da tolerance.
+
+    True when tc.tags_da * 2 > tc.tags (more than half; false for no tag).
+    Under -tolerance_by_analyzer on, the ion-trap MS2 of a ppm run are
+    tagged at -fragment_tolerance_itms (0.5 Da), so their tag-end masses are
+    as coarse as on a Da run and the 0.008 Da residue and label windows do
+    not hold for them.
+
+    @param[in] tc Terminus counts with tags_da filled.
+    @return True when most counted tags are Da-tagged.
+  */
+  bool mostlyDaTagged(const TerminusCounter& tc);
+  /**
+    @brief The settings the reports of @p tc are written with.
+
+    @p s, with low_resolution and da_tagged set when the run's tolerance is
+    in ppm but mostlyDaTagged(@p tc): the no-call rule "no call on a Da
+    tolerance" of -digest_out and -label_out then applies, as the
+    documentation states it for Da-tolerance runs. A run with fewer than
+    half of its tags Da-tagged keeps @p s.
+
+    @param[in] s The run's digest settings.
+    @param[in] tc Terminus counts with tags_da filled.
+    @return The settings for digestRows(), labelRows(), labelCall() and the rest.
+  */
+  DigestSettings reportSettings(const DigestSettings& s, const TerminusCounter& tc);
+  // ---- end 1.16.3 ----
 
   // ---- 1.12 D: instrument class (#3c) ----
   /**
@@ -977,7 +1017,8 @@ namespace FASTag::Digest
   // the same counts. It reads the tag-end counts only, never the mass-gap
   // result, so -massgap_out cannot change it.
   //   - no_call low_resolution: the fragment tolerance is in Da (prose-auto
-  //     runs the termini only on ppm runs);
+  //     runs the termini only on ppm runs), or (1.16.3) most filtered tags
+  //     come from spectra tagged at a Da tolerance (reportSettings());
   //   - no_call few_tags: fewer than LABEL_TAG_MIN C-terminal tag ends
   //     (tot(); 175, prose-auto 0.1.10's TAG_MIN, the 1.12 rule);
   //   - an isobaric label (labelKeys() order) when its count reaches
@@ -989,10 +1030,29 @@ namespace FASTag::Digest
   //     >= DigestSettings::silac_min (50, prose-auto's SILAC_MIN_TAGS);
   //     strong when both shares are >= HEAVY_STRONG;
   //   - every label that passes is listed (isobaric first); none is
-  //     label-free.
+  //     label-free. The label row names TMTpro "TMTpro/iTRAQ8" when
+  //     iTRAQ8plex lies inside the window (labelCallName(), 1.16.3).
   inline constexpr std::uint64_t LABEL_TAG_MIN = 175;
   inline constexpr double LABEL_MIN_SHARE = 0.01, LABEL_BACKGROUND_FOLD = 20.0;
   inline constexpr double HEAVY_MIN = 0.2, HEAVY_STRONG = 0.3, KR_TRYPTIC = 0.8;
+  /// 1.16.3: the iTRAQ8plex label (Unimod 730, monoisotopic 304.205360 Da),
+  /// 1.786 mDa below TMTpro (labelKeys(), 304.207146 Da). It has no
+  /// labelKeys() entry of its own: inside the label window its tag ends are
+  /// counted as TMTpro.
+  inline constexpr double ITRAQ8_MASS = 304.20536;
+  /**
+    @brief The label_call name of a labelKeys() entry.
+
+    The key's name, except TMTpro when iTRAQ8plex lies inside its label
+    window (|TMTpro - ITRAQ8_MASS| <= @p s.window, always at the default
+    0.008 Da): "TMTpro/iTRAQ8", as the tag ends cannot tell the two apart;
+    the reporter ions (-qc_out reporter_kit) can.
+
+    @param[in] l Index into labelKeys().
+    @param[in] s Digest settings (the window).
+    @return The name written in the label_call label row.
+  */
+  std::string labelCallName(std::size_t l, const DigestSettings& s);
 
   /**
     @brief The label call over the tag-end counts.
@@ -1001,7 +1061,7 @@ namespace FASTag::Digest
   {
     bool called = false;              ///< a call was made
     std::string reason;               ///< no call: low_resolution or few_tags
-    std::vector<std::string> labels;  ///< labelKeys() names that passed, then "SILAC"
+    std::vector<std::string> labels;  ///< labelKeys() names that passed, then "SILAC" (the label row writes labelCallName())
     bool isobaric = false;            ///< an isobaric label passed
     bool silac = false, silac_strong = false;  ///< SILAC passed, and passed strongly
     double kr_rounded = 0.0;          ///< krShare() rounded to 3 decimals; 0 when tot() is 0

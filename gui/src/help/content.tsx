@@ -1026,11 +1026,14 @@ export const DIGEST: HelpPage = {
           <p>
             The label call needs at least 175 counted C-terminal ends and a ppm tolerance. Otherwise it
             reports <code>no_call</code> with reason <code>few_tags</code> or <code>low_resolution</code>.
+            A run whose tags come mostly from ion-trap spectra tagged at 0.5 Da (Advanced › Fragment tolerance by
+            analyzer, on by default) counts as a Da tolerance and gets <code>low_resolution</code>: those tag ends are
+            too coarse for the label windows.
             An isobaric-label call needs the label count to reach 1% of filtered tags and 20 times its background.
             SILAC additionally needs both heavy shares to reach 20% and K/R to account for at least 80% of the
             counted C-terminal ends. <code>label-free</code> means no tested label rule fired; it does not rule out
-            other labels or weak labelling. TMTpro and iTRAQ8plex have the same mass here; reporter ions are needed
-            to distinguish them.
+            other labels or weak labelling. TMTpro and iTRAQ8plex differ by less than the label window, so a call at
+            that mass reads <code>TMTpro/iTRAQ8</code>; the reporter kit of the Run QC report tells them apart.
           </p>
           <p>
             These calls belong to <L to="param-label_out">Label report</L>.

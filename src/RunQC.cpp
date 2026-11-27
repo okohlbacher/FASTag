@@ -530,12 +530,14 @@ namespace FASTag::RunQC
     const Digest::LabelCall c = Digest::labelCall(tc, s);
     ev.called = c.called;
     ev.reason = c.reason;
+    ev.da_tagged = Digest::reportSettings(s, tc).da_tagged;
     const auto& keys = Digest::labelKeys();
     for (std::size_t l = 0; l < keys.size(); ++l)
     {
       ev.ends[l] = tc.lab_n[l] + tc.lab_c[l];
       ev.background[l] = tc.lab_bg_n[l] + tc.lab_bg_c[l];
       ev.passed[l] = std::find(c.labels.begin(), c.labels.end(), keys[l].name) != c.labels.end();
+      ev.names[l] = Digest::labelCallName(l, s);
     }
     return ev;
   }
@@ -1160,13 +1162,20 @@ namespace FASTag::RunQC
         {"no_label", "no label of the family passed the label call"},
         {"several_labels", "more than one label passed the label call"},
         {"label_conflict", "the label that passed has no kit with every observed channel"}};
-    const std::string why = WHY.count(kd.why) ? WHY.at(kd.why) : kd.why;
+    // 1.16.3: the label mass by its label_call name (TMTpro/iTRAQ8).
+    const auto labelName = [&](std::size_t l) {
+      return label_ev_.names[l].empty() ? std::string(keys[l].name) : label_ev_.names[l];
+    };
+    const std::string why = kd.why == "low_resolution" && label_ev_.da_tagged
+                                ? "most filtered tags come from MS2 tagged at a Da tolerance, so the label windows do not hold"
+                            : WHY.count(kd.why) ? WHY.at(kd.why)
+                                                : kd.why;
     // For a conflict: "<label> (<n> tag ends of <m>)" and the kits the channels allow.
     std::string conflict_label, conflict_kits;
     if (kd.evidence == "label_conflict")
     {
       const std::size_t l = static_cast<std::size_t>(kd.label);
-      conflict_label = std::string(keys[l].name) + " (" + num(label_ev_.ends[l]) + " tag ends of " +
+      conflict_label = labelName(l) + " (" + num(label_ev_.ends[l]) + " tag ends of " +
                        num(label_ev_.tags) + " filtered tags)";
       for (std::size_t i = 0; i < kd.candidates.size(); ++i)
         conflict_kits += (i == 0 ? "" : " or ") + kd.candidates[i];
@@ -1176,7 +1185,7 @@ namespace FASTag::RunQC
                      ? "Conflict: the label mass says " + conflict_label + ", but the observed channels fit only " +
                            conflict_kits + "; no kit is called."
                  : kd.evidence == "label_mass"
-                     ? "The kit: the smallest kit of the " + std::string(keys[static_cast<std::size_t>(kd.label)].name) +
+                     ? "The kit: the smallest kit of the " + labelName(static_cast<std::size_t>(kd.label)) +
                            " label that holds every observed channel; larger kits whose extra channels were not seen are not named."
                  : kd.evidence == "reporters_only"
                      ? std::string(kd.kit == "ambiguous" ? "Ambiguous: " : "") +
@@ -1193,7 +1202,7 @@ namespace FASTag::RunQC
     if (kd.evidence == "label_mass")
     {
       const std::size_t l = static_cast<std::size_t>(kd.label);
-      ev_desc = "The label mass decides: " + std::string(keys[l].name) + " on " + num(label_ev_.ends[l]) +
+      ev_desc = "The label mass decides: " + labelName(l) + " on " + num(label_ev_.ends[l]) +
                 " tag ends of " + num(label_ev_.tags) + " filtered tags (" + num(label_ev_.background[l]) +
                 " at +0.5 Da).";
     }

@@ -330,6 +330,8 @@ const count = (v: number | null): string => (v == null ? '–' : fmt(v))
 const LABEL_MODS: Record<string, string> = {
   TMT: 'TMT6plex (K, N-term)',
   TMTpro: 'TMTpro (K, N-term)',
+  // FASTag 1.16.3: the 304.2 Da label mass, which the tag ends cannot split
+  'TMTpro/iTRAQ8': 'TMTpro or iTRAQ8plex (K, N-term)',
   iTRAQ4: 'iTRAQ4plex (K, N-term)',
   SILAC: 'Label:13C(6)15N(2) (K), Label:13C(6)15N(4) (R), variable'
 }
