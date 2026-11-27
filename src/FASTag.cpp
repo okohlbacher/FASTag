@@ -4181,6 +4181,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       {
         if (tag_cz) pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq), cz_pair.reversedOffset());
         else pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq));
+        // 1.16.3: a tag of a spectrum tagged at a Da tolerance (an ion-trap
+        // MS2 under -tolerance_by_analyzer on); FD::reportSettings() reads it.
+        if (!params_of(t.ion_series, spec_itms).front().tol_ppm) ++pt.digest.tags_da;
       }
       // 1.12 D #3g: the tags -alkylation_out reads (as the digest report),
       // of the selected hypothesis only (#6, PLAN-INTEGRATION 2.4). A c/z
@@ -6435,7 +6438,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       if (!digest_quality.empty())
       {
         const FD::Quality qual = FD::reportQuality(tc, protease_models, more, digest_quality, digest_settings);
-        const auto qrows = FD::qualityRows(qual, digest_settings);
+        const auto qrows = FD::qualityRows(qual, FD::reportSettings(digest_settings, tc));
         rows.insert(rows.end(), qrows.begin(), qrows.end());
       }
       if (!FD::writeReport(digest_out, rows))

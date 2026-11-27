@@ -103,6 +103,19 @@ static std::string value(const std::vector<D::Row>& rows, const std::string& sec
     if (r.section == section && r.key == key) return r.value;
   return "<missing " + section + " " + key + ">";
 }
+/// The n column of a row.
+static std::string field(const std::vector<D::Row>& rows, const std::string& section, const std::string& key)
+{
+  for (const D::Row& r : rows)
+    if (r.section == section && r.key == key) return r.n;
+  return "<missing " + section + " " + key + ">";
+}
+static std::string description(const std::vector<D::Row>& rows, const std::string& section, const std::string& key)
+{
+  for (const D::Row& r : rows)
+    if (r.section == section && r.key == key) return r.description;
+  return "<missing " + section + " " + key + ">";
+}
 
 // ---- label_call (FASTag 1.12 #3a): counters set field by field
 static int key(const char* name)
@@ -651,6 +664,68 @@ int main()
       for (const D::Row& r : rows)
         if (r.section == "label_call" && r.key == "label") itraq8 = r.description.find("iTRAQ8plex") != std::string::npos;
       check(itraq8, "label_call: the TMTpro row says iTRAQ8plex has the same mass");
+    }
+
+    // 1.16.3 (ion-trap MS2 tagged at 0.5 Da on a ppm run): most filtered tags Da-tagged is low_resolution
+    {
+      D::TerminusCounter pro = labelCounter(1000, kr, {0, 60, 0});
+      pro.tags_da = 501;
+      check(D::mostlyDaTagged(pro), "mostlyDaTagged: 501 of 1000");
+      check(callOf(pro) == "no_call - - - low_resolution", "label_call: 501 of 1000 tags Da-tagged is low_resolution (" + callOf(pro) + ")");
+      check(statusDesc(pro, s).find("501 of 1000 filtered tags come from MS2 tagged at a Da tolerance") != std::string::npos,
+            "label_call: the Da-tagged no call says how many tags were Da-tagged (" + statusDesc(pro, s) + ")");
+      const auto lr = D::labelRows(pro, s);
+      check(value(lr, "run", "low_resolution") == "yes" && field(lr, "run", "low_resolution") == "501",
+            "label rows: low_resolution yes with n = the Da-tagged tags");
+      check(value(lr, "nlabel", "TMTpro.count") == "60" && value(lr, "count", "tags_filtered") == "1000",
+            "label rows: the counts are written as before");
+      // exactly half is not most: the call is made, and the row says how many
+      pro.tags_da = 500;
+      check(!D::mostlyDaTagged(pro), "mostlyDaTagged: 500 of 1000 is not most");
+      check(callOf(pro) == "call TMTpro nterm_gap none -", "label_call: 500 of 1000 tags Da-tagged still calls");
+      check(value(D::labelRows(pro, s), "run", "low_resolution") == "no" && field(D::labelRows(pro, s), "run", "low_resolution") == "500" &&
+                description(D::labelRows(pro, s), "run", "low_resolution").find("fewer than half") != std::string::npos,
+            "label rows: a minority of Da-tagged tags is stated, low_resolution no");
+      // no Da-tagged tag: the 1.12 row, byte for byte
+      pro.tags_da = 0;
+      check(field(D::labelRows(pro, s), "run", "low_resolution") == "-" &&
+                description(D::labelRows(pro, s), "run", "low_resolution") == "The fragment tolerance is in ppm.",
+            "label rows: without Da-tagged tags the low_resolution row is unchanged");
+      // a Da run (every tag Da-tagged) keeps its 1.12 wording
+      pro.tags_da = 1000;
+      check(callOf(pro, da) == "no_call - - - low_resolution" &&
+                statusDesc(pro, da).find("the fragment tolerance is in Da") != std::string::npos &&
+                description(D::labelRows(pro, da), "run", "low_resolution") ==
+                    "The fragment tolerance is in Da, so the label windows do not hold." &&
+                field(D::labelRows(pro, da), "run", "low_resolution") == "-",
+            "label_call: a Da run keeps the Da-tolerance wording");
+      check(!D::reportSettings(da, pro).da_tagged && D::reportSettings(s, pro).da_tagged && D::reportSettings(s, pro).low_resolution,
+            "reportSettings: da_tagged only on a ppm run");
+      // merge() adds tags_da
+      D::TerminusCounter a, b;
+      a.tags = 3; a.tags_da = 1; b.tags = 4; b.tags_da = 4;
+      a.merge(b);
+      check(a.tags == 7 && a.tags_da == 5 && D::mostlyDaTagged(a), "merge: tags_da summed");
+      // -digest_out: the same rule (low_resolution first), and the quality report
+      D::TerminusCounter dg;
+      for (int i = 0; i < 300; ++i)
+      {
+        dg.add(1000.0, 128.09496, "PEPT");
+        dg.add(1000.0, 156.10111, "PEPT");
+      }
+      dg.tags += 400;  // 1000 filtered tags, 600 of them at K or R
+      dg.tags_da = 900;
+      const auto drows = D::digestRows(dg, table(), D::RunMeta(), s);
+      check(value(drows, "call", "reason") == "low_resolution" && value(drows, "nocall", "low_resolution") == "yes" &&
+                field(drows, "nocall", "low_resolution") == "900",
+            "digest: most tags Da-tagged is low_resolution (" + value(drows, "call", "reason") + ")");
+      check(description(drows, "call", "status").find("900 of 1000 filtered tags") != std::string::npos,
+            "digest: the no call says how many tags were Da-tagged");
+      const D::Quality q = D::reportQuality(dg, table(), drows, "Trypsin", s);
+      check(!q.measured && q.reason == "low_resolution", "digest quality: Da-tagged run not measured");
+      dg.tags_da = 0;
+      check(value(D::digestRows(dg, table(), D::RunMeta(), s), "call", "status") == "call",
+            "digest: the same counts without Da-tagged tags are called");
     }
 
     // SILAC (Lys8/Arg10): both heavy shares >= 0.2, K/R share >= 0.8 (rounded to 3 decimals, as prose-auto

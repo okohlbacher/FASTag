@@ -530,6 +530,7 @@ namespace FASTag::RunQC
     const Digest::LabelCall c = Digest::labelCall(tc, s);
     ev.called = c.called;
     ev.reason = c.reason;
+    ev.da_tagged = Digest::reportSettings(s, tc).da_tagged;
     const auto& keys = Digest::labelKeys();
     for (std::size_t l = 0; l < keys.size(); ++l)
     {
@@ -1160,7 +1161,10 @@ namespace FASTag::RunQC
         {"no_label", "no label of the family passed the label call"},
         {"several_labels", "more than one label passed the label call"},
         {"label_conflict", "the label that passed has no kit with every observed channel"}};
-    const std::string why = WHY.count(kd.why) ? WHY.at(kd.why) : kd.why;
+    const std::string why = kd.why == "low_resolution" && label_ev_.da_tagged
+                                ? "most filtered tags come from MS2 tagged at a Da tolerance, so the label windows do not hold"
+                            : WHY.count(kd.why) ? WHY.at(kd.why)
+                                                : kd.why;
     // For a conflict: "<label> (<n> tag ends of <m>)" and the kits the channels allow.
     std::string conflict_label, conflict_kits;
     if (kd.evidence == "label_conflict")

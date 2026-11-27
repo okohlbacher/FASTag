@@ -29,7 +29,9 @@ val() { tr -d '\r' < "$1" | awk -F'\t' -v s="$2" -v k="$3" '$1 == s && $2 == k {
 # rows refuse a Da tolerance, checked below). At 1000 ppm the fixture has 23
 # C-terminal tag ends, 11 of them at K/R, so -digest_tag_min 10 measures the C
 # end and its missed-cleavage ratios (the default 100 gives few_tags).
-COMMON=(-in "$IN" -tag_length 4 -fragment_tolerance 1000 -fragment_tolerance_unit ppm)
+# 1.16.3: -tolerance_by_analyzer off keeps every MS2 at 1000 ppm; on (the default), the ion-trap MS2 are
+# tagged at 0.5 Da and the quality rows refuse the run as low_resolution (checked below).
+COMMON=(-in "$IN" -tag_length 4 -fragment_tolerance 1000 -fragment_tolerance_unit ppm -tolerance_by_analyzer off)
 DA=(-in "$IN" -tag_length 4 -fragment_tolerance 0.5 -fragment_tolerance_unit Da)
 
 # ---- off: unchanged; on: 1.12 rows a byte prefix, tag TSV unchanged.
@@ -176,6 +178,14 @@ run "${DA[@]}" -out "$TMP/t11.tsv" -digest_out "$TMP/d11.tsv" -digest_quality Tr
 run "${DA[@]}" -out "$TMP/t12.tsv" -digest_out "$TMP/d12.tsv" -digest_quality auto -digest_tag_min 10
 [ "$(val "$TMP/d12.tsv" quality basis) $(val "$TMP/d12.tsv" quality status) $(val "$TMP/d12.tsv" quality reason)" = \
   "call not_measured low_resolution" ] || fail "auto on a Da tolerance is not 'call not_measured low_resolution'"
+# 1.16.3: a ppm run whose ion-trap MS2 are tagged at 0.5 Da (-tolerance_by_analyzer on, the default) is
+# refused the same way, and says why
+run -in "$IN" -tag_length 4 -fragment_tolerance 1000 -fragment_tolerance_unit ppm -out "$TMP/t13.tsv" \
+  -digest_out "$TMP/d13.tsv" -digest_quality Trypsin -digest_tag_min 10
+[ "$(val "$TMP/d13.tsv" quality enzyme) $(val "$TMP/d13.tsv" quality status) $(val "$TMP/d13.tsv" quality reason)" = \
+  "Trypsin not_measured low_resolution" ] || fail "Trypsin on Da-tagged ion-trap MS2 is not 'not_measured low_resolution'"
+tr -d '\r' < "$TMP/d13.tsv" | grep -q "^quality	reason	low_resolution	-	Not measured: most filtered tags come from MS2 tagged at a Da tolerance" \
+  || fail "the Da-tagged quality refusal does not say why"
 
 # ---- a named N-end enzyme of the shipped table measures the N end
 run "${COMMON[@]}" -out "$TMP/t3.tsv" -digest_out "$TMP/d3.tsv" -digest_quality Asp-N

@@ -57,6 +57,15 @@ namespace FASTag::Digest
         if (name == keys[static_cast<std::size_t>(k)].name) return k;
       return -1;
     }
+
+    /// 1.16.3: the share of Da-tagged tags, for a sentence: "<n> of <m>
+    /// filtered tags come from MS2 tagged at a Da tolerance (ion trap,
+    /// -tolerance_by_analyzer)".
+    std::string daTagged(const TerminusCounter& tc)
+    {
+      return u(tc.tags_da) + " of " + u(tc.tags) +
+             " filtered tags come from MS2 tagged at a Da tolerance (ion trap, -tolerance_by_analyzer)";
+    }
   }
 
   double median(std::vector<double> v)
@@ -68,8 +77,9 @@ namespace FASTag::Digest
   }
 
   std::vector<Row> digestRows(const TerminusCounter& tc, const ModelTable& table, const RunMeta& meta,
-                              const DigestSettings& s)
+                              const DigestSettings& s0)
   {
+    const DigestSettings s = reportSettings(s0, tc);  // 1.16.3: Da-tagged runs are low_resolution
     std::vector<Row> out;
     Rows r{out};
     const std::string w = num(s.window);
@@ -359,7 +369,9 @@ namespace FASTag::Digest
     else
     {
       std::string why;
-      if (reason == "low_resolution") why = "the fragment tolerance is in Da, so the residue windows do not hold";
+      if (reason == "low_resolution")
+        why = s.da_tagged ? daTagged(tc) + ", so the residue windows do not hold"
+                          : "the fragment tolerance is in Da, so the residue windows do not hold";
       else if (reason == "timstof") why = "the input is from a timsTOF";
       else if (reason == "ms2_scan_window") why = "the median MS2 scan window starts at m/z " + f(low, 2) + ", above y1 of K plus 0.1 (147.21)";
       else if (reason == "ms2_first_peak") why = "the median first MS2 peak is at m/z " + f(first, 2) + ", above y1 of K plus 0.1 (147.21)";
@@ -389,8 +401,15 @@ namespace FASTag::Digest
                       : "The timsTOF rule withholds the call as in FASTag 1.11, or the run is not timsTOF data.");
     }
 
-    r.add("nocall", "low_resolution", lowres, "-",
-          s.low_resolution ? "The fragment tolerance is in Da." : "The fragment tolerance is in ppm.");
+    if (s.da_tagged)
+      r.add("nocall", "low_resolution", lowres, u(tc.tags_da),
+            "The fragment tolerance is in ppm, but " + daTagged(tc) + ".");
+    else if (!s.low_resolution && tc.tags_da > 0)
+      r.add("nocall", "low_resolution", lowres, u(tc.tags_da),
+            "The fragment tolerance is in ppm; " + daTagged(tc) + ", fewer than half.");
+    else
+      r.add("nocall", "low_resolution", lowres, "-",
+            s.low_resolution ? "The fragment tolerance is in Da." : "The fragment tolerance is in ppm.");
     r.add("nocall", "timstof", tims, "-",
           tims == "yes" ? "The instrument, the native ID format or a 1/K0 ion mobility marks the input as timsTOF data."
           : tims == "no" ? "Neither the instrument, the native ID format nor the ion mobility marks the input as timsTOF data."
@@ -501,14 +520,22 @@ namespace FASTag::Digest
     return kr.value();
   }
 
-  std::vector<Row> labelRows(const TerminusCounter& tc, const DigestSettings& s)
+  std::vector<Row> labelRows(const TerminusCounter& tc, const DigestSettings& s0)
   {
+    const DigestSettings s = reportSettings(s0, tc);  // 1.16.3: Da-tagged runs are low_resolution
     std::vector<Row> out;
     Rows r{out};
     r.add("run", "window_da", num(s.window), "-", "A tag end counts for a label when its mass is within " + num(s.window) + " Da of it.");
-    r.add("run", "low_resolution", s.low_resolution ? "yes" : "no", "-",
-          s.low_resolution ? "The fragment tolerance is in Da, so the label windows do not hold."
-                           : "The fragment tolerance is in ppm.");
+    if (s.da_tagged)
+      r.add("run", "low_resolution", "yes", u(tc.tags_da),
+            "The fragment tolerance is in ppm, but " + daTagged(tc) + ", so the label windows do not hold.");
+    else if (!s.low_resolution && tc.tags_da > 0)
+      r.add("run", "low_resolution", "no", u(tc.tags_da),
+            "The fragment tolerance is in ppm; " + daTagged(tc) + ", fewer than half.");
+    else
+      r.add("run", "low_resolution", s.low_resolution ? "yes" : "no", "-",
+            s.low_resolution ? "The fragment tolerance is in Da, so the label windows do not hold."
+                             : "The fragment tolerance is in ppm.");
     r.add("run", "silac_min", std::to_string(s.silac_min), "-",
           "The heavy shares are gated on " + std::to_string(s.silac_min) + " K- and R-terminal tag ends each.");
     r.add("count", "tags_filtered", u(tc.tags), u(tc.tags), u(tc.tags) + " reported tags are ungapped with an E-value of at most 1.");
@@ -569,8 +596,9 @@ namespace FASTag::Digest
     }
   }
 
-  LabelCall labelCall(const TerminusCounter& tc, const DigestSettings& s)
+  LabelCall labelCall(const TerminusCounter& tc, const DigestSettings& s0)
   {
+    const DigestSettings s = reportSettings(s0, tc);  // 1.16.3: Da-tagged runs are low_resolution
     LabelCall c;
     const std::uint64_t tot = tc.tot();
     if (tot > 0) c.kr_rounded = round3(krShare(tc));
@@ -603,8 +631,9 @@ namespace FASTag::Digest
     return c;
   }
 
-  std::vector<Row> labelCallRows(const LabelCall& c, const TerminusCounter& tc, const DigestSettings& s)
+  std::vector<Row> labelCallRows(const LabelCall& c, const TerminusCounter& tc, const DigestSettings& s0)
   {
+    const DigestSettings s = reportSettings(s0, tc);  // 1.16.3: Da-tagged runs are low_resolution
     std::vector<Row> out;
     Rows r{out};
     const std::uint64_t tot = tc.tot();
@@ -613,7 +642,8 @@ namespace FASTag::Digest
     {
       const std::string why =
           c.reason == "low_resolution"
-              ? "the fragment tolerance is in Da, so the label windows do not hold"
+              ? (s.da_tagged ? daTagged(tc) + ", so the label windows do not hold"
+                             : "the fragment tolerance is in Da, so the label windows do not hold")
               : u(tot) + " C-terminal tag ends are fewer than " + std::to_string(LABEL_TAG_MIN);
       r.add(sec, "status", "no_call", u(tot), "No label is called: " + why + ".");
       r.add(sec, "label", "-", "-", "There is no label call.");
