@@ -107,6 +107,51 @@ namespace FASTag::Digest
 
   struct Flank2Bins;  // 1.12 D #3d, below
 
+  // ---- 1.17 silac2 (-label_format 2): route-split SILAC ends -------------
+  /// The residue keys of the route-split counts: light and heavy K and R,
+  /// and W (whose end mass G+F shares, as R+10's A+L does).
+  inline constexpr int NUM_SILAC2_KEYS = 7;
+  /**
+    @brief One key of the route-split counts, with its residue mass.
+  */
+  struct Silac2Key
+  {
+    const char* name;  ///< key name (K, K+4, K+8, R, R+6, R+10, W)
+    double mass;       ///< residue mass (Da)
+  };
+  /**
+    @brief The keys of the route-split counts.
+
+    @return K, K+4 (Label:2H(4)), K+8 (Label:13C(6)15N(2)), R, R+6
+            (Label:13C(6)), R+10 (Label:13C(6)15N(4)), W.
+  */
+  const std::array<Silac2Key, NUM_SILAC2_KEYS>& silac2Keys();
+  /**
+    @brief A dipeptide whose mass makes a tag end look like a residue key.
+  */
+  struct DipeptideAlias
+  {
+    std::string name;  ///< the two residues in AAS order (I counted as L), e.g. "AL"
+    double end_mass;   ///< the tag-end mass it gives: the dipeptide mass, or that less H2O
+    bool less_h2o;     ///< end_mass is the dipeptide mass less H2O (a b2 ion read as y1)
+  };
+  /**
+    @brief The dipeptides whose end mass lies within @p window of @p mass.
+
+    A tag end of residue mass m is also two residues a+b when
+    |m(a) + m(b) - m| <= window (a y2-anchored end, or a reversed read of
+    two residues), or |m(a) + m(b) - H2O - m| <= window (a b2 ion read as y1
+    on the C-terminal route; a peptide N-terminus a+b on the N-terminal
+    route). Unordered pairs over AAS, in AAS order, the plain dipeptide before
+    the one less H2O.
+
+    @param[in] mass Residue mass of the key (Da).
+    @param[in] window Mass window (Da).
+    @return The aliases; empty when none is within the window.
+  */
+  std::vector<DipeptideAlias> dipeptideAliases(double mass, double window);
+  // ---- end 1.17 silac2 ----
+
   /**
     @brief Terminus counts over the filtered tags.
 
@@ -204,6 +249,16 @@ namespace FASTag::Digest
     /// nq the same for P2'..P4' by the P1' residue.
     std::array<std::array<std::uint64_t, NUM_AA>, NUM_AA> cq{}, nq{};
     // ---- end 1.13 digqual ----
+    // ---- 1.17 silac2: read by silac2Call() only (-label_format 2) ----
+    /// Per silac2Keys() entry: tags whose C-terminal flank mass is near the
+    /// key mass (s2_y, the y1-anchored route; c_near for the keys both
+    /// tables hold) and whose N-terminal flank mass is near the key mass +
+    /// the reversed-read offset (s2_b, a reversed b-ion read; n_h2o).
+    std::array<std::uint64_t, NUM_SILAC2_KEYS> s2_y{}, s2_b{};
+    /// Of those, the ends whose end mass (cterm, or nterm less the offset)
+    /// is also within the window of a dipeptideAliases() end mass of the key.
+    std::array<std::uint64_t, NUM_SILAC2_KEYS> s2_y_alias{}, s2_b_alias{};
+    // ---- end 1.17 silac2 ----
 
     /**
       @brief Tag ends that match key k.
@@ -230,6 +285,9 @@ namespace FASTag::Digest
     bool near_(double v, double m) const { return v >= m - w_ && v <= m + w_; }
     double w_;
     std::shared_ptr<const Flank2Bins> bins_;  ///< 1.12 D #3d; shared by copies
+    /// 1.17 silac2: per silac2Keys() entry the dipeptideAliases() end masses
+    /// at w_; built on first use, shared by copies.
+    std::shared_ptr<const std::array<std::vector<double>, NUM_SILAC2_KEYS>> s2_alias_;
   };
 
   // ---- model table ------------------------------------------------------
@@ -784,6 +842,9 @@ namespace FASTag::Digest
     bool da_tagged = false;
     std::string models = "shipped", background = "shipped_human";  ///< model table and background sources
     bool background_pseudocount = false;       ///< one count added per residue of the FASTA
+    /// -label_format (1.17): 1 writes the 1.16 -label_out; 2 appends the
+    /// silac2 rows (route, silac2) after label_call. Experimental.
+    int label_format = 1;
     // ---- 1.12 D: chemistry v2 (#3c-#3f), all off by default ----
     // At these defaults digestRows() writes the 1.11 rows byte for byte. Not
     // validated on held-out data; the fits come at the DEV regeneration on
@@ -1086,6 +1147,104 @@ namespace FASTag::Digest
     @return The report rows.
   */
   std::vector<Row> labelCallRows(const LabelCall& c, const TerminusCounter& tc, const DigestSettings& s);
+
+  // ---- 1.17 silac2: -label_format 2 (experimental, off by default) --------
+  //
+  // From the PXD067551 investigation (timsTOF, no y1 ends; Arg10 aliased by
+  // the dipeptide A+L): the two routes by which a tag end counts as a
+  // residue, kept apart, and one call per SILAC label. Appended after the
+  // label_call rows, which stay a byte prefix; label_call itself is
+  // unchanged. Not validated on held-out data (output/silac-067551/
+  // PREREG-silac-v2.md in the project folder holds the preregistered test).
+  //   - routes: y = cterm_mass near the residue mass (the tag reaches y1),
+  //     b = nterm_mass near the residue mass + H2O (a reversed b-ion read);
+  //   - alias: a key whose end mass is also a dipeptide's (dipeptideAliases();
+  //     R+10 = A+L less H2O, W = G+F less H2O at 0.008 Da) is assessed on the
+  //     y route alone, light and heavy alike;
+  //   - y gate: the y-route K ends (K, K+4, K+8) and R ends (R, R+6, R+10)
+  //     are each >= DigestSettings::silac_min;
+  //   - per label (Lys4/K+4, Arg6/R+6, Lys8/K+8, Arg10/R+10 against light K or
+  //     R): ends n = heavy + light on its routes (y+b, or y for an aliased
+  //     label), share = heavy / n with a Wilson 95% interval;
+  //     not_assessable when n < silac_min (reason alias_<XY> for an aliased
+  //     label, few_ends otherwise), present when share >= HEAVY_MIN (0.2),
+  //     else not_detected; every label on its own, no two-label rule;
+  //   - run: no_call low_resolution on a Da tolerance; otherwise a call
+  //     naming the present labels when any is present; none present and the
+  //     y gate closed: no_call no_y1_ends (not label-free); all four
+  //     not_detected: call none; else no_call with the first not-assessable
+  //     label's reason.
+
+  /// The SILAC labels of the silac2 call.
+  inline constexpr int NUM_SILAC2_LABELS = 4;
+  /// Two-sided 95% normal quantile of the Wilson interval.
+  inline constexpr double WILSON_Z95 = 1.959963984540054;
+
+  /**
+    @brief The Wilson score interval of a binomial share.
+
+    @param[in] k Successes.
+    @param[in] n Trials (> 0).
+    @param[in] z Normal quantile (WILSON_Z95 for 95%).
+    @return {low, high}, clamped to [0, 1]; {0, 1} for n = 0.
+  */
+  std::array<double, 2> wilson(std::uint64_t k, std::uint64_t n, double z = WILSON_Z95);
+
+  /**
+    @brief One label of the silac2 call.
+  */
+  struct Silac2Label
+  {
+    std::string name;          ///< Lys4, Arg6, Lys8 or Arg10
+    int heavy = 0, light = 0;  ///< silac2Keys() indices
+    std::string route;         ///< "y+b", or "y" for an aliased label
+    std::string alias;         ///< the alias dipeptides joined by "+" ("" when none)
+    std::uint64_t heavy_ends = 0, light_ends = 0;  ///< on the route(s)
+    double share = 0.0;        ///< heavy / (heavy + light); 0 when there is no end
+    std::array<double, 2> ci{0.0, 1.0};            ///< Wilson 95% interval of share
+    std::string call;          ///< present, not_detected or not_assessable
+    std::string reason;        ///< not_assessable: low_resolution, few_ends or alias_<XY>; else ""
+  };
+
+  /**
+    @brief The silac2 call: the y-route gate and one call per label.
+  */
+  struct Silac2Call
+  {
+    bool called = false;       ///< a run-level call was made
+    std::string reason;        ///< no call: low_resolution, no_y1_ends, few_ends or alias_<XY>
+    std::string silac;         ///< the present labels joined by "+", or "none"; "" on a no call
+    std::uint64_t y_k = 0, y_r = 0;  ///< y-route K (K, K+4, K+8) and R (R, R+6, R+10) ends
+    bool y_gate = false;       ///< y_k and y_r are each >= silac_min
+    std::uint64_t y_tot = 0;   ///< y-route ends of every residue key (residueKeys() and K+4, R+6)
+    double y_kr = 0.0;         ///< y-route K/R share of y_tot; 0 when y_tot is 0
+    std::array<Silac2Label, NUM_SILAC2_LABELS> labels;  ///< Lys4, Arg6, Lys8, Arg10
+  };
+
+  /**
+    @brief The silac2 call over the tag-end counts (see the rules above).
+
+    @param[in] tc Terminus counts.
+    @param[in] s Digest settings (window, silac_min, low_resolution).
+    @return The call.
+  */
+  Silac2Call silac2Call(const TerminusCounter& tc, const DigestSettings& s);
+  /**
+    @brief The rows -label_format 2 appends after labelCallRows().
+
+    Section route (format, then per silac2Keys() entry: <k>.y, <k>.b,
+    <k>.alias, <k>.y_alias, <k>.b_alias; then y.K.tags, y.R.tags, y.gate,
+    y.tot, y.kr), then section silac2 (per label: <L>.route, <L>.count,
+    <L>.share, <L>.ci_low, <L>.ci_high, <L>.call, <L>.reason; then status,
+    silac, reason).
+
+    @param[in] c The call.
+    @param[in] tc Terminus counts.
+    @param[in] s Digest settings.
+    @return The report rows.
+  */
+  std::vector<Row> silac2Rows(const Silac2Call& c, const TerminusCounter& tc, const DigestSettings& s);
+  // ---- end 1.17 silac2 ----
 
   /**
     @brief Settings of the mass-gap report.

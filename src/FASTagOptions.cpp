@@ -412,6 +412,16 @@ void TOPPFASTag::registerOptionsAndFlags_()
   registerIntOption_("digest_silac_min", "<n>", 50,
                      "K- and R-terminal tag ends each before -label_out's heavy shares are gated in", false, true);
   setMinInt_("digest_silac_min", 0);
+  // 1.17 silac2: format 2 appends the route-split SILAC rows after
+  // label_call (src/Digest.h). Off by default; format 1 is the 1.16 report
+  // byte for byte. Not validated on held-out data.
+  registerStringOption_("label_format", "<n>", "1",
+                        "Format of -label_out: '1' (1.16) or '2', which appends the y1-anchored and reversed-b "
+                        "routes of the K/R tag ends, their dipeptide aliases (Arg10 = A+L) and a call per SILAC "
+                        "label (Lys4, Arg6, Lys8, Arg10) with a Wilson 95% interval. Experimental, not validated "
+                        "on held-out data",
+                        false, true);
+  setValidStrings_("label_format", ListUtils::create<std::string>("1,2"));
   // 1.14: -label_call_min_tags removed (0 failed its held-out test); 175 is a constant again.
   registerIntOption_("label_call_min_tags", "<n>", 175, REMOVED_HELP, false, true);
   registerDoubleOption_("massgap_window", "<Da>", 0.02,

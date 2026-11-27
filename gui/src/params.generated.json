@@ -875,6 +875,18 @@
       "toppAdvanced": true
     },
     {
+      "name": "label_format",
+      "type": "string",
+      "default": "1",
+      "description": "Format of -label_out: '1' (1.16) or '2', which appends the y1-anchored and reversed-b routes of the K/R tag ends, their dipeptide aliases (Arg10 = A+L) and a call per SILAC label (Lys4, Arg6, Lys8, Arg10) with a Wilson 95% interval. Experimental, not validated on held-out data",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "1",
+        "2"
+      ]
+    },
+    {
       "name": "label_out",
       "type": "output-file",
       "default": "",

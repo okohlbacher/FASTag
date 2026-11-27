@@ -412,8 +412,10 @@ if(FASTAG_BUILD_TESTS)
   set(FASTAG_UNIT_TESTS_113 complement_tol_test cleavage_test tmt_pseudo_test)
   # ---- subsumed tags and terminal anchors: unit tests ----
   set(FASTAG_UNIT_TESTS_TERM subsume_test terminus_test)
+  # ---- 1.17 silac2 (-label_format 2): unit tests ----
+  set(FASTAG_UNIT_TESTS_SILAC2 silac2_test)
   foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F} ${FASTAG_UNIT_TESTS_113}
-            ${FASTAG_UNIT_TESTS_B113_MSFRAGGER} ${FASTAG_UNIT_TESTS_DIGQUAL} ${FASTAG_UNIT_TESTS_TERM})
+            ${FASTAG_UNIT_TESTS_B113_MSFRAGGER} ${FASTAG_UNIT_TESTS_DIGQUAL} ${FASTAG_UNIT_TESTS_TERM} ${FASTAG_UNIT_TESTS_SILAC2})
     add_executable(${t} test/${t}.cpp)
     target_link_libraries(${t} PRIVATE fastag_core)
     add_test(NAME ${t} COMMAND ${t})
@@ -559,6 +561,14 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
   set_tests_properties(digest_quality_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # 1.17 silac2: -label_format 2 on the vendored fixture (format 1 the
+  # default byte for byte, the 1.16 rows a byte prefix, the route counts a
+  # recount of the tag TSV, no_call low_resolution / no_y1_ends, refusals).
+  add_test(NAME label_format_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/label_format_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(label_format_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # 1.13 (#24): the shipped -alkylation_proteome proteomes: manifest against
   # the files, every name resolved in the installed and flat layouts, refusals.

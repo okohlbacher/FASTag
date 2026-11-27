@@ -370,6 +370,64 @@ stays below the always-label-free baseline. The second endpoint (0 no worse than
 holds by construction and carries no information. Per the preregistered decision rule the default stays
 175.
 
+### Label report format 2 (1.17, `-label_format 2`; experimental, off by default)
+
+Added after the PXD067551 investigation (project folder `output/silac-067551/REPORT.md`; timsTOF Pro 2,
+Lys8-only, Arg10-only and mixed cultures): 0 of 12 labelled runs were called SILAC, for three reasons the 1.16
+report cannot show. (1) Arg10 is an alias: the end mass of R+10 (166.1094 Da) is A+L less H2O (166.1106 Da,
+1.2 mDa; the y1 of Arg10, 185.1277, and the b2 of AL, 185.1285, differ by 4 ppm); 10,004 of 10,011 R+10 ends
+came from the `nterm_mass` route and 98 % of them are peptide N-termini AL/LA/AI/IA, so unlabelled runs show
+Arg10 shares of 0.65-0.94. (2) That timsTOF data has no y1 ends: the `cterm_mass` route gives 0-1 K, R ends
+per run, so the K/R share pools reversed reads only and fails 0.8 on every run. (3) The 1.16 rule needs both
+heavy shares at 0.2, so a single-label design cannot be called.
+
+`-label_format 2` appends two sections after `label_call`; every row before them, `label_call` included, is the
+format-1 report byte for byte, and no other output changes. Format 1 (the default) writes no new row.
+
+| Section | Keys | Value |
+|---|---|---|
+| `route` | `format` (`2`); per key k in `K`, `K+4`, `K+8`, `R`, `R+6`, `R+10`, `W`: `<k>.y` = `near(c, m_k)` (the y1-anchored route), `<k>.b` = `near(n, m_k + H2O)` (a reversed b-ion read; the series offset for c/z-dot), `<k>.alias` (the dipeptides whose end mass is within the window of `m_k`, or `-`), `<k>.y_alias`, `<k>.b_alias` (the route's ends whose end mass, `c` or `n − H2O`, is also within the window of an alias end mass); `y.K.tags` (y-route K, K+4, K+8), `y.R.tags` (R, R+6, R+10), `y.gate` (`yes` when both are ≥ `-digest_silac_min`), `y.tot` (y-route ends of every residue key, K+4 and R+6 included), `y.kr` (K/R share of `y.tot`; `-` when `y.gate` is `no`) | integer, word, decimal |
+| `silac2` | per label L in `Lys4` (K+4), `Arg6` (R+6), `Lys8` (K+8), `Arg10` (R+10): `<L>.route` (`y+b`, or `y` for an aliased label), `<L>.count` (heavy ends; `n` = heavy + light), `<L>.share` (heavy / (heavy + light)), `<L>.ci_low`, `<L>.ci_high` (Wilson score 95 % interval, z = 1.959964), `<L>.call` (`present`, `not_detected`, `not_assessable`), `<L>.reason` (`low_resolution`, `few_ends`, `alias_<XY>`, or `-`); then `status` (`call`, `no_call`), `silac` (the present labels joined by `+` in the order above, `none`, or `-` on a no call), `reason` (`low_resolution`, `no_y1_ends`, `few_ends`, `alias_<XY>`, or `-`) | word, integer, decimal |
+
+Masses: K+4 = K + 4.025107 (Label:2H(4)), R+6 = R + 6.020129 (Label:13C(6)), K+8 and R+10 as above, W 186.07931.
+An alias of a key is a pair of residues a ≤ b (AAS order, I counted as L) with |m(a) + m(b) − m_k| ≤ w (two
+residues in the flank) or |m(a) + m(b) − H2O − m_k| ≤ w (a b2 ion read as y1, or a peptide N-terminus a+b on the
+`nterm_mass` route). At w = 0.008 Da: R+10 = A+L less H2O, W = G+F less H2O; K, K+4, K+8, R and R+6 have none
+(at 0.02 Da R is also G+V).
+
+Rules (`FASTag::Digest::silac2Call`):
+
+1. Routes apart: each label uses the y and b routes, light and heavy alike, unless the heavy or the light key
+   has an alias; then it uses the y route alone (Arg10 at the default window). The b route of an aliased key
+   is never pooled.
+2. Per label: n = heavy + light ends on its routes. `not_assessable` when n < `-digest_silac_min` (50):
+   `alias_<XY>` for an aliased label (Arg10 without 50 y-route R and R+10 ends: `alias_AL`), `few_ends`
+   otherwise; `present` when share ≥ 0.2 (`HEAVY_MIN`, the 1.16 constant, per label); else `not_detected`.
+   No rule ties two labels together.
+3. Run: on a Da tolerance `no_call low_resolution`. A call naming the present labels when any is present (also
+   without y1 ends: an unaliased label on the b route). None present and `y.gate` `no`: `no_call no_y1_ends`,
+   where format 1 says label-free. All four `not_detected`: call `none`. Otherwise `no_call` with the first
+   not-assessable label's reason.
+
+The K/R share is reported on the y route only (`y.kr`) and is not a condition of the call: each share is a
+ratio within one residue. The isobaric labels stay in `label_call`. Nothing here was chosen on held-out data;
+the thresholds are the 1.16 constants (0.2, 50). The preregistered held-out test (project folder
+`output/silac-067551/PREREG-silac-v2.md`) decides whether format 2 or any of its rules becomes a default.
+
+**MS1 precursor pairs (not implemented, design note).** A SILAC pair is two MS1 features at the same retention
+time and ion mobility, Δm/z = n · 8.0142/z (Lys8) or n · 10.0083/z (Arg10) (4.0251/z, 6.0201/z for Lys4/Arg6),
+n the labelled residues of the peptide, with an isotope envelope of the same shape. Unlike tag ends it has no
+fragment alias (no dipeptide makes an MS1 mass difference) and it gives a mix's heavy fraction directly (summed
+heavy / (heavy + light) intensity over pairs). It needs MS1 spectra: FASTag reads MS2 only today (on Bruker
+input that means the MS1 frames of the .d file as well). A design would (a) read MS1 (mzML/mzPeak spectra of level 1; timsTOF
+frames with their mobility), (b) build features per precursor of each tagged MS2 (the precursor m/z, charge
+and RT window of the MS2 that gave a tag; this keeps the search to peptides FASTag sees), (c) look for the
+partner at ± k·Δ/z, k = 1..3, within 10 ppm, ± 0.1 min and ± 0.02 1/K0, with a matching
+isotope pattern (cosine ≥ 0.9 on the first three peaks), (d) count pairs against a decoy shift (Δ ± 0.5 Da/z)
+as the background, as `nlabel` does at +0.5 Da, and (e) report per label pairs, decoy pairs, the heavy
+intensity fraction and its interval. It would be a separate opt-in report (`-silac_pairs_out`), not part of
+`-label_out`, validated on the same preregistered held-out set before anything depends on it.
+
 ## `-massgap_out` (requires `-recon_out`, like `-delta_out`)
 
 Input is the `-delta_out` histogram (0.0005 Da bins, local-max grouped), built whether or not
@@ -416,6 +474,7 @@ Input is the `-delta_out` histogram (0.0005 Da bins, local-max grouped), built w
 | `-digest_window` | 0.008 Da | advanced |
 | `-digest_background_share` | 0.05 | advanced; below 1 |
 | `-digest_silac_min` | 50 | advanced |
+| `-label_format` | 1 | experimental (1.17); 2 appends the route and silac2 sections to `-label_out` |
 | `-label_call_min_tags` | 175 | removed in 1.14; no effect |
 | `-massgap_window`, `-massgap_window_da` | 0.02, 0.5 Da | advanced |
 | `-massgap_min_spectra`, `-massgap_min_share`, `-massgap_min_bin` | 20, 0.005, 2 | advanced |
@@ -424,8 +483,8 @@ Input is the `-delta_out` histogram (0.0005 Da bins, local-max grouped), built w
 | `-digest_quality <enzyme\|auto>` | empty (off) | experimental (1.13); requires `-digest_out` |
 
 `-digest_models`, `-digest_tag_min` and `-digest_background_share` without `-digest_out`,
-`-digest_window` without `-digest_out` or `-label_out`, and `-digest_silac_min` without `-label_out`
-are ignored with a warning.
+`-digest_window` without `-digest_out` or `-label_out`, and `-digest_silac_min` and `-label_format` without
+`-label_out` are ignored with a warning.
 
 **`FASTAG_FULL_PRECISION=1`** (environment, not in `--help`): the tag TSV writes `nterm_mass`,
 `cterm_mass` and `evalue` in shortest round-trip form instead of 4 decimals and 6 significant digits,
