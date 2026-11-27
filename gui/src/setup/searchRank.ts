@@ -2,7 +2,7 @@
 // the form by its name in words, its CLI flag or its help text. Choosing a
 // result opens its section and focuses its field (App.tsx).
 
-import { humanName, PARAM_BY_NAME, RENDERED, SECTIONS, UNIT_PARAMS } from '../paramLayout'
+import { humanName, PARAM_BY_NAME, RENDERED, SECTIONS, UNIT_PARAMS, uiOf } from '../paramLayout'
 
 export interface ParamHit {
   name: string
@@ -43,7 +43,9 @@ export function searchParams(query: string, limit = 20): ParamHit[] {
     if (!spec) return
     const byFlag = scoreText(name, words)
     const byName = scoreText(humanName(name), words)
-    const byHelp = scoreText(spec.description, words)
+    // The CLI's description, and the words users call its view by.
+    const extra = uiOf(name).keywords
+    const byHelp = scoreText(extra ? `${spec.description} ${extra}` : spec.description, words)
     let where: ParamHit['where']
     let score: number
     if (byFlag || byName) {

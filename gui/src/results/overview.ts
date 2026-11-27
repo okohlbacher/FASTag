@@ -301,6 +301,17 @@ export function topShift(text: string | null | undefined): { delta: string; spec
   return best
 }
 
+/// Where a mass-shift table (-delta_out) with a residues column (1.15.2
+/// on) is shown by residue, for the Top mass shift tile: the view, the file
+/// (@p path, the run's delta_out) and the column. null for a table without
+/// the column (it has no By residue view).
+export function byResidueNote(text: string | null | undefined, path: unknown): string | null {
+  const head = (text ?? '').split(/\r?\n/).find((l) => l !== '' && !l.startsWith('#'))
+  if (!head || !head.split('\t').some((h) => h.trim() === 'residues')) return null
+  const file = typeof path === 'string' && path.trim() !== '' ? (path.split(/[\\/]/).pop() ?? path) : '<run>.delta.tsv'
+  return `mass shifts by residue: Mass shifts › By residue (the residues column of ${file})`
+}
+
 /// The rank a species report reports at: @p asked (the run's species_rank)
 /// when it has rows there, else the rank of its first row.
 export function reportRank(sp: SpeciesReport | null | undefined, asked?: unknown): string {
@@ -493,6 +504,7 @@ export function buildOverview(i: OverviewInputs): Overview {
       note: `of ${fmt(numOf(dc.get('ms2_tagged')))} MS2 spectra with any tag, placed on the database (mass-shift accounting)`
     })
   const shift = topShift(i.delta)
+  const byResidue = byResidueNote(i.delta, i.params['delta_out'])
   const fewPlaced = placed != null && placed < LOW_PLACED
   if (shift)
     figures.push({
@@ -500,7 +512,7 @@ export function buildOverview(i: OverviewInputs): Overview {
       label: 'Top mass shift',
       value: `${Number(shift.delta) > 0 ? '+' : ''}${shift.delta} Da${shift.name ? ` (${shift.name})` : ''}`,
       tone: 'figure',
-      note: `${fmt(shift.spectra)} spectra, away from 0; a candidate, not an identified modification`
+      note: `${fmt(shift.spectra)} spectra, away from 0; a candidate, not an identified modification${byResidue ? `; ${byResidue}` : ''}`
     })
   // The survey's main result has a tile whatever it found (shownTiles shows
   // it when the mass-shift table was asked for): none is a result too.

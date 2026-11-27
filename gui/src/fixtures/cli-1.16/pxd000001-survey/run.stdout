@@ -1,0 +1,9 @@
+-threads 0: using 8 of 16 logical cores.
+Modifications: Carbamidomethyl (C, fixed)
+Recon index: 4499 proteins, 1455924 residues, 13 isobaric rules; min tag length 7 (derived)
+Delta counts: 847 MS2 placed of 5594 tagged; 847 samples (23 exact, 600 gapped, 224 terminal gaps); gaps 20 fragment-localized, 131 sequence-constrained, 113 ambiguous, 336 unlocalized; 847 in 222 rows
+Delta histogram: 847 spectra sampled -> run.delta.tsv
+Delta sites: 151 gaps localized, 449 unlocalized; names from 2787 Unimod and 683 PSI-MOD entries
+6103 MS2 spectra, 223912 tags
+Subsumed tags dropped: 26907
+FASTag took 1.14 s (wall), 4.20 s (CPU), 0.26 s (system), 3.94 s (user); Peak Memory Usage: 163 MB.

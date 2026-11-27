@@ -21,6 +21,7 @@ import { FASTA_EXTENSION, SHIFT_MIN_DA, type TileAction } from './overview'
 import { longestSeed, shortestSeed } from '../paramLayout'
 import ReportHeader from './ReportHeader'
 import ProductFiles, { type ProductFile } from './ProductFiles'
+import ResidueMatrix from './ResidueMatrix'
 import './viewers.css'
 
 /// Below this many placed spectra the gap distribution supports no
@@ -160,11 +161,16 @@ export function siblingMassgap(deltaPath: string): string {
   return `${dirName(deltaPath)}${stem == null ? '' : `${stem}.`}massgap.tsv`
 }
 
-type Dataset = 'recon' | 'delta' | 'reconIds'
+type Dataset = 'recon' | 'delta' | 'residues' | 'reconIds'
 const DATASET_LABEL: Record<Dataset, string> = {
   recon: 'Placements',
   delta: 'Mass-shift table',
+  // The mass-shift table's residues column as a matrix (ResidueMatrix.tsx).
+  residues: 'By residue',
   reconIds: 'Identifications (mzTab)'
+}
+const DATASET_TITLE: Partial<Record<Dataset, string>> = {
+  residues: 'Mass shifts by residue: the localized spectra of each mass shift on each residue, from the residues column of the mass-shift table'
 }
 
 const signed = (v: number, d = 4): string => (Number.isNaN(v) ? '' : v > 0 ? `+${v.toFixed(d)}` : v < 0 ? `−${(-v).toFixed(d)}` : (0).toFixed(d))
@@ -340,8 +346,11 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
 
 function ReconTables({ recon, delta, ids, loading }: { recon: ReconTable | null; delta: DeltaTable | null; ids: ReconIdTable | null; loading: boolean }): JSX.Element | null {
   // The survey's answer first: the mass-shift table with sites and UniMod
-  // names; the placements behind it are the detail.
-  const avail = (['delta', 'recon', 'reconIds'] as Dataset[]).filter((d) => (d === 'recon' ? recon : d === 'delta' ? delta : ids))
+  // names, and the same by residue (a table with a residues column, 1.15.2
+  // on); the placements behind it are the detail.
+  const avail = (['delta', 'residues', 'recon', 'reconIds'] as Dataset[]).filter((d) =>
+    d === 'recon' ? recon : d === 'delta' ? delta : d === 'residues' ? delta?.extra['residues'] : ids
+  )
   const [pick, setPick] = useSticky<Dataset | null>(delta ?? recon ?? ids, 'dataset', null)
   const ds = pick && avail.includes(pick) ? pick : avail[0]
   if (!ds) return loading ? <p className="muted">Reading the tables…</p> : null
@@ -350,7 +359,7 @@ function ReconTables({ recon, delta, ids, loading }: { recon: ReconTable | null;
       {avail.length > 1 && (
         <div className="seg" role="group" aria-label="Table">
           {avail.map((d) => (
-            <button key={d} type="button" aria-pressed={d === ds} onClick={() => setPick(d)}>
+            <button key={d} type="button" aria-pressed={d === ds} title={DATASET_TITLE[d]} onClick={() => setPick(d)}>
               {DATASET_LABEL[d]}
             </button>
           ))}
@@ -358,6 +367,7 @@ function ReconTables({ recon, delta, ids, loading }: { recon: ReconTable | null;
       )}
       {ds === 'recon' && recon && <PlacementTable t={recon} />}
       {ds === 'delta' && delta && <DeltaPeaks t={delta} />}
+      {ds === 'residues' && delta && <ResidueMatrix t={delta} />}
       {ds === 'reconIds' && ids && <IdTable t={ids} />}
     </section>
   )

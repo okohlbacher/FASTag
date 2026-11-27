@@ -625,6 +625,8 @@ export function installMockBridge(): MockBridge {
     writeSummary: (dest, text, protect) => {
       mock.summaryProtect.push(protect)
       if (mock.summaryWriteError) return Promise.reject(new Error(mock.summaryWriteError))
+      // As report.rs write_summary: a .tsv or .csv name only.
+      if (!/\.(tsv|csv)$/i.test(dest)) return Promise.reject(new Error(`the summary is a .tsv or .csv file, not "${dest}"`))
       // As report.rs write_summary: never over a protected file (the SDRF).
       if (protect?.includes(dest)) return Promise.reject(new Error(`cannot write ${dest}: it is the loaded SDRF, which is never written`))
       mock.summaryWrites.push({ dest, text })

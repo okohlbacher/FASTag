@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- **Desktop app, Mass shifts › By residue.** The mass-shift-by-residue matrix of a Mass-shift survey: beside the
+  Mass-shift table, one row per mass shift (gap, best UniMod/PSI-MOD name, spectra, localized, unlocalized,
+  localized %) and one column per residue, each cell the localized spectra from the `residues` column of
+  `<run>.delta.tsv`; terminal-ambiguous sites under N-term and C-term, or under their residue on request. A
+  Localized-at-least filter, hidden empty columns, sort by any heading (spectra first), the keyboard of the other
+  tables, and Export matrix… (TSV or CSV) with the rows and columns shown. Shown for tables with a `residues`
+  column (FASTag 1.15.2 or later).
+- **Findable.** The survey's Outputs list, task text and settings group, the Overview's Top mass shift tile and
+  a new Help section (Mass shifts by residue, residue matrix) name the view, the file and the column; Help search
+  and the parameter search find it by "residue matrix".
+- The CLI and its outputs are unchanged.
+
 ## 1.16.2 (2026-11-25)
 
 Fixes from the user-interface tests of 1.16.1, a new database-reduction recipe in the desktop app, Run QC tiles

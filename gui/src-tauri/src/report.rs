@@ -80,7 +80,8 @@ pub fn report_head(path: String) -> Result<Option<String>, String> {
     read_head(&path)
 }
 
-/// Write the batch summary TSV (P2b) to @p dest, a .tsv the user chose:
+/// Write the batch summary TSV (P2b), or a table the app exports (the
+/// residue matrix: .tsv or .csv), to @p dest, a file the user chose:
 /// to `<dest>.part` first, renamed over @p dest once complete, so a failed
 /// write never leaves a truncated summary under the chosen name.
 ///
@@ -88,8 +89,9 @@ pub fn report_head(path: String) -> Result<Option<String>, String> {
 /// passes the loaded SDRF): a @p dest that is one of them, by its path or
 /// as the same file on disk (another spelling, case, a link), is refused.
 pub(crate) fn write_summary(dest: &str, text: &str, protect: &[String]) -> Result<(), String> {
-    if !dest.to_ascii_lowercase().ends_with(".tsv") {
-        return Err(format!("the summary is a .tsv file, not {dest:?}"));
+    let lower = dest.to_ascii_lowercase();
+    if !(lower.ends_with(".tsv") || lower.ends_with(".csv")) {
+        return Err(format!("the summary is a .tsv or .csv file, not {dest:?}"));
     }
     if text.len() as u64 > SUMMARY_MAX_BYTES {
         return Err(format!("the summary is {} MB, too large", text.len() >> 20));
@@ -178,6 +180,11 @@ mod tests {
     fn summary_needs_a_tsv_name_and_a_writable_folder() {
         let e = write_summary(tmp("summary.txt").to_str().unwrap(), "x\n", &[]).unwrap_err();
         assert!(e.contains(".tsv"), "{e}");
+        // A CSV export (the residue matrix) is written the same way.
+        let c = tmp("matrix.CSV");
+        write_summary(c.to_str().unwrap(), "delta,name\n", &[]).unwrap();
+        assert_eq!(std::fs::read_to_string(&c).unwrap(), "delta,name\n");
+        std::fs::remove_file(&c).ok();
         let e = write_summary("", "x\n", &[]).unwrap_err();
         assert!(e.contains(".tsv"), "{e}");
         let missing = std::env::temp_dir().join("fastag-no-such-dir").join("s.tsv");

@@ -52,3 +52,5 @@ e2e-tauri/results
 # rules; listed so re-adding them needs no -f)
 !src/fixtures/cli-1.12/*.tsv
 !src/fixtures/sdrf/*.tsv
+# ...and the recorded 1.16 CLI outputs (gui/src/fixtures/cli-1.16/README.md)
+!src/fixtures/cli-1.16/**/*.tsv

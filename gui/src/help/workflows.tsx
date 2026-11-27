@@ -257,6 +257,7 @@ export const WORKFLOWS: HelpPage = {
             <li>Switch the gap plot between <strong>Chart</strong> and <strong>Bins</strong> (a table of the plotted bins; the Mass-shift table below has sites and UniMod names). Change the gap range to inspect outlying peaks; the chart reports peaks outside the shown range and any clipped zero peak. Arrow keys step through peaks when the chart is focused.</li>
             <li>UniMod marks (all of them with <strong>All UniMod marks</strong>) show known mass changes near a peak. A nearby mark or a CLI explanation is a hypothesis, not an identified modification. Opening a delta table without its mass-gap report uses an explicitly labelled, assumed 0.5 Da matching window.</li>
             <li>In the placement table, <strong>Contains</strong> searches spectrum, tag, protein or peptide. <strong>|Δ| at least (Da)</strong> filters by the size of the gap in either direction. <strong>Interpretation</strong> selects modification, substitution or unexplained rows; <strong>One flank off</strong> keeps placements with a gap localized to one side of the tag.</li>
+            <li><strong>By residue</strong>, beside the Mass-shift table, shows the same mass shifts as a matrix over the residues: see <L to="workflow-shift-residues">Mass shifts by residue</L>.</li>
           </ul>
           <p>
             Table filters and sort order are kept when switching tabs. Reconciliation identifications are
@@ -266,6 +267,32 @@ export const WORKFLOWS: HelpPage = {
             is listed as a file the same way, with buttons to reveal it or open it in another tool. This limit is
             separate from the large-file Tags browser. Placements are not FDR-controlled identifications;
             read <L to="digest-gaps">how mass gaps are interpreted</L> before drawing a conclusion.
+          </p>
+        </>
+      )
+    },
+    {
+      id: 'workflow-shift-residues',
+      title: 'Mass shifts by residue (residue matrix)',
+      body: (
+        <>
+          <p>
+            <strong>Results › Mass shifts › By residue</strong> is the mass-shift-by-residue matrix of a
+            Mass-shift survey: one row per mass shift, one column per residue, each cell the spectra of that
+            shift localized on that residue. It reads the <code>residues</code> column of the Mass-shift table,{' '}
+            <code>&lt;run&gt;.delta.tsv</code> (<L to="param-delta_out">-delta_out</L>), whose{' '}
+            <code>site:count</code> pairs count localized spectra only; a table without that column (FASTag
+            1.15.1 or earlier) has no By residue view.
+          </p>
+          <ul>
+            <li>Each row gives the gap (Da), the best name (the first UniMod name that fits a site of the row, else the first PSI-MOD name, else an isotope error), its spectra, and the row totals <strong>Localized</strong>, <strong>Unlocalized</strong> and <strong>Localized %</strong>: the site columns of a row add up to its Localized count, so a shift with few localized spectra says little about where it sits.</li>
+            <li>The columns are the 20 residues, and <strong>N-term</strong> and <strong>C-term</strong> when the table has terminal-ambiguous sites (N-term|K: the N-terminus or the K side chain; Protein N-term|M). <strong>Terminal sites under their residue</strong> counts those under K or M instead. Hover a cell for the sites behind it.</li>
+            <li><strong>Localized at least</strong> keeps the rows with that many localized spectra (1 at first); <strong>Hide empty residue columns</strong> leaves out the residues no row shown has. Click a heading to sort, by spectra (the first order) or by gap; in the table the arrow keys, Page Up/Down, Home and End move the active row.</li>
+            <li><strong>Export matrix…</strong> writes the rows and columns shown, in the order shown, as TSV, or as CSV when the file is named .csv: <code>delta</code>, <code>name</code>, <code>spectra</code>, <code>localized</code>, <code>unlocalized</code>, <code>localized_pct</code>, then one column per site (0 where the matrix is blank).</li>
+          </ul>
+          <p>
+            The counts are candidates, not identifications: localization is by fragment ions, nothing is
+            FDR-controlled, and a name is a hypothesis.
           </p>
         </>
       )
