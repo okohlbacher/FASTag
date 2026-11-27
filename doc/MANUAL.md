@@ -3,7 +3,7 @@
 The desktop app runs the FASTag command-line tool for you and shows its results: tags, spectra,
 species, digestion and labels. Everything it does can also be done on the command line
 ([TUTORIAL.md](TUTORIAL.md)); **Export INI…** and **Copy command line** give the exact command.
-Screenshots are from FASTag 1.15 on macOS; Windows and Linux look the same apart from the
+Screenshots are from FASTag 1.16.2 on macOS; Windows and Linux look the same apart from the
 window frame.
 
 Install: see the [README](../README.md#install) (macOS disk image or Homebrew cask, Windows
@@ -31,7 +31,7 @@ Setup goes through four steps: **Task**, **Inputs**, **Settings** and **Outputs 
 3. The **Instrument** preset under **About these spectra** sets the fragment tolerance. MS2
    spectra that the file marks as ion-trap (in the Thermo filter string, `ITMS`, or in the
    spectrum's instrument configuration) are tagged at 0.5 Da whatever the preset (Advanced ›
-   **Fragment tolerance by analyzer**, on by default). The preset's tolerance applies to all
+   Fragment tolerance by analyzer › **Tolerance by analyzer**, on by default). The preset's tolerance applies to all
    other spectra and to the placement and mass-shift reports, so it must match the analyser that
    read the MS2: about 20 ppm for Orbitrap, Astral or TOF MS2, 0.3 Da for ion-trap MS2. This
    file's spectra are marked `ITMS`, so its tags are read at 0.5 Da with any preset; choose
@@ -42,7 +42,9 @@ Setup goes through four steps: **Task**, **Inputs**, **Settings** and **Outputs 
 6. Click **Run**.
 
 If the tolerance was wrong for spectra the file does not mark as ion-trap, **Checks after the run**
-says so from the peak spacing it saw and offers a re-run with the right setting:
+says so from the peak spacing it saw and offers a re-run with the right setting. (The screenshot
+was taken with **Tolerance by analyzer** turned off, so the example's ion-trap spectra were read at
+20 ppm.)
 
 ![Checks after a run at the wrong tolerance](images/manual-02-checks-after-run.png)
 
@@ -71,7 +73,8 @@ and Mass shifts tables, a click on a scan (it has the spectrum icon) opens it th
 
 The stick plot shows the peaks FASTag used; the tag's b and y ladders are drawn over them on
 their own lines, each labelled with its series as judged from the peaks (**b or y?** when it is not
-told apart), with the mass error of each step, and the table below lists the spectrum's other tags.
+told apart), with the mass error of each step. Below the plot, a run with a FASTA aligns the tag on its
+proteins (**Alignment on the database**), and the table lists the spectrum's other tags.
 
 ## 3. Surveying a run
 
