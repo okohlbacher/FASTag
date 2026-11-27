@@ -278,6 +278,9 @@ jobs:
     # installed-app checked them.
     permissions:
       contents: read
+      # read: the Test step's reuse lookup on a v* tag (fastag/.github/scripts/tested-tree.sh)
+      # lists this workflow's earlier runs and their jobs.
+      actions: read
     outputs:
       signed: ${{ steps.signpath-gate.outputs.enabled }}
     env:
@@ -461,7 +464,21 @@ jobs:
           echo "MZPEAK_VALIDATE=$V" >> "$GITHUB_ENV"
           echo "validator: $V"
 
+      # A v* tag push does not re-run ctest when an earlier push or dispatch
+      # run of this workflow with the SAME git tree passed the Test step of
+      # this job (ci.yml has the same step; .github/scripts/tested-tree.sh).
+      # Any API error, a main push or a dispatch (release_tag included): the
+      # tests run as before.
+      - name: Look for an identical tree that already passed the tests (tag builds)
+        id: test-reuse
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash fastag/.github/scripts/tested-tree.sh windows-x64
+
       - name: Test
+        if: steps.test-reuse.outputs.reuse != 'true'
         shell: bash
         env:
           FASTAG_PYTHON: ${{ steps.validator-python.outputs.python-path }}
@@ -480,7 +497,11 @@ jobs:
           # separately, with a scrubbed environment, further down.
           SHARE=$(find "$WS/openms-install" -type d -path '*/share/OpenMS' 2>/dev/null | head -1)
           [ -n "$SHARE" ] && export OPENMS_DATA_PATH="$SHARE" && echo "OPENMS_DATA_PATH=$SHARE"
-          ctest --test-dir fastag/build --output-on-failure 2>&1 | tee ctest.log
+          # One test per core: the tests are independent (their own temp
+          # directories; fixtures, RUN_SERIAL and COST in CMakeLists.txt).
+          NJ="${NUMBER_OF_PROCESSORS:-$(nproc 2>/dev/null || echo 2)}"
+          echo "ctest -j $NJ"
+          ctest --test-dir fastag/build --output-on-failure -j "$NJ" 2>&1 | tee ctest.log
           # The mzPeak tests SKIP themselves in a build without mzPeak support
           # or without the validator. This job has both, so a skip here would
           # be a broken harness presenting as green -- the very class of
@@ -495,7 +516,17 @@ jobs:
             grep -E "Test +#[0-9]+: $t " ctest.log | grep -q 'Passed' \
               || { echo "::error::$t did not pass (skipped, not run or missing)"; grep -E "$t" ctest.log || true; exit 1; }
           done
-          # ...and the binary reads both formats for real.
+
+      # Not part of Test, so a tag build that reuses an earlier test run still
+      # reads both vendor formats with the binary it built.
+      - name: Read the vendor test files with the built binary
+        shell: bash
+        run: |
+          set -o pipefail
+          # The same OpenMS share data as the Test step.
+          SHARE=$(find "$WS/openms-install" -type d -path '*/share/OpenMS' 2>/dev/null | head -1)
+          [ -n "$SHARE" ] && export OPENMS_DATA_PATH="$SHARE" && echo "OPENMS_DATA_PATH=$SHARE"
+          # The binary reads both formats for real.
           ./fastag/build/FASTag.exe -in fastag/test/fixtures/bruker/PXD040281_SA_02_trim.d -out /tmp/ci-bruker.tsv -threads 2 > /tmp/ci-bruker.log 2>&1 \
             || { cat /tmp/ci-bruker.log; echo "::error::the build cannot read the Bruker fixture"; exit 1; }
           grep -E "Bruker timsTOF input: [1-9][0-9]* MS2 spectra" /tmp/ci-bruker.log \
@@ -1025,6 +1056,9 @@ jobs:
       # test/mzpeak_validate.sh.
       - name: Validate every mzPeak archive this job wrote
         shell: bash
+        env:
+          TESTS_REUSED: ${{ steps.test-reuse.outputs.reuse == 'true' }}
+          TESTS_REUSED_FROM: ${{ steps.test-reuse.outputs.run_url }}
         run: |
           set -euo pipefail
           R=validator-reports; rm -rf "$R"; mkdir -p "$R"
@@ -1032,7 +1066,11 @@ jobs:
             || { echo "::error::the CONTROL archive (reference converter) fails the pinned validator -- the validator or its pin is broken, not FASTag"; exit 1; }
           bash fastag/test/mzpeak_validate.sh "$R/bundle" /tmp/bundle-mzpeak/bundle.mzpeak \
             || { echo "::error::the archive the shipped bundle wrote is not a valid mzPeak archive"; exit 1; }
-          cp -r fastag/build/mzpeak-roundtrip/validator "$R/ctest"
+          if [ "$TESTS_REUSED" = true ]; then
+            echo "ctest did not run here (tests reused from $TESTS_REUSED_FROM): no round-trip reports to collect"
+          else
+            cp -r fastag/build/mzpeak-roundtrip/validator "$R/ctest"
+          fi
           ls -R "$R" | head -40
 
       # The reports, pass or fail: a red validator run is only useful with

@@ -1085,4 +1085,24 @@ if(FASTAG_BUILD_TESTS)
                COMMAND benchmark synth ${prof} 150 4 1 2 100)
     endforeach()
   endif()
+
+  # Parallel ctest (CI runs `ctest -j <cores>`): the tests are independent --
+  # each writes into its own mktemp/temp_directory_path directory or its own
+  # build subdirectory, the archives mzpeak_validate reads come from the
+  # mzpeak_roundtrip fixture, and shipped_data_test, the one test that changes
+  # the build tree, is RUN_SERIAL. A fresh CI build has no CTestCostData.txt,
+  # so ctest would start tests in number order and the slowest ones, near the
+  # end of the list, would finish last on their own. COST (about their serial
+  # seconds on the CI runners, 1.16.4) starts them first.
+  foreach(_cost charge_cli_test:200 species_call_cli_test:150 species_orientation_cli_test:80
+                species_dump_cli_test:55 subsume_cli_test:55 digest_cli_test:45 msfragger_cli_test:40
+                threads_test:40 shortlist_cli_test:40 proteomes_cli_test:40 cli_guards_test:35
+                census_ids_cli_test:35 gui_cli_test:30)
+    string(REPLACE ":" ";" _cost "${_cost}")
+    list(GET _cost 0 _t)
+    list(GET _cost 1 _c)
+    if(TEST ${_t})
+      set_tests_properties(${_t} PROPERTIES COST ${_c})
+    endif()
+  endforeach()
 endif()
