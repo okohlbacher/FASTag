@@ -32,8 +32,11 @@
   too); `-qc_out`'s `reporter_kit`, which reads the reporter ions, decides between them (262 of 265 iTRAQ8 runs
   `itraq8plex`). The `nlabel` rows keep their `TMTpro.*` keys; `-qc_out`'s kit descriptions name the mass
   `TMTpro/iTRAQ8`. A `-digest_window` below 1.786 mDa writes `TMTpro` as before.
-- The tag TSV and every other output are unchanged; Orbitrap-only runs give byte-identical reports except the
-  `TMTpro` label row.
+- The tag TSV and every other output are unchanged. A run without Da-tagged tags changes only where the 304.2 Da
+  label passes: the `label_call` `label` row, and the descriptions of `-qc_out`'s `reporter_kit` and
+  `reporter_family_evidence` when that label decides the kit. PXD031575 (514 runs, rerun with this build): the 96
+  TMTpro runs go from `label-free` to `no_call low_resolution` (every filtered tag Da-tagged), the 254 iTRAQ8 runs
+  called `TMTpro` read `TMTpro/iTRAQ8`, the 153 iTRAQ4 runs are byte-identical; PXD000001 (TMT6) is byte-identical.
 - **Desktop app:** Help (Labels) describes both changes; the Overview lists `TMTpro/iTRAQ8` as "TMTpro or
   iTRAQ8plex".
 
