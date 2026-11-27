@@ -480,7 +480,9 @@ superseded CLI child in the backend. The MS2's Thermo filter strings decide
 first (1.16.4: the probe's `ms2_filter_itms` and `ms2_filter_ftms`): when
 most probed MS2 say `ITMS` the run is ion trap, when most say `FTMS` it is
 high-resolution and gets no ion-trap warning, whatever the instrument
-configurations name. Otherwise the instrument family is the CLI's
+configurations name. An ion-trap run by its filter strings at a ppm tolerance
+gets a warning, not a red flag, while Tolerance by analyzer is on: FASTag tags
+those MS2 at `-fragment_tolerance_itms` anyway. Otherwise the instrument family is the CLI's
 `ms2_analyzer` where it names one; by name only an instrument without a
 second analyser (LTQ XL, LTQ Velos) is an ion trap, while the hybrids (LTQ
 Orbitrap, Orbitrap Elite, the Tribrids, LTQ FT, LTQ FT Ultra) need the

@@ -1,0 +1,7 @@
+{"record":"probe","format":1,"version":"1.16.4","input":"test/fixtures/Ecoli_MS2_small.mgf","file_format":"MGF"}
+{"record":"instrument","name":null,"model":null,"ms2_analyzer":null,"ms2_analyzer_from":null,"ion_mobility":null,"ms2_filter_itms":0,"ms2_filter_ftms":0}
+{"record":"spectra","ms1":0,"ms2":139,"ms2_probed":139,"ms2_centroid":139,"ms2_profile":0,"ms2_type_unknown":0,"verdict":"centroid","pick_profile":"legacy","will_pick":false,"may_pick_unknown":false}
+{"record":"activation","of":139,"collisional":0,"electron":0,"hybrid":0,"unknown":139}
+{"record":"index","state":"not_applicable"}
+{"record":"acquisition","mode":"DDA","why":"no repeating window scheme (periodicity 0.12 over 26 repeat gaps, cycle 51, 113 distinct precursor m/z, 0% uncharged, 139 MS2 probed)","warn":false,"refuse":false,"check":"refuse","ms2_probed":139,"windows":113,"median_width":0}
+{"record":"end"}

@@ -27,6 +27,7 @@ import diaRc from '../fixtures/cli-1.12/dia_raw.rc?raw'
 import ecoliProbe from '../fixtures/probe/ecoli_ms2_small.probe.jsonl?raw'
 import ecoliProbe1164 from '../fixtures/probe/ecoli_ms2_small.1.16.4.probe.jsonl?raw'
 import ecoliFtmsProbe1164 from '../fixtures/probe/ecoli_ms2_small_ftms.1.16.4.probe.jsonl?raw'
+import ecoliMgfProbe1164 from '../fixtures/probe/ecoli_ms2_small_mgf.1.16.4.probe.jsonl?raw'
 import ecoliDigest from '../fixtures/cli-1.15/ecoli_ms2_small_20ppm.digest.tsv?raw'
 import ecoliErr from '../fixtures/cli-1.15/ecoli_ms2_small_20ppm.stderr?raw'
 
@@ -354,12 +355,32 @@ describe('Ecoli_MS2_small.mzML: the checks before and after the run agree', () =
   })
 
   // FASTag 1.16.4's probe also counts the MS2 filter strings (ITMS / FTMS).
-  it('1.16.4 probe: ITMS filter strings make it ion trap, whatever the configuration names', () => {
+  // The real probe of the file the installed-app specs run (e2e-tauri,
+  // E2E_MZML): its ITMS MS2 are tagged at 0.5 Da by -tolerance_by_analyzer
+  // (on by default), so 20 ppm only warns and Run is not held.
+  it('1.16.4 probe: ITMS filter strings make it ion trap; tagged at 0.5 Da by analyzer, so a warning, not a red flag', () => {
     const r = pre(ecoliProbe1164)
     expect(r.detected).toMatchObject({ family: 'ion-trap', preset: 'iontrap-cid', text: 'LTQ Orbitrap XL' })
+    expect(ids(r.checks)).toEqual(['warn:iontrap-ppm-tagged'])
+    expect(r.checks[0].detail).toContain('The filter strings of 139 probed MS2 of LTQ Orbitrap XL say ITMS')
+    expect(r.checks[0].detail).toContain('FASTag tags them at 0.5 Da')
+    expect(r.checks[0].fix).toEqual({ label: 'Use Ion trap CID 0.5 Da', instrument: 'iontrap-cid' })
+    expect(r.checks.some((c) => c.level === 'flag' || c.level === 'block')).toBe(false)
+    expect(pre(ecoliProbe1164, { ...ppm, tolerance_by_analyzer: 'on', fragment_tolerance_itms: '0.6' }).checks[0].title).toBe(
+      'Ion-trap MS2 with a 20 ppm tolerance: tagged at 0.6 Da'
+    )
+  })
+
+  it('1.16.4 probe, Tolerance by analyzer off: every MS2 at 20 ppm, the red flag', () => {
+    const r = pre(ecoliProbe1164, { ...ppm, tolerance_by_analyzer: 'off' })
     expect(ids(r.checks)).toEqual(['flag:iontrap-ppm'])
     expect(r.checks[0].detail).toContain('the filter strings of 139 probed MS2 say ITMS')
-    expect(r.checks.some((c) => c.id === 'hybrid-ppm')).toBe(false)
+  })
+
+  it('1.16.4 probe of the MGF twin (no filter strings, no instrument): nothing to question', () => {
+    const r = pre(ecoliMgfProbe1164)
+    expect(r.detected?.family).toBe('unknown')
+    expect(r.checks).toEqual([])
   })
 
   it('1.16.4 probe of the FTMS twin: no ion-trap warning at 20 ppm, the Orbitrap preset is detected', () => {

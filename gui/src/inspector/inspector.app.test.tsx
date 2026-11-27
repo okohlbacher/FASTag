@@ -16,6 +16,7 @@ import diaRawProbe from '../fixtures/probe/dia_raw.probe.jsonl?raw'
 import noMs2Probe from '../fixtures/probe/no_ms2.probe.jsonl?raw'
 import fastaProbe from '../fixtures/probe/fasta_nodecoys.probe.jsonl?raw'
 import orbitrapProbe from '../fixtures/probe/orbitrap.probe.jsonl?raw'
+import ecoliProbe1164 from '../fixtures/probe/ecoli_ms2_small.1.16.4.probe.jsonl?raw'
 import it20Digest from '../fixtures/cli-1.12/iontrap_20ppm.digest.tsv?raw'
 import it20Label from '../fixtures/cli-1.12/iontrap_20ppm.label.tsv?raw'
 import it20Err from '../fixtures/cli-1.12/iontrap_20ppm.stderr?raw'
@@ -150,6 +151,24 @@ describe('inspector before a run', () => {
     expect(runButton().getAttribute('aria-describedby')).toBeNull()
     await click(runButton())
     expect(mock.runCalls[0].params).toMatchObject({ fragment_tolerance: '0.5', fragment_tolerance_unit: 'Da' })
+  })
+
+  // The real FASTag 1.16.4 probe of test/fixtures/Ecoli_MS2_small.mzML, the
+  // file the installed-app specs (e2e-tauri) run at the defaults: its ITMS
+  // MS2 are tagged at 0.5 Da by analyzer, so Run is not held.
+  it('the real 1.16.4 probe of the E. coli fixture at 20 ppm: a warning, and Run stays enabled', async () => {
+    const mock = installMockBridge()
+    withProbe(mock, ecoliProbe1164)
+    await renderApp(mock)
+    await pickSingle(mock, IN)
+    await flush()
+    const w = checkItem(/^Warning: Ion-trap MS2 with a 20 ppm tolerance: tagged at 0.5 Da/)
+    expect(w.textContent).toContain('say ITMS')
+    expect(screen.getByRole('option', { name: 'Ion trap CID 0.5 Da (detected)' })).toBeDefined()
+    expect((runButton() as HTMLButtonElement).disabled).toBe(false)
+    expect(runButton().getAttribute('aria-describedby')).toBeNull()
+    await click(runButton())
+    expect(mock.runCalls).toHaveLength(1)
   })
 
   it('held on Settings: Review input checks goes to Inputs and focuses the red flag to answer', async () => {

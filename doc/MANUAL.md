@@ -28,8 +28,8 @@ Setup goes through four steps: **Task**, **Inputs**, **Settings** and **Outputs 
 2. **Inputs**: **Checks before the run** reads the file's metadata. Here the instrument is an LTQ
    Orbitrap XL, which can read MS2 in either analyser. Its instrument configuration does not say
    which, but the MS2's filter strings say `ITMS`: since 1.16.4 the app detects ion-trap MS2 from
-   them and raises a red flag for the 20 ppm default (the screenshot, from 1.16.2, shows the older
-   warning that the MS2 may be ion-trap).
+   them and warns that they are tagged at 0.5 Da while the reports use the 20 ppm default (the
+   screenshot, from 1.16.2, shows the older warning that the MS2 may be ion-trap).
 3. The **Instrument** preset under **About these spectra** sets the fragment tolerance. MS2
    spectra that the file marks as ion-trap (in the Thermo filter string, `ITMS`, or in the
    spectrum's instrument configuration) are tagged at 0.5 Da whatever the preset (Advanced ›

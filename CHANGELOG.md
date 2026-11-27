@@ -5,7 +5,9 @@
 - **Desktop app, ion-trap check reads the filter strings (fix).** The check before the run no longer warns that
   the MS2 "may be read in the ion trap" when their Thermo filter strings say `FTMS`, and it detects ion-trap MS2
   from `ITMS` filter strings, whatever the instrument configurations name (often the Orbitrap of an LTQ Orbitrap
-  whose MS2 were read in the ion trap, as in `test/fixtures/Ecoli_MS2_small.mzML`). `-probe_input`'s
+  whose MS2 were read in the ion trap, as in `test/fixtures/Ecoli_MS2_small.mzML`). At a ppm tolerance such a run
+  gets a warning, not a red flag, while Tolerance by analyzer is on (the default): FASTag tags its ITMS MS2 at
+  0.5 Da anyway, and only the reports use the ppm tolerance; with it off, the red flag holds Run as before. `-probe_input`'s
   `instrument` record has two new fields, `ms2_filter_itms` and `ms2_filter_ftms` (probed MS2 whose filter
   string names that analyser; probe format still 1). Tagging, the label call and species ranking are unchanged.
 - **Desktop app, Ion trap CID preset at 0.5 Da (fix).** The preset sets 0.5 Da instead of 0.3 Da, the tolerance

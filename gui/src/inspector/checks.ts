@@ -507,7 +507,30 @@ export function preStartChecks(o: {
   const family = familyOf(facts)
   const preset = presetFor(family)
   const detected: Detected = { family, text: instrumentText(facts), preset, source: 'the probe' }
-  if (family === 'ion-trap' && unit === 'ppm') {
+  // The MS2's filter strings say ITMS and -tolerance_by_analyzer is on (the
+  // CLI default): the run tags those spectra at -fragment_tolerance_itms
+  // whatever the fragment tolerance (RunQC::factsOf reads the same filter
+  // strings), so the tags are fine and nothing holds Run; only the reports
+  // (placement, mass shifts) use the ppm tolerance. A warning, as 1.16.3
+  // gave these files (test/fixtures/Ecoli_MS2_small.mzML).
+  const settingOf = (n: string): string => {
+    const v = String(values[n] ?? '').trim()
+    return v === '' ? String(PARAM_BY_NAME.get(n)?.default ?? '') : v
+  }
+  const byFilter = (facts.ms2FilterItms ?? 0) > (facts.ms2FilterFtms ?? 0)
+  const taggedByAnalyzer = byFilter && settingOf('tolerance_by_analyzer') !== 'off'
+  if (family === 'ion-trap' && unit === 'ppm' && taggedByAnalyzer) {
+    const itmsTol = settingOf('fragment_tolerance_itms') || '0.5'
+    checks.push({
+      id: 'iontrap-ppm-tagged',
+      level: 'warn',
+      title: `Ion-trap MS2 with a ${tolOf(values)} ppm tolerance: tagged at ${itmsTol} Da`,
+      detail: `The filter strings of ${facts.ms2FilterItms} probed MS2 of ${instrumentText(facts) ?? 'this instrument'} say ITMS (read in the ion trap). Tolerance by analyzer is on, so FASTag tags them at ${itmsTol} Da; the placement and mass-shift reports use the ${tolOf(values)} ppm fragment tolerance. ${presetText(IONTRAP)} is the preset for them.`,
+      faq: 'faq-tolerance-warning',
+      source: 'the probe',
+      fix: { label: `Use ${presetText(IONTRAP)}`, instrument: IONTRAP.id }
+    })
+  } else if (family === 'ion-trap' && unit === 'ppm') {
     checks.push({
       id: 'iontrap-ppm',
       level: 'flag',
