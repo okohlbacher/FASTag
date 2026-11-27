@@ -12,7 +12,30 @@
 - **Findable.** The survey's Outputs list, task text and settings group, the Overview's Top mass shift tile and
   a new Help section (Mass shifts by residue, residue matrix) name the view, the file and the column; Help search
   and the parameter search find it by "residue matrix".
-- The CLI and its outputs are unchanged.
+- **`-label_out` on ion-trap MS2 (fix).** Since 1.15.5, `-tolerance_by_analyzer` (default on) tags ion-trap MS2 at
+  0.5 Da, but the label call still read the run's ppm tolerance and called such runs at the 0.008 Da label windows,
+  mostly label-free (all 96 TMTpro runs of PXD031575, which have ion-trap CID MS2 and SPS-MS3). The tag ends of a
+  spectrum tagged at a Da tolerance are as coarse as on a Da run, where the documented rule is no call. A run whose
+  filtered tags come mostly (more than half) from spectra tagged at a Da tolerance now gets `no_call` with reason
+  `low_resolution`, and the description says how many tags were Da-tagged. The `run` row `low_resolution` reads
+  `yes` with `n` the Da-tagged tags; on a run with fewer than half Da-tagged it stays `no`, with `n` and a sentence
+  giving their number. The counts are unchanged. A bug fix: the code now does what the documentation says
+  ("no call on a Da tolerance"); no default changes.
+- **`-digest_out` the same (fix).** The protease call read the same run-level flag: on such a run it now gives
+  `no_call low_resolution` (first in the rule order) instead of the next rule (on the PXD031575 TMTpro runs
+  `ms2_scan_window`, on the bundled E. coli example `ms2_first_peak`), and `-digest_quality` is `not_measured`
+  `low_resolution`. `-qc_out`'s kit call reads the same label call: on such a run the label mass no longer decides
+  the family (`reporters_only`, "most filtered tags come from MS2 tagged at a Da tolerance").
+- **`-label_out` names `TMTpro/iTRAQ8` (fix).** iTRAQ8plex (304.2054 Da) lies 1.8 mDa from TMTpro (304.2071 Da),
+  inside the 0.008 Da label window, so the tag ends cannot tell them apart; the call wrote `TMTpro` and named it on
+  254 of 265 iTRAQ8 runs of PXD031575. The label row now reads `TMTpro/iTRAQ8` (with `+SILAC` when SILAC passes
+  too); `-qc_out`'s `reporter_kit`, which reads the reporter ions, decides between them (262 of 265 iTRAQ8 runs
+  `itraq8plex`). The `nlabel` rows keep their `TMTpro.*` keys; `-qc_out`'s kit descriptions name the mass
+  `TMTpro/iTRAQ8`. A `-digest_window` below 1.786 mDa writes `TMTpro` as before.
+- The tag TSV and every other output are unchanged; Orbitrap-only runs give byte-identical reports except the
+  `TMTpro` label row.
+- **Desktop app:** Help (Labels) describes both changes; the Overview lists `TMTpro/iTRAQ8` as "TMTpro or
+  iTRAQ8plex".
 
 ## 1.16.2 (2026-11-25)
 
