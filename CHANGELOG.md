@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Desktop app, no unshifted rows in any Mass shifts table.** The 0.5 Da cut of 1.16.3 now applies to every
+  table of the Mass shifts tab: the gap chart's **Bins**, the **Placements** (exact placements included) and
+  **Spectra per mass shift**, besides the Mass-shift table and By residue. A line under each table gives the
+  spectra (or placements) it leaves out. The chart still draws the zero bin, cut, as the reference; the Placed
+  spectra, Shifted and Placements counts, the Overview tiles and the CLI's files are unchanged. The placements'
+  Interpretation filter loses "none (no gap)", which only exact placements matched.
+- **Desktop app, full width for Mass shifts.** The Mass shifts tab uses the window's width instead of the
+  1200 px content column, so the residue matrix shows its 22 site columns on a wide window; on a narrow one the
+  tables still scroll sideways in their own box.
+
 ## 1.16.3 (2026-11-27)
 
 - **Desktop app, pooled residue matrix.** Mass shifts › By residue pools the mass-shift tables of several runs
