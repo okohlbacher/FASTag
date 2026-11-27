@@ -1406,6 +1406,30 @@ jobs:
           python3 tools/gui_third_party_notices.py --gui gui --target "$target" --platform macos \
             --out gui/src-tauri/resources/fastag/GUI-THIRD-PARTY-NOTICES.txt
 
+      # The release profile's compiled crates (Cargo registry, deps/, build/,
+      # .fingerprint/ -- never bundle/, the staged resources or the app
+      # binary), keyed on the image, the architecture, rustc and Cargo.lock,
+      # falling back to the newest of the same toolchain. Saved right after
+      # the build that filled it.
+      - name: Cargo cache key
+        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && runner.os == 'macOS')
+        id: cargo-key
+        shell: bash
+        run: echo "key=cargo-release-${{ runner.os }}-${{ runner.arch }}-${ImageOS:-img}-$(rustc -V | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+      - name: Restore the Cargo cache
+        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && runner.os == 'macOS')
+        id: cargo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            gui/src-tauri/target/release/deps
+            gui/src-tauri/target/release/build
+            gui/src-tauri/target/release/.fingerprint
+          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
+          restore-keys: ${{ steps.cargo-key.outputs.key }}-
       - name: Build, sign and notarize the desktop app (macOS)
         if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && runner.os == 'macOS')
         timeout-minutes: 120
@@ -1445,6 +1469,19 @@ jobs:
             [ ${#dmgs[@]} -gt 0 ] || { echo "::error::tauri produced no .dmg"; exit 1; }
             codesign --verify --strict --verbose=2 "${dmgs[0]}"
           fi
+
+      - name: Save the Cargo cache
+        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && runner.os == 'macOS') && steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            gui/src-tauri/target/release/deps
+            gui/src-tauri/target/release/build
+            gui/src-tauri/target/release/.fingerprint
+          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
 
       # Tauri's dmg is UDZO (zlib). Recompressed as ULMO (LZMA) it is about
       # 42% smaller (516.8 MB -> 300.4 MB measured with the full taxonomy
@@ -2234,12 +2271,46 @@ jobs:
           target=$(rustc -vV | sed -n 's/^host: //p')
           python3 ../tools/gui_third_party_notices.py --gui . --target "$target" --platform linux \
             --out src-tauri/resources/fastag/GUI-THIRD-PARTY-NOTICES.txt
+      # The release profile's compiled crates (Cargo registry, deps/, build/,
+      # .fingerprint/ -- never bundle/, the staged resources or the app
+      # binary), keyed on the image, the architecture, rustc and Cargo.lock,
+      # falling back to the newest of the same toolchain. Saved right after
+      # the build that filled it.
+      - name: Cargo cache key
+        id: cargo-key
+        shell: bash
+        run: echo "key=cargo-release-${{ runner.os }}-${{ runner.arch }}-${ImageOS:-img}-$(rustc -V | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+      - name: Restore the Cargo cache
+        id: cargo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            gui/src-tauri/target/release/deps
+            gui/src-tauri/target/release/build
+            gui/src-tauri/target/release/.fingerprint
+          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
+          restore-keys: ${{ steps.cargo-key.outputs.key }}-
       - name: Build the .deb
         working-directory: gui
         run: |
           npx tauri build --bundles deb
           ls -la src-tauri/target/release/bundle/deb/
           df -h / | tail -1
+      - name: Save the Cargo cache
+        if: steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            gui/src-tauri/target/release/deps
+            gui/src-tauri/target/release/build
+            gui/src-tauri/target/release/.fingerprint
+          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
       # The Debian package is named fastag-gui, not the `fas-tag` Tauri
       # derives from productName: tauri.conf.json has no option for it, so
       # the .deb is repacked with only the Package field changed. The name
@@ -2404,6 +2475,28 @@ jobs:
           R=gui/src-tauri/resources/fastag
           python3 tools/vendor_bundle.py strip --root "$R" --exe-dir "$R/bin" --share "$R/share/OpenMS"
           python3 tools/vendor_bundle.py check --absent --root "$R" --exe-dir "$R/bin" --share "$R/share/OpenMS"
+      # The release profile's compiled crates (Cargo registry, deps/, build/,
+      # .fingerprint/ -- never bundle/, the staged resources or the app
+      # binary), keyed on the image, the architecture, rustc and Cargo.lock,
+      # falling back to the newest of the same toolchain. Saved right after
+      # the build that filled it.
+      - name: Cargo cache key
+        id: cargo-key
+        shell: bash
+        run: echo "key=cargo-release-${{ runner.os }}-${{ runner.arch }}-${ImageOS:-img}-$(rustc -V | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+      - name: Restore the Cargo cache
+        id: cargo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            gui/src-tauri/target/release/deps
+            gui/src-tauri/target/release/build
+            gui/src-tauri/target/release/.fingerprint
+          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
+          restore-keys: ${{ steps.cargo-key.outputs.key }}-
       - name: Build the AppImage
         id: appimage
         working-directory: gui
@@ -2460,6 +2553,18 @@ jobs:
           python3 ../tools/gui_third_party_notices.py --appimage-listing "$L" --check-appimage "$X/${inside#squashfs-root/}"
           bash ../tools/check_bundle_notices.sh "$X/$(dirname "${inside#squashfs-root/}")" appimage
           rm -rf "$X"
+      - name: Save the Cargo cache
+        if: steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            gui/src-tauri/target/release/deps
+            gui/src-tauri/target/release/build
+            gui/src-tauri/target/release/.fingerprint
+          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
       - name: Name and check the AppImage
         id: name
         shell: bash
