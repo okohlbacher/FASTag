@@ -227,6 +227,9 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
   const placed =
     (massgap && num(value(massgap, 'cys', 'spectra'))) ?? (bins.length ? bins.reduce((n, b) => n + b.spectra, 0) : null)
 
+  // The tables By residue pools (0: none, the opened table alone): the gap
+  // chart shows the opened run only, so it is hidden while they are pooled.
+  const [pooled, setPooled] = useState(0)
   const have = !!(massgap || tables.recon || tables.delta || tables.reconIds)
   if (!have) {
     return (
@@ -337,17 +340,31 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
         Candidates, not identifications: localization is region-level, nothing here is FDR-controlled, and an
         interpretation names a hypothesis.
       </p>
-      {bins.length > 0 ? (
+      {pooled > 1 ? (
+        <p className="hint chart-hidden" role="status">
+          The gap chart is hidden while By residue pools {pooled} mass-shift tables: it shows the opened run only. This table only brings it back.
+        </p>
+      ) : bins.length > 0 ? (
         <MassGapChart bins={bins} peaks={peaks} window={win} windowAssumed={winAssumed} source={baseName(tables.delta ?? massgap?.path ?? '')} />
       ) : (
         !loading && <p className="muted">No gap rows to draw.</p>
       )}
-      <ReconTables recon={recon.table} delta={delta.table} ids={ids.table} loading={loading} batch={batchDeltas} />
+      <ReconTables recon={recon.table} delta={delta.table} ids={ids.table} loading={loading} batch={batchDeltas} onPooled={setPooled} />
     </div>
   )
 }
 
-function ReconTables({ recon, delta, ids, loading, batch }: { recon: ReconTable | null; delta: DeltaTable | null; ids: ReconIdTable | null; loading: boolean; batch?: readonly string[] }): JSX.Element | null {
+interface ReconTablesProps {
+  recon: ReconTable | null
+  delta: DeltaTable | null
+  ids: ReconIdTable | null
+  loading: boolean
+  batch?: readonly string[]
+  /// The tables By residue shows pooled (0 when it is not shown or not pooled).
+  onPooled?(n: number): void
+}
+
+function ReconTables({ recon, delta, ids, loading, batch, onPooled }: ReconTablesProps): JSX.Element | null {
   // The survey's answer first: the mass-shift table with sites and UniMod
   // names, and the same by residue (a table with a residues column, 1.15.2
   // on); the placements behind it are the detail.
@@ -370,7 +387,7 @@ function ReconTables({ recon, delta, ids, loading, batch }: { recon: ReconTable 
       )}
       {ds === 'recon' && recon && <PlacementTable t={recon} />}
       {ds === 'delta' && delta && <DeltaPeaks t={delta} />}
-      {ds === 'residues' && delta && <ResidueMatrix t={delta} batch={batch} />}
+      {ds === 'residues' && delta && <ResidueMatrix t={delta} batch={batch} onPooled={onPooled} />}
       {ds === 'reconIds' && ids && <IdTable t={ids} />}
     </section>
   )

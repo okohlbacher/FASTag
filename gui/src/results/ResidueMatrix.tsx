@@ -56,9 +56,12 @@ export interface ResidueMatrixProps {
   t: DeltaTable
   /// The mass-shift tables of the batch's finished jobs (Pool the batch).
   batch?: readonly string[]
+  /// Told how many tables the matrix pools (0: the table shown alone, or the
+  /// view gone): the Mass shifts view hides its one-run chart while pooled.
+  onPooled?(n: number): void
 }
 
-export default function ResidueMatrix({ t, batch = [] }: ResidueMatrixProps): JSX.Element {
+export default function ResidueMatrix({ t, batch = [], onPooled }: ResidueMatrixProps): JSX.Element {
   const [minLoc, setMinLoc] = useSticky(t, 'matrixMin', '1')
   const [hideEmpty, setHideEmpty] = useSticky(t, 'matrixHideEmpty', true)
   const [byResidue, setByResidue] = useSticky(t, 'matrixByResidue', false)
@@ -78,6 +81,11 @@ export default function ResidueMatrix({ t, batch = [] }: ResidueMatrixProps): JS
   // One table: its own rows (tolerance 0 merges nothing); pooled: merged by mass.
   const m = useMemo(() => (own ? poolTables([own, ...(pool?.tables.map((x) => x.source) ?? [])], mode, tol ? tol.tolerance : 0) : null), [own, pool, mode, tol])
   const pooled = !!pool && pool.tables.length > 0
+  const nPooled = pooled ? pool.tables.length + 1 : 0
+  useEffect(() => {
+    onPooled?.(nPooled)
+  }, [nPooled, onPooled])
+  useEffect(() => () => onPooled?.(0), [onPooled])
   const min = minLoc.trim() !== '' && Number.isFinite(Number(minLoc)) ? Number(minLoc) : 0
   const ids = useMemo(() => {
     if (!m) return new Uint32Array(0)
