@@ -215,6 +215,9 @@ jobs:
     # nothing to an untrusted PR -- it only ever matters on an actual tag push.
     permissions:
       contents: write
+      # read: the Test step's reuse lookup on a v* tag (.github/scripts/tested-tree.sh)
+      # lists this workflow's earlier runs and their jobs.
+      actions: read
     # A ceiling, not an estimate. Linux finishes in minutes once OpenMS is
     # cached; this exists so a job that hangs dies rather than holding a
     # concurrency group. It does NOT cover a job stuck waiting for a runner --
@@ -485,12 +488,33 @@ jobs:
           echo "MZPEAK_VALIDATE=$V" >> "$GITHUB_ENV"
           echo "validator: $V"
 
+      # A v* tag build does not re-run ctest when an earlier push or dispatch
+      # run of this workflow (the release dry run, the main push of the merge
+      # commit) has the SAME git tree and a successful Test step in the job of
+      # the same name. Any API error, a PR, a main push or a dispatch: the
+      # tests run as before. The run it relied on is named in the log and the
+      # job summary.
+      - name: Look for an identical tree that already passed the tests (tag builds)
+        id: test-reuse
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/tested-tree.sh "${{ matrix.name }}"
+
       - name: Test
+        if: steps.test-reuse.outputs.reuse != 'true'
         shell: bash -el {0}
         run: |
           # pipefail, as in Configure: this shell has errexit but not pipefail.
           set -o pipefail
-          ctest --test-dir build --output-on-failure 2>&1 | tee ctest.log
+          # One test per core: the tests are independent (their own temp
+          # directories; fixtures, RUN_SERIAL and COST in CMakeLists.txt).
+          # The required-test checks below read the per-test result lines,
+          # which ctest prints the same way with -j.
+          NJ=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+          echo "ctest -j $NJ"
+          ctest --test-dir build --output-on-failure -j "$NJ" 2>&1 | tee ctest.log
           # The mzPeak tests SKIP themselves in a build without mzPeak support
           # or without the validator. This job has both, so a skip here would
           # be a broken harness presenting as green -- the very class of
@@ -504,7 +528,14 @@ jobs:
             grep -E "Test +#[0-9]+: $t " ctest.log | grep -q 'Passed' \
               || { echo "::error::$t did not pass (skipped, not run or missing)"; grep -E "$t" ctest.log || true; exit 1; }
           done
-          # ...and the binary reads both for real, not only their refusals.
+
+      # Not part of Test, so a tag build that reuses an earlier test run still
+      # reads both vendor formats with the binary it built.
+      - name: Read the vendor test files with the built binary
+        shell: bash -el {0}
+        run: |
+          set -o pipefail
+          # The binary reads both for real, not only their refusals.
           ./build/FASTag -in test/fixtures/bruker/PXD040281_SA_02_trim.d -out /tmp/ci-bruker.tsv -threads 2 > /tmp/ci-bruker.log 2>&1 \
             || { cat /tmp/ci-bruker.log; echo "::error::the build cannot read the Bruker fixture"; exit 1; }
           grep -E "Bruker timsTOF input: [1-9][0-9]* MS2 spectra" /tmp/ci-bruker.log \
@@ -1038,6 +1069,9 @@ jobs:
       # test/mzpeak_validate.sh.
       - name: Validate every mzPeak archive this job wrote
         shell: bash
+        env:
+          TESTS_REUSED: ${{ steps.test-reuse.outputs.reuse == 'true' }}
+          TESTS_REUSED_FROM: ${{ steps.test-reuse.outputs.run_url }}
         run: |
           set -euo pipefail
           R=validator-reports; rm -rf "$R"; mkdir -p "$R"
@@ -1045,7 +1079,11 @@ jobs:
             || { echo "::error::the CONTROL archive (reference converter) fails the pinned validator -- the validator or its pin is broken, not FASTag"; exit 1; }
           bash test/mzpeak_validate.sh "$R/bundle" /tmp/bundle-mzpeak/bundle.mzpeak \
             || { echo "::error::the archive the shipped bundle wrote is not a valid mzPeak archive"; exit 1; }
-          cp -r build/mzpeak-roundtrip/validator "$R/ctest"
+          if [ "$TESTS_REUSED" = true ]; then
+            echo "ctest did not run here (tests reused from $TESTS_REUSED_FROM): no round-trip reports to collect"
+          else
+            cp -r build/mzpeak-roundtrip/validator "$R/ctest"
+          fi
           ls -R "$R" | head -40
 
       # The reports, pass or fail: a red validator run is only useful with
@@ -1730,6 +1768,7 @@ jobs:
       ASSET_VERSION: ${{ needs.version.outputs.version }}
     permissions:
       contents: write
+      actions: read
     timeout-minutes: 330
     strategy:
       fail-fast: false
