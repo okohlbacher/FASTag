@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { installMockBridge } from '../testing/mockBridge'
 import { click, flush } from '../testing/render'
 import ReconView from './ReconView'
+import { heatOf } from './ResidueMatrix'
 import { buildOverview, byResidueNote, type OverviewInputs } from './overview'
 import { searchHelp } from '../help/search'
 import { searchParams } from '../setup/searchRank'
@@ -132,5 +133,17 @@ describe('the residue matrix is findable', () => {
     // A 1.12 table has no residues column: no such note.
     expect(byResidueNote(humanDelta, DELTA)).toBeNull()
     expect(byResidueNote(pxd1Delta, undefined)).toMatch(/<run>\.delta\.tsv/)
+  })
+})
+
+describe('heatOf: the shade follows the log of the count', () => {
+  it('is 0 for no count, 1 for the largest, and on a log scale between', () => {
+    expect(heatOf(0, 100)).toBe(0)
+    expect(heatOf(5, 0)).toBe(0)
+    expect(heatOf(100, 100)).toBe(1)
+    // A count of 10 next to 1,000: about a third of the full shade, not 1 %.
+    expect(heatOf(10, 1000)).toBeCloseTo(Math.log1p(10) / Math.log1p(1000), 12)
+    expect(heatOf(10, 1000)).toBeGreaterThan(0.3)
+    expect(heatOf(1, 2)).toBeLessThan(heatOf(2, 2))
   })
 })
