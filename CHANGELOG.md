@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Census columns `tic` and `xrea` (census format 4).** `-census` writes two more columns after
+  `res_cover_exact`: `tic`, the summed intensity of the spectrum's peaks as read, and `xrea`, Xrea (Na & Paek,
+  J Proteome Res 2006) over the same peaks (area between the diagonal and the cumulative intensity curve of the
+  intensity-sorted peaks, divided by 1/2 plus the most intense peak's share). Both are candidate features for
+  predicting identification. `census_version` is 4; the columns before them keep their positions, the optional
+  columns (`best_ion_series`, `pre_*`, `identified`, `triage`, `ident_score`) move two to the right. Tags and
+  every other output are unchanged. The desktop app labels the two columns in the census table.
+
 ## 1.16.4 (2026-11-27)
 
 - **Desktop app, ion-trap check reads the filter strings (fix).** The check before the run no longer warns that

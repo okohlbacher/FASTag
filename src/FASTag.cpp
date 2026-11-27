@@ -3711,6 +3711,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       cfacts.n_peaks = crow.n_peaks = sig.n_peaks;
       crow.has_gini = sig.has_gini;
       crow.gini = sig.gini;
+      crow.tic = sig.tic;
+      crow.has_xrea = sig.has_xrea;
+      crow.xrea = sig.xrea;
     }
     if (spec.getMSLevel() != 2 || spec.empty() || spec.getPrecursors().empty())
     {

@@ -57,7 +57,9 @@ namespace FASTag::Census
   /// orientation was known and every residue placed on its own (1) or
   /// res_cover is a lower bound (0: a tag folded, or a gap's residues left
   /// out).
-  inline constexpr int TABLE_VERSION = 3;
+  /// 4: the columns tic (summed positive intensity) and xrea (Na & Paek 2006)
+  /// after res_cover_exact, before the optional columns.
+  inline constexpr int TABLE_VERSION = 4;
 
   /**
     @brief Per-spectrum status.
@@ -198,6 +200,48 @@ namespace FASTag::Census
   }
 
   /**
+    @brief Xrea of a spectrum (Na & Paek, J Proteome Res 2006, 5:3241).
+
+    Cumulative intensity normalization: the peaks sorted by intensity,
+    ascending, at x = k/m (k = 1..m), the cumulative intensity divided by the
+    total at y (from (0, 0) to (1, 1)). XX is the area between the diagonal
+    and that curve (trapezoids), the lower right triangle has area 1/2, and
+    alpha is the relative intensity of the most intense peak (its share of
+    the total):
+
+        Xrea = XX / (1/2 + alpha)
+
+    0 for equal intensities and for a single peak, always below 1 (XX < 1/2);
+    a few strong peaks of similar height over many weak ones give the largest
+    values. Zero intensities are left out: they are padding, not peaks.
+
+    @param[in] v Intensities sorted ascending, >= 0 (zeros are skipped).
+    @param[out] out Xrea.
+    @return False when no intensity is positive.
+  */
+  template <typename T>
+  bool xrea(const std::vector<T>& v, double& out)
+  {
+    std::size_t first = 0;
+    while (first < v.size() && !(static_cast<double>(v[first]) > 0)) ++first;
+    const std::size_t m = v.size() - first;
+    if (m == 0) return false;
+    double total = 0;
+    for (std::size_t i = first; i < v.size(); ++i) total += static_cast<double>(v[i]);
+    double cum = 0, area2 = 0;  // area2: twice the area under the curve, times m
+    for (std::size_t i = first; i < v.size(); ++i)
+    {
+      const double prev = cum;
+      cum += static_cast<double>(v[i]) / total;
+      area2 += prev + cum;
+    }
+    const double under = area2 / (2.0 * static_cast<double>(m));
+    const double alpha = static_cast<double>(v.back()) / total;
+    out = std::max(0.0, 0.5 - under) / (0.5 + alpha);
+    return true;
+  }
+
+  /**
     @brief Peak facts read from the input spectrum itself.
   */
   struct Signal
@@ -205,15 +249,19 @@ namespace FASTag::Census
     std::size_t n_peaks = 0;  ///< finite m/z, positive and finite intensity
     bool has_gini = false;    ///< false when no intensity is positive
     double gini = 0;          ///< int_gini
+    double tic = 0;           ///< summed intensity of the n_peaks peaks (census 4)
+    bool has_xrea = false;    ///< false when no intensity is positive
+    double xrea = 0;          ///< Xrea of the n_peaks peaks (census 4)
   };
 
   /**
-    @brief n_peaks and int_gini of a spectrum.
+    @brief n_peaks, int_gini, tic and xrea of a spectrum.
 
     int_gini is over every peak with a finite m/z and a finite, non-negative
     intensity: zero-intensity peaks (profile padding) are part of the
     population, NaN and negative ones are not. It is our own training-free
-    signal, not Xrea.
+    signal, not Xrea. tic and xrea are over the n_peaks peaks (positive,
+    finite intensity, finite m/z) as read, before any preprocessing.
 
     @param[in] spec Input spectrum (peaks with getMZ() and getIntensity()).
     @return The signal facts.
@@ -232,12 +280,17 @@ namespace FASTag::Census
       const float in = static_cast<float>(pk.getIntensity());
       if (!std::isfinite(mz) || !std::isfinite(in) || in < 0) continue;
       scratch.push_back(in == 0 ? 0.0f : in);  // -0.0 as +0.0 (sortNonNegative)
-      if (in > 0) ++s.n_peaks;
+      if (in > 0)
+      {
+        ++s.n_peaks;
+        s.tic += static_cast<double>(in);
+      }
     }
     if (s.n_peaks > 0)
     {
       s.has_gini = true;
-      s.gini = gini(scratch);
+      s.gini = gini(scratch);                    // sorts scratch ascending
+      s.has_xrea = xrea(scratch, s.xrea);
     }
     return s;
   }
@@ -518,6 +571,9 @@ namespace FASTag::Census
     std::size_t n_peaks = 0;    ///< peaks with finite m/z and positive, finite intensity
     bool has_gini = false;      ///< gini is valid
     double gini = 0;            ///< int_gini
+    double tic = 0;             ///< summed intensity of the n_peaks peaks (census 4)
+    bool has_xrea = false;      ///< xrea is valid
+    double xrea = 0;            ///< Xrea (census 4)
     bool prepared = false;      ///< n_kept, n_edges and n_compl are valid
     std::size_t n_kept = 0, n_edges = 0, n_compl = 0;  ///< SpectrumDiag: peaks kept, graph edges, kept peaks with a complement at charge 1
     Status status = Status::EMPTY;  ///< census status
@@ -546,7 +602,7 @@ namespace FASTag::Census
   {
     return std::string("index\tspectrum\trt\tprecursor_mz\tcharge_given\tcharge_used\tn_peaks\tn_peaks_kept"
                        "\tn_edges\tn_compl\tint_gini\tstatus\tn_found\tn_reported\tbest_evalue\tbest_len"
-                       "\tbest_min_conf\tbest_mean_conf\tbest_tic\ttag_cover\tmax_len\tres_cover\tres_cover_exact")
+                       "\tbest_min_conf\tbest_mean_conf\tbest_tic\ttag_cover\tmax_len\tres_cover\tres_cover_exact\ttic\txrea")
          + (ion_series ? "\tbest_ion_series" : "")
          + (score ? "\tpre_best_evalue\tpre_best_len\tpre_best_mean_conf\tpre_tag_cover" : "") + "\n";
   }
@@ -601,7 +657,7 @@ namespace FASTag::Census
   /**
     @brief Appends one census row.
 
-    23 fields, one more with @p ion_series, four more with @p score, and a newline.
+    25 fields, one more with @p ion_series, four more with @p score, and a newline.
 
     @param[in,out] buf Buffer appended to.
     @param[in] r The row.
@@ -655,6 +711,10 @@ namespace FASTag::Census
       buf += r.res_cover_exact ? '1' : '0';
     }
     else buf += "\t\t\t\t\t\t\t\t";
+    buf += '\t';
+    appendNum(buf, r.tic, general, 6);
+    buf += '\t';
+    if (r.has_xrea) appendNum(buf, r.xrea, fixed, 4);
     if (ion_series)
     {
       buf += '\t';
