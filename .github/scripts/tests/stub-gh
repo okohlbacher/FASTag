@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2016  # jq programs in single quotes, their variables via --arg
+# A stand-in for gh in the script tests, answering from written responses in
+# $GH_FIXTURES:
+#   gh api [-X M] [-H h] [-f|-F k=v]... [--paginate] [--input F] <endpoint> [--jq q]
+#     GET  -> $GH_FIXTURES/<endpoint, / ? = & : as _>.json (through jq when
+#             --jq); a missing file is a 404, a file "<name>.fail" a 500
+#     releases (list, create), releases/<id> (get, PATCH), releases/<id>/assets
+#     (list), releases/assets/<id> (DELETE), uploads.github.com .../assets?name=N
+#     (POST --input) act on $GH_FIXTURES/releases.state.json, a JSON array
+#     of {id, tag_name, draft, body, assets: [{id, name, size, digest}]}
+#   gh run download <id> --repo R --name N --dir D
+#     -> copies $GH_FIXTURES/artifacts/<id>/<N>/ into D
+# Hooks: $GH_FIXTURES/appear (a JSON release): added to the state at the
+# Nth release listing (N in $GH_FIXTURES/appear.after); $GH_FIXTURES/corrupt:
+# an upload stores a wrong digest. Every call is appended to $GH_FIXTURES/calls.
+set -u
+F="${GH_FIXTURES:?}"
+echo "$*" >> "$F/calls"
+state="$F/releases.state.json"
+[ -f "$state" ] || echo '[]' > "$state"
+put() { jq "$@" "$state" > "$state.tmp" && mv "$state.tmp" "$state"; }
+if [ "$1" = run ] && [ "$2" = download ]; then
+  id=$3; shift 3; name=""; dir=""
+  while [ $# -gt 0 ]; do case "$1" in --name) name=$2; shift 2;; --dir) dir=$2; shift 2;; *) shift;; esac; done
+  src="$F/artifacts/$id/$name"
+  [ -d "$src" ] || { echo "no artifact $name in run $id" >&2; exit 1; }
+  mkdir -p "$dir" && cp -R "$src/." "$dir/"
+  exit 0
+fi
+[ "$1" = api ] || { echo "stub-gh: unsupported: $*" >&2; exit 2; }
+shift
+method=GET; ep=""; q=""; input=""; fields=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -X|--method) method=$2; shift 2;;
+    -H) shift 2;;
+    -f|-F) fields+=("$2"); shift 2;;
+    --paginate) shift;;
+    --input) input=$2; shift 2;;
+    --jq) q=$2; shift 2;;
+    *) ep=$1; shift;;
+  esac
+done
+out() { if [ -n "$q" ]; then jq -r "$q"; else cat; fi; }
+field() { local kv; for kv in "${fields[@]}"; do [ "${kv%%=*}" = "$1" ] && { echo "${kv#*=}"; return; }; done; }
+ep=${ep#https://api.github.com/}
+case "$method $ep" in
+  "GET repos/"*/releases\?*|"GET repos/"*/releases)
+    n=$(( $(cat "$F/lists" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$F/lists"
+    if [ -f "$F/appear" ] && [ "$n" -ge "$(cat "$F/appear.after" 2>/dev/null || echo 1)" ]; then
+      put --slurpfile a "$F/appear" '. + $a'; rm -f "$F/appear"
+    fi
+    out < "$state"; exit;;
+  "POST repos/"*/releases)
+    id=$(( $(jq '[.[].id] | max // 100' "$state") + 1 ))
+    put --arg t "$(field tag_name)" --arg b "$(field body)" --argjson id "$id" '. + [{id: $id, tag_name: $t, draft: true, body: $b, assets: []}]'
+    echo "{\"id\": $id}"; exit 0;;
+  "PATCH repos/"*/releases/*)
+    id=${ep##*/}
+    [ "$(field draft)" = false ] && put --argjson id "$id" 'map(if .id == $id then .draft = false else . end)'
+    exit 0;;
+  "GET repos/"*/releases/*/assets*)
+    id=${ep#*releases/}; id=${id%%/*}
+    jq --argjson id "$id" '.[] | select(.id == $id) | .assets' "$state" | out; exit;;
+  "GET repos/"*/releases/[0-9]*)
+    id=${ep##*/}
+    jq --argjson id "$id" '.[] | select(.id == $id)' "$state" | out; exit;;
+  "DELETE repos/"*/releases/assets/*)
+    aid=${ep##*/}
+    put --argjson a "$aid" 'map(.assets |= map(select(.id != $a)))'; exit 0;;
+  "POST https://uploads.github.com/repos/"*)
+    id=${ep#*releases/}; id=${id%%/*}; name=${ep##*name=}
+    d=$(shasum -a 256 "$input" 2>/dev/null | cut -d' ' -f1 || sha256sum "$input" | cut -d' ' -f1)
+    [ -f "$F/corrupt" ] && d=0000
+    size=$(wc -c < "$input" | tr -d ' ')
+    aid=$(( $(jq '[.[].assets[].id] | max // 500' "$state") + 1 ))
+    put --argjson id "$id" --argjson a "$aid" --arg n "$name" --argjson s "$size" --arg d "sha256:$d" \
+      'map(if .id == $id then .assets += [{id: $a, name: $n, size: $s, digest: $d}] else . end)'
+    echo "{\"id\": $aid}"; exit 0;;
+esac
+f="$F/$(echo "$ep" | tr '/?=&:' '_____').json"
+[ -f "${f%.json}.fail" ] && { echo "gh: Server Error (HTTP 500)" >&2; exit 1; }
+[ -f "$f" ] || { echo "gh: Not Found (HTTP 404) $ep" >&2; exit 1; }
+out < "$f"

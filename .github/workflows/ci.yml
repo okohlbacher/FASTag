@@ -50,6 +50,24 @@ on:
         description: 'With gui_dry_run: embed the pinned taxonomy index (release-sized dmg and Linux bundles)'
         type: boolean
         default: false
+      # The tag build's promotion path, without a tag: finds the release
+      # candidate (a gui_dry_run + gui_full_payload run of this tree, below)
+      # and attaches its files to this DRAFT release instead of a tag's,
+      # runs the smoke jobs against them and checks every digest. Nothing is
+      # built, nothing is published, the tap is not touched. The name must
+      # start with ci-promotion-test-.
+      promote_to:
+        description: 'Promotion dry run: attach the release candidate of this tree to this DRAFT release (ci-promotion-test-*); empty = off'
+        type: string
+        default: ''
+      # With promote_to: no promotion -- the full build and test path of a
+      # tag, attached to the draft instead (the fallback, end to end). A tag
+      # push gets the same through the repository variable
+      # RELEASE_FORCE_REBUILD=<tag> (then re-run the tag's workflows).
+      force_rebuild:
+        description: 'With promote_to: build everything as a tag without a candidate would (the fallback), attaching to the draft'
+        type: boolean
+        default: false
 
 # cancel-in-progress is ON, after turning it off caused something worse.
 #
@@ -66,6 +84,12 @@ on:
 #
 # Two lessons, both encoded below: an unschedulable runner label is a wedge, not
 # a delay; and `cancel-in-progress: false` turns any wedge into an outage.
+# Read-only unless a job says otherwise: only the jobs that write to a
+# release (version, which creates the draft; the uploaders; promote-assets;
+# release-notes; the publisher) get contents: write.
+permissions:
+  contents: read
+
 concurrency:
   # A manual dispatch gets its OWN group. Sharing <workflow>-refs/heads/main
   # with ordinary pushes means cancel-in-progress lets the next push to main
@@ -130,6 +154,14 @@ env:
   # molecules: it has MS2 but no peptide tags). It proves a bundle's
   # Thermo reader starts its .NET runtime and reads scans.
   THERMO_SMOKE_RAW_SHA256: ad87e20816a6383fa38f4991b3df012d8a05e92c1e67d8e9e1ef0b6a979330f2
+  # A RELEASE CANDIDATE: a dispatch with gui_dry_run and gui_full_payload
+  # builds every release file at release size, signed as a tag signs them,
+  # and tests them as a tag tests them. Every job that makes a release file
+  # then records it (name, artifact, sha256: .github/scripts/rc-manifest.py
+  # part), and job "release candidate", which runs only when every gate
+  # passed, writes the manifest. A v* tag of the same git tree attaches
+  # those files instead of building them again (job version, promote).
+  RC_CANDIDATE: ${{ inputs.gui_dry_run && inputs.gui_full_payload && 'true' || 'false' }}
 
 jobs:
   # ------------------------------------------------------ release version
@@ -143,11 +175,31 @@ jobs:
     name: release version
     runs-on: ubuntu-24.04
     permissions:
-      contents: read
+      # write: the one creator of the release draft (release-draft.sh create)
+      contents: write
+      # read: the release-candidate lookup (.github/scripts/release-candidate.sh)
+      actions: read
     outputs:
       version: ${{ steps.v.outputs.version }}
+      # 'false': a documentation-only change (step changes); build and test skip
+      code: ${{ steps.changes.outputs.code }}
+      # 'true' only on a v* tag push: the one run that publishes.
+      publish: ${{ steps.rc.outputs.publish }}
+      # the draft's id; every writer uses it, never the tag name
+      release_id: ${{ steps.rc.outputs.release_id }}
+      candidate_attempt: ${{ steps.rc.outputs.run_attempt }}
+      manifest_sha256: ${{ steps.rc.outputs.manifest_sha256 }}
+      # 'true' when a v* tag (or a promote_to dry run) attaches the files of
+      # release candidate run candidate_run instead of building them; every
+      # build job then skips, the promote and promoted-smoke jobs run.
+      promote: ${{ steps.rc.outputs.promote }}
+      candidate_run: ${{ steps.rc.outputs.run_id }}
+      # The release this run writes to: the tag, or promote_to's draft.
+      release: ${{ steps.rc.outputs.release }}
       legs: ${{ steps.legs.outputs.legs }}
       linux_legs: ${{ steps.legs.outputs.linux_legs }}
+      linux_x64_leg: ${{ steps.legs.outputs.linux_x64_leg }}
+      linux_arm64_leg: ${{ steps.legs.outputs.linux_arm64_leg }}
       macos_legs: ${{ steps.legs.outputs.macos_legs }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -156,10 +208,46 @@ jobs:
           sparse-checkout: |
             CMakeLists.txt
             tools/release_assets.sh
+            .github/docs-only.txt
+            .github/scripts
           sparse-checkout-cone-mode: false
+      # A pull request or main push that changes only files of
+      # .github/docs-only.txt (screenshots, the manual, ...) skips every build
+      # and test job: they report as skipped, the run stays green. Tags,
+      # dispatches and anything else: code=true.
+      - name: Documentation-only change?
+        id: changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -uo pipefail
+          files=""
+          if [ "$EVENT" = pull_request ] && [ -n "$PR" ]; then
+            files=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files?per_page=100" --paginate --jq '.[].filename') || files=""
+          elif [ "$EVENT" = push ] && [ "$GITHUB_REF" = refs/heads/main ] && [[ "$BEFORE" =~ ^[0-9a-f]{40}$ ]] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ]; then
+            files=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$GITHUB_SHA" --jq '.files[].filename') || files=""
+          fi
+          code=true
+          if [ -n "$files" ] && [ -f .github/docs-only.txt ]; then
+            mapfile -t pats < <(grep -v '^#' .github/docs-only.txt | grep .)
+            code=false
+            while IFS= read -r f; do
+              hit=0
+              for p in "${pats[@]}"; do
+                # shellcheck disable=SC2053  # the patterns are globs
+                if [[ "$f" == $p ]]; then hit=1; break; fi
+              done
+              [ "$hit" = 1 ] || { code=true; echo "code change: $f"; break; }
+            done <<< "$files"
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          [ "$code" = true ] || echo "### Documentation only ($(wc -l <<< "$files") files): build and test jobs skipped" >> "$GITHUB_STEP_SUMMARY"
       - id: v
         env:
-          TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          TAG: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
         run: |
           set -euo pipefail
           v=$(tools/release_assets.sh version "$TAG")
@@ -193,31 +281,91 @@ jobs:
           # slowest leg, lost their runner twice, and end in 2027. 1.16.1 is the
           # last Intel release.
           legs=$(jq -c . <<<"$legs")
-          # Two jobs (build, build-macos), so the Linux GUI jobs need only the
-          # Linux legs and never wait for a macOS runner.
+          # A build job per leg (build-linux-x64, build-linux-arm64,
+          # build-macos), so each GUI job needs only its own leg's CLI: x64
+          # never waits for arm64, nor either for a macOS runner.
           {
             echo "legs=$legs"
             echo "linux_legs=$(jq -c 'map(select(.name | startswith("linux")))' <<<"$legs")"
+            echo "linux_x64_leg=$(jq -c 'map(select(.name == "linux-x64"))' <<<"$legs")"
+            echo "linux_arm64_leg=$(jq -c 'map(select(.name == "linux-arm64"))' <<<"$legs")"
             echo "macos_legs=$(jq -c 'map(select(.name | startswith("macos")))' <<<"$legs")"
           } >> "$GITHUB_OUTPUT"
           echo "build legs: $(jq -r 'map(.name) | join(", ")' <<<"$legs")" | tee -a "$GITHUB_STEP_SUMMARY"
 
-  build:
-    name: ${{ matrix.name }}
+      # Release intent, promotion and the draft, decided once, here.
+      #   release: a v* TAG PUSH (a dispatch on a tag is an ordinary dispatch:
+      #     it never writes to a release), or promote_to's draft; else empty.
+      #   publish: only the tag push publishes (release-complete).
+      #   promote: a release candidate of this exact tree
+      #     (release-candidate.sh: a completed gui_dry_run + gui_full_payload
+      #     dispatch of this workflow whose "release candidate" job passed in
+      #     its latest attempt, whose manifest names this tree, version, run,
+      #     attempt and workflow with the macOS files signed, and whose every
+      #     payload artifact is still there); then its files are attached and
+      #     smoke-tested instead of built. No candidate, an API error,
+      #     force_rebuild (promote_to) or the repository variable
+      #     RELEASE_FORCE_REBUILD naming the tag: everything is built and
+      #     tested as before.
+      #   release_id: the draft (release-draft.sh create: the one creator;
+      #     a published release is refused unless the repository variable
+      #     RELEASE_REPAIR names the tag; promote_to only ever a draft).
+      # Incompatible inputs are refused before anything runs.
+      - name: Release intent, promotion and the draft
+        id: rc
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.v.outputs.version }}
+          RC_META: macos_signed=true
+          IS_TAG_PUSH: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+          PROMOTE_TO: ${{ inputs.promote_to }}
+          FORCE: ${{ inputs.force_rebuild || (vars.RELEASE_FORCE_REBUILD != '' && vars.RELEASE_FORCE_REBUILD == github.ref_name) }}
+          REPAIR: ${{ vars.RELEASE_REPAIR != '' && vars.RELEASE_REPAIR == github.ref_name }}
+          DRY: ${{ inputs.gui_dry_run }}
+          FULL: ${{ inputs.gui_full_payload }}
+          FORCE_INPUT: ${{ inputs.force_rebuild }}
+        run: |
+          set -euo pipefail
+          if [ -n "$PROMOTE_TO" ]; then
+            [[ "$PROMOTE_TO" =~ ^ci-promotion-test-[A-Za-z0-9._-]+$ ]] \
+              || { echo "::error::promote_to must be a ci-promotion-test-* draft, not '$PROMOTE_TO'"; exit 1; }
+            [ "$DRY" != true ] && [ "$FULL" != true ] \
+              || { echo "::error::promote_to replays a tag run; it does not combine with gui_dry_run or gui_full_payload"; exit 1; }
+            REL=$PROMOTE_TO; PUBLISH=false; export RELEASE_DRAFT_ONLY=1
+          elif [ "$IS_TAG_PUSH" = true ]; then
+            REL=$GITHUB_REF_NAME; PUBLISH=true
+            [ "$REPAIR" = true ] && export RELEASE_ALLOW_PUBLISHED=1
+          else
+            [ "$FORCE_INPUT" != true ] || { echo "::error::force_rebuild needs promote_to"; exit 1; }
+            { echo "release="; echo "publish=false"; echo "promote=false"; echo "release_id="; } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          { echo "release=$REL"; echo "publish=$PUBLISH"; } >> "$GITHUB_OUTPUT"
+          if [ "$FORCE" = true ]; then
+            { echo "promote=false"; echo "run_id="; echo "run_attempt="; echo "manifest_sha256="; } >> "$GITHUB_OUTPUT"
+            echo "### $REL: forced rebuild (no promotion)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            bash .github/scripts/release-candidate.sh "$RUNNER_TEMP/rc"
+            if [ -n "$PROMOTE_TO" ] && ! grep -qx 'promote=true' "$GITHUB_OUTPUT"; then
+              echo "::error::promote_to: no release candidate of this tree (see above)"; exit 1
+            fi
+          fi
+          id=$(bash .github/scripts/release-draft.sh create "$REL")
+          echo "release_id=$id" >> "$GITHUB_OUTPUT"
+          echo "### $REL: draft release $id (publish: $PUBLISH)" >> "$GITHUB_STEP_SUMMARY"
+
+  build-linux-x64:
+    name: ${{ matrix.name }} build
+    if: (needs.version.outputs.promote != 'true') && needs.version.outputs.code != 'false'
     runs-on: ${{ matrix.runner }}
     needs: [version]
     env:
       ASSET_VERSION: ${{ needs.version.outputs.version }}
-    # write, not the default: needed only for the tag-triggered release-asset
-    # upload below. Scoped to this job rather than the workflow, since nothing
-    # else here needs it. GitHub already forces a read-only token for
-    # pull_request runs from forks regardless of this setting, so it grants
-    # nothing to an untrusted PR -- it only ever matters on an actual tag push.
+      FASTAG_BUILD_TARGET: FASTag
+    # Read-only: the build jobs make artifacts; the uploader jobs
+    # (gui-linux-release, gui-linux-arm64-release, macos-release) attach them.
     permissions:
-      contents: write
-      # read: the Test step's reuse lookup on a v* tag (.github/scripts/tested-tree.sh)
-      # lists this workflow's earlier runs and their jobs.
-      actions: read
+      contents: read
     # A ceiling, not an estimate. Linux finishes in minutes once OpenMS is
     # cached; this exists so a job that hangs dies rather than holding a
     # concurrency group. It does NOT cover a job stuck waiting for a runner --
@@ -241,16 +389,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.version.outputs.linux_legs) }}
+        include: ${{ fromJSON(needs.version.outputs.linux_x64_leg) }}
 
     steps: &build-steps
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - &s01
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
       # The same libraries OpenMS was built against (.github/env/openms.yml),
       # the same compilers, plus what packaging needs.
-      - name: Install the toolchain and dependencies
+      - &s02
+        name: Install the toolchain and dependencies
         uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
         with:
           environment-file: .github/env/openms.yml
@@ -261,15 +411,48 @@ jobs:
       # OpenMS: restored from the cache, or built from source and saved at once,
       # so a later FASTag failure in this job cannot keep the build from the
       # cache (actions/cache would save only from a successful job).
-      - name: Restore OpenMS
+      - &s03
+        name: Restore OpenMS
         id: openms-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: openms-install
           key: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
 
-      - name: Check out OpenMS at the pinned commit
+      # A cache miss (an eviction, a new pin): the same install as a prebuilt
+      # asset of the deps release (deps-openms-<OPENMS_REF, 8>: a prerelease,
+      # never Latest, written only by main and tag pushes), sha256-checked, in
+      # seconds; only when that is missing too is OpenMS built from source.
+      - &s03b
+        name: Fetch the prebuilt OpenMS (cache miss)
+        id: openms-prebuilt
         if: steps.openms-cache.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEY: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
+        run: |
+          set -uo pipefail
+          sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
+          rel=${OPENMS_DEPS_RELEASE:-deps-openms-${OPENMS_REF:0:8}}
+          d="$RUNNER_TEMP/openms-prebuilt"; rm -rf "$d"; mkdir -p "$d"
+          start=$(date +%s)
+          if gh release download "$rel" --repo "$GITHUB_REPOSITORY" -p "$KEY.tar.gz" -p "$KEY.tar.gz.sha256" -D "$d"; then
+            (cd "$d" && sha -c "$KEY.tar.gz.sha256") || { echo "::error::the prebuilt OpenMS in $rel does not match its sha256"; exit 1; }
+            # Relative archive path: GNU tar reads "D:..." as a remote host.
+            ws=$PWD; rm -rf openms-install
+            (cd "$d" && tar -xzf "$KEY.tar.gz" -C "$ws") || { echo "::error::the prebuilt OpenMS did not unpack"; exit 1; }
+            rm -rf "$d"
+            echo "got=true" >> "$GITHUB_OUTPUT"
+            echo "prebuilt OpenMS from $rel in $(( $(date +%s) - start )) s" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "got=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::no prebuilt OpenMS $KEY in $rel: building it from source (about an hour)"
+          fi
+
+      - &s04
+        name: Check out OpenMS at the pinned commit
+        if: steps.openms-cache.outputs.cache-hit != 'true' && steps.openms-prebuilt.outputs.got != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -291,8 +474,9 @@ jobs:
       # The .NET SDK the Thermo bridge's managed half is built with (only
       # when OpenMS is built; the runtime the CLI uses is installed below on
       # every run).
-      - name: Install the .NET SDK (OpenMS Thermo bridge)
-        if: steps.openms-cache.outputs.cache-hit != 'true'
+      - &s05
+        name: Install the .NET SDK (OpenMS Thermo bridge)
+        if: steps.openms-cache.outputs.cache-hit != 'true' && steps.openms-prebuilt.outputs.got != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -300,8 +484,9 @@ jobs:
           bash "$RUNNER_TEMP/dotnet-install.sh" --version "$DOTNET_SDK_VERSION" --install-dir "$RUNNER_TEMP/dotnet-sdk" --no-path
           "$RUNNER_TEMP/dotnet-sdk/dotnet" --info | head -20
 
-      - name: Build and install OpenMS
-        if: steps.openms-cache.outputs.cache-hit != 'true'
+      - &s06
+        name: Build and install OpenMS
+        if: steps.openms-cache.outputs.cache-hit != 'true' && steps.openms-prebuilt.outputs.got != 'true'
         shell: bash -el {0}
         run: |
           set -euo pipefail
@@ -336,14 +521,8 @@ jobs:
           cmake --build openms-build --parallel "$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)"
           cmake --install openms-build
 
-      - name: Save OpenMS
-        if: steps.openms-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: openms-install
-          key: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
-
-      - name: Verify the OpenMS install
+      - &s08
+        name: Verify the OpenMS install
         shell: bash
         run: |
           set -euo pipefail
@@ -362,7 +541,48 @@ jobs:
           find openms-install/include -name 'BrukerTimsFile.h' | grep -q .
           grep -m1 -oE 'PACKAGE_VERSION "[^"]+"' openms-install/lib/cmake/OpenMS/OpenMSConfigVersion.cmake
 
-      - name: Point the build at OpenMS
+      # Saved once verified, at once (before anything of FASTag's runs).
+      - &s07
+        name: Save OpenMS
+        if: steps.openms-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: openms-install
+          key: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
+
+      # Main and tag pushes only: the install this job has (from the cache or
+      # just built) becomes the deps release's asset when that lacks it, so a
+      # later miss downloads it instead of building (job deps-openms uploads).
+      - name: Stage the OpenMS install for the deps release (main and tag pushes)
+        id: openms-stage
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEY: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
+        run: |
+          set -euo pipefail
+          sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
+          rel=${OPENMS_DEPS_RELEASE:-deps-openms-${OPENMS_REF:0:8}}
+          if gh release view "$rel" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null | grep -qxF "$KEY.tar.gz"; then
+            echo "$rel has $KEY.tar.gz"; echo "stage=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          mkdir -p openms-prebuilt
+          tar -czf "openms-prebuilt/$KEY.tar.gz" openms-install
+          (cd openms-prebuilt && sha "$KEY.tar.gz" > "$KEY.tar.gz.sha256")
+          ls -l openms-prebuilt
+          echo "stage=true" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: steps.openms-stage.outputs.stage == 'true'
+        with:
+          name: openms-prebuilt-${{ matrix.name }}
+          path: openms-prebuilt/*
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+
+      - &s09
+        name: Point the build at OpenMS
         shell: bash -el {0}
         run: |
           set -euo pipefail
@@ -377,7 +597,8 @@ jobs:
       # steps copy it into dist/FASTag/dotnet (tools/vendor_bundle.py), where
       # the shipped CLI finds it itself. And a .raw to read: OpenMS's own
       # 2 MB test file at OPENMS_REF, checked by its sha256.
-      - name: Install the .NET runtime and fetch a Thermo .raw
+      - &s10
+        name: Install the .NET runtime and fetch a Thermo .raw
         shell: bash
         run: |
           set -euo pipefail
@@ -397,7 +618,8 @@ jobs:
       # The mzPeak fixture of OpenMS's own tests at the pinned commit: 34 MS2
       # spectra, written by the reference converter. The smoke runs read it,
       # and the validator step uses it as its control.
-      - name: Fetch the mzPeak test archive
+      - &s11
+        name: Fetch the mzPeak test archive
         shell: bash
         run: |
           set -euo pipefail
@@ -407,9 +629,11 @@ jobs:
           echo "5af157f1744d13502dbc8f7103ad0d01c4ba5ecc528087756aa09ed75d4b4087  ci-data/small.mzpeak" > ci-data/small.sha256
           if command -v sha256sum >/dev/null; then sha256sum -c ci-data/small.sha256; else shasum -a 256 -c ci-data/small.sha256; fi
 
-      - name: Configure
+      - &s12
+        name: Configure
         shell: bash -el {0}
         run: |
+          if [ "${TESTS_REUSED:-}" = true ]; then echo "tests reused from an identical tree: nothing to build here"; exit 0; fi
           # pipefail, because the cmake line below is piped into tee. This
           # shell is `bash -el`, which has errexit but NOT pipefail, so a
           # failed configure would otherwise be swallowed by tee.
@@ -425,9 +649,11 @@ jobs:
             -DOpenMS_DIR="$OPENMS_DIR" \
             -DCMAKE_PREFIX_PATH="$OPENMS_INSTALL;$CONDA_PREFIX" 2>&1 | tee configure.log
 
-      - name: Verify OpenMP was found
+      - &s13
+        name: Verify OpenMP was found
         shell: bash -el {0}
         run: |
+          if [ "${TESTS_REUSED:-}" = true ]; then echo "tests reused from an identical tree: nothing to build here"; exit 0; fi
           # Without this, macOS goes GREEN while shipping a serial binary.
           #
           # Missing OpenMP is not a build error. CMakeLists.txt warns and carries
@@ -445,9 +671,15 @@ jobs:
           fi
           grep "FASTag: OpenMP" configure.log
 
-      - name: Build
+      # The build jobs build the CLI alone (FASTAG_BUILD_TARGET=FASTag: the
+      # bundles take build/FASTag and data/ from the source tree); the test
+      # jobs build everything ctest runs.
+      - &s14
+        name: Build
         shell: bash -el {0}
-        run: cmake --build build --parallel
+        run: |
+          if [ "${TESTS_REUSED:-}" = true ]; then echo "tests reused from an identical tree: nothing to build here"; exit 0; fi
+          cmake --build build --parallel ${FASTAG_BUILD_TARGET:+--target "$FASTAG_BUILD_TARGET"}
 
       # mzPeakValidator, for every archive this job writes: ctest's
       # mzpeak_validate (the round-trip archives) and the bundle check below.
@@ -459,17 +691,20 @@ jobs:
       # --only-binary: every compiled dependency has a wheel for all five
       # targets, and a source build here would be a silent multi-minute
       # detour on a runner without a compiler for it.
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      - &s15
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         id: validator-python
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: test/mzpeak-validator-requirements.txt
-      - name: Install mzPeakValidator
+      - &s16
+        name: Install mzPeakValidator
         shell: bash
         env:
           PY: ${{ steps.validator-python.outputs.python-path }}
         run: |
+          if [ "${TESTS_REUSED:-}" = true ]; then echo "tests reused from an identical tree: nothing to build here"; exit 0; fi
           set -euo pipefail
           PY="${PY//\\//}"
           for attempt in 1 2 3; do
@@ -487,47 +722,6 @@ jobs:
           "$V" --help >/dev/null
           echo "MZPEAK_VALIDATE=$V" >> "$GITHUB_ENV"
           echo "validator: $V"
-
-      # A v* tag build does not re-run ctest when an earlier push or dispatch
-      # run of this workflow (the release dry run, the main push of the merge
-      # commit) has the SAME git tree and a successful Test step in the job of
-      # the same name. Any API error, a PR, a main push or a dispatch: the
-      # tests run as before. The run it relied on is named in the log and the
-      # job summary.
-      - name: Look for an identical tree that already passed the tests (tag builds)
-        id: test-reuse
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash .github/scripts/tested-tree.sh "${{ matrix.name }}"
-
-      - name: Test
-        if: steps.test-reuse.outputs.reuse != 'true'
-        shell: bash -el {0}
-        run: |
-          # pipefail, as in Configure: this shell has errexit but not pipefail.
-          set -o pipefail
-          # One test per core: the tests are independent (their own temp
-          # directories; fixtures, RUN_SERIAL and COST in CMakeLists.txt).
-          # The required-test checks below read the per-test result lines,
-          # which ctest prints the same way with -j.
-          NJ=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
-          echo "ctest -j $NJ"
-          ctest --test-dir build --output-on-failure -j "$NJ" 2>&1 | tee ctest.log
-          # The mzPeak tests SKIP themselves in a build without mzPeak support
-          # or without the validator. This job has both, so a skip here would
-          # be a broken harness presenting as green -- the very class of
-          # failure this coverage exists for. Require a Passed line for each.
-          # The vendor readers (1.15.2) likewise: bruker_cli_test reads the
-          # trimmed timsTOF fixture, thermo_cli_test checks the reader's gate
-          # and notice (its data part needs a peptide .raw, which CI has not).
-          # gui_cli_test and shipped_data_test: the shipped data in every
-          # layout and the build tree's staging (they skip without Python).
-          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test bruker_cli_test thermo_cli_test gui_cli_test shipped_data_test; do
-            grep -E "Test +#[0-9]+: $t " ctest.log | grep -q 'Passed' \
-              || { echo "::error::$t did not pass (skipped, not run or missing)"; grep -E "$t" ctest.log || true; exit 1; }
-          done
 
       # Not part of Test, so a tag build that reuses an earlier test run still
       # reads both vendor formats with the binary it built.
@@ -1069,9 +1263,6 @@ jobs:
       # test/mzpeak_validate.sh.
       - name: Validate every mzPeak archive this job wrote
         shell: bash
-        env:
-          TESTS_REUSED: ${{ steps.test-reuse.outputs.reuse == 'true' }}
-          TESTS_REUSED_FROM: ${{ steps.test-reuse.outputs.run_url }}
         run: |
           set -euo pipefail
           R=validator-reports; rm -rf "$R"; mkdir -p "$R"
@@ -1079,11 +1270,7 @@ jobs:
             || { echo "::error::the CONTROL archive (reference converter) fails the pinned validator -- the validator or its pin is broken, not FASTag"; exit 1; }
           bash test/mzpeak_validate.sh "$R/bundle" /tmp/bundle-mzpeak/bundle.mzpeak \
             || { echo "::error::the archive the shipped bundle wrote is not a valid mzPeak archive"; exit 1; }
-          if [ "$TESTS_REUSED" = true ]; then
-            echo "ctest did not run here (tests reused from $TESTS_REUSED_FROM): no round-trip reports to collect"
-          else
-            cp -r build/mzpeak-roundtrip/validator "$R/ctest"
-          fi
+          # ctest's round-trip reports are the test job's (mzpeak-validator-ctest-<leg>).
           ls -R "$R" | head -40
 
       # The reports, pass or fail: a red validator run is only useful with
@@ -1122,7 +1309,7 @@ jobs:
       # Without them a tag build takes the "not configured" branch and ships
       # unsigned. doc/SIGNING-macos-gui.md names the secrets.
       - name: Detect macOS signing readiness
-        if: runner.os == 'macOS' && (startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run)
+        if: runner.os == 'macOS' && (needs.version.outputs.release != '' || inputs.gui_dry_run)
         id: mac-signing
         shell: bash
         env:
@@ -1152,6 +1339,8 @@ jobs:
           security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security import "$CERT_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          # The search list as words: one argument per keychain.
+          # shellcheck disable=SC2046
           security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"' | xargs)
           security default-keychain -d user -s "$KEYCHAIN_PATH"
           security find-identity -p codesigning -v "$KEYCHAIN_PATH"
@@ -1188,19 +1377,11 @@ jobs:
             || { cat "$RUNNER_TEMP/signed-raw.log"; echo "::error::the signed CLI cannot read a Thermo .raw"; exit 1; }
           grep -E "scans indexed" "$RUNNER_TEMP/signed-raw.log"
 
-      - name: Submit to Apple notary + wait (macOS)
-        if: steps.mac-signing.outputs.enabled == 'true'
-        timeout-minutes: 60
-        shell: bash
-        env:
-          MACOS_APPLE_ID: ${{ secrets.MACOS_APPLE_ID }}
-          MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
-          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
-        run: |
-          ditto -c -k --keepParent dist/FASTag "${RUNNER_TEMP}/FASTag-notarize.zip"
-          xcrun notarytool submit "${RUNNER_TEMP}/FASTag-notarize.zip" \
-            --apple-id "$MACOS_APPLE_ID" --team-id "$MACOS_TEAM_ID" \
-            --password "$MACOS_NOTARY_PASSWORD" --wait
+      # No notarization of the bare CLI folder here (it was submitted as a zip
+      # up to 1.16.4): a signed release ships the CLI only inside its disk
+      # image and inside the app, and each of those is notarized, with the
+      # CLI's Mach-Os in it, and stapled (below). A build without the signing
+      # secrets ships the unsigned tarball, which was never notarized.
 
       # MOVED AHEAD OF THE DESKTOP APP, and that is the whole point: the app's
       # resources are staged from dist/FASTag, so embedding the index after that
@@ -1209,10 +1390,8 @@ jobs:
       # taxonomy dumps are present ... but the k-mer index (tax_k7.taxdb) is
       # not" -- reported from /Applications/FASTag.app on 2026-09-09.
       #
-      # The original reason for placing it late still holds for the CLI: the
-      # index is unsigned data and embedding it before notarization would add
-      # ~450 MB to that upload. It does not conflict, because the CLI is
-      # notarized further up, before this point.
+      # The index is unsigned data, embedded after the codesign step; the disk
+      # images that carry it are notarized with it.
       # Embed the full taxonomy index into the tarball -- tag builds only;
       # main pushes keep the fast dumps-only bundles nobody installs.
       #
@@ -1234,7 +1413,7 @@ jobs:
       # before the tag (see the input's comment). linux-x64 embeds it before
       # the portable-CLI pack below, which gui-linux stages.
       - name: Embed taxonomy index (tag builds)
-        if: startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload && (runner.os == 'macOS' || matrix.name == 'linux-x64' || matrix.name == 'linux-arm64'))
+        if: needs.version.outputs.release != '' || (inputs.gui_dry_run && inputs.gui_full_payload && (runner.os == 'macOS' || matrix.name == 'linux-x64' || matrix.name == 'linux-arm64'))
         shell: bash -el {0}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1302,8 +1481,81 @@ jobs:
           path: FASTag-${{ matrix.name }}-portable.tar.gz
           # Already gzip: a second compression pass only costs time.
           compression-level: 0
-          retention-days: 14
+          retention-days: 30
           if-no-files-found: error
+
+      # A release candidate's Linux CLI tarball: the portable tarball above,
+      # byte for byte (the release attaches it as FASTag-<version>-<leg>.tar.gz).
+      - name: Release-candidate part (${{ matrix.name }})
+        if: env.RC_CANDIDATE == 'true' && runner.os == 'Linux'
+        shell: bash
+        run: |
+          python3 .github/scripts/rc-manifest.py part --job "${{ matrix.name }}" --group "${{ matrix.name }}" \
+            --artifact "FASTag-${{ matrix.name }}-portable" --out "rc-part-${{ matrix.name }}.json" \
+            "FASTag-${ASSET_VERSION}-${{ matrix.name }}.tar.gz=FASTag-${{ matrix.name }}-portable.tar.gz"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: env.RC_CANDIDATE == 'true' && runner.os == 'Linux'
+        with:
+          name: rc-part-${{ matrix.name }}
+          path: rc-part-${{ matrix.name }}.json
+          if-no-files-found: error
+
+      # A signed, notarized, STAPLED disk image of the CLI.
+      #
+      # Why a .dmg when the tarball already carries the same signed binaries:
+      # Apple staples a notarization ticket only to app bundles, installers and
+      # DISK IMAGES -- never a lone Mach-O or a plain folder. The tarball is
+      # therefore verified by an ONLINE Gatekeeper lookup on first run, which
+      # fails for a user who is offline or behind a proxy that blocks Apple.
+      # The disk image can carry its ticket, so it opens with no network at all.
+      # Both ship: the .dmg for people installing by hand, the tarball for
+      # scripts and CI, where mounting an image is a nuisance.
+      #
+      # Built AFTER the taxonomy embed so the image contains a complete,
+      # -species-capable install, and BEFORE the desktop app: the image goes to
+      # Apple's notary here and is stapled after the app's build, so the two
+      # notarizations overlap instead of queueing one after the other. On a
+      # tag and on a full-payload dry run (the release candidate, which keeps
+      # the image as an artifact).
+      - name: Make the CLI disk image and submit it for notarization (macOS)
+        if: steps.mac-signing.outputs.enabled == 'true' && (needs.version.outputs.release != '' || (inputs.gui_dry_run && inputs.gui_full_payload))
+        timeout-minutes: 30
+        shell: bash
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          MACOS_APPLE_ID: ${{ secrets.MACOS_APPLE_ID }}
+          MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          DMG="FASTag-${ASSET_VERSION}-${{ matrix.name }}.dmg"
+          STAGE="${RUNNER_TEMP}/dmgroot"
+          rm -rf "$STAGE"; mkdir -p "$STAGE"
+          cp -R dist/FASTag "$STAGE/FASTag"
+          python3 tools/check_taxonomy_manifest.py --pinned "data/taxonomy/manifests/$TAXDB_TAG.json" "$STAGE/FASTag/share-FASTag-taxonomy" \
+            || { echo "::error::the CLI disk image would not carry the pinned taxonomy index"; exit 1; }
+
+          # A custom volume icon needs THREE things, and missing any one leaves
+          # the generic white disk: the icon at the volume root named
+          # .VolumeIcon.icns, the volume's "has custom icon" Finder flag, and a
+          # writable image while both are set -- a UDZO image is read-only, so
+          # this builds UDRW first and converts afterwards.
+          cp gui/src-tauri/icons/icon.icns "$STAGE/.VolumeIcon.icns"
+          RW="${RUNNER_TEMP}/FASTag-rw.dmg"
+          rm -f "$RW"
+          hdiutil create -volname "FASTag" -srcfolder "$STAGE" -ov -format UDRW "$RW"
+          MNT=$(hdiutil attach -readwrite -noverify -noautoopen "$RW" | grep -o '/Volumes/.*' | head -1)
+          SetFile -a C "$MNT" || echo "::warning::SetFile unavailable; the disk image will use the generic icon"
+          hdiutil detach "$MNT" -quiet
+          rm -f "$DMG"
+          hdiutil convert "$RW" -format UDZO -o "$DMG"
+          rm -f "$RW"
+          # The licence agreement (Thermo's RawFileReader terms, section 3.3).
+          python3 tools/dmg_license.py "$DMG" gui/src-tauri/installer-license.txt
+
+          codesign --force --timestamp --sign "$MACOS_SIGNING_IDENTITY" "$DMG"
+          # To Apple now; job time goes on with the app while it is checked.
+          bash .github/scripts/notarize.sh submit "$DMG" cli-dmg
 
       # ------------------------------------------------- desktop app (macOS)
       # The .app is a SECOND artifact needing its OWN signature: notarization
@@ -1373,7 +1625,7 @@ jobs:
           # it embeds no index.
           if [ -s "$R/share/FASTag/taxonomy/tax_k7.taxdb" ]; then
             echo "taxonomy index present: $(du -h "$R/share/FASTag/taxonomy/tax_k7.taxdb" | cut -f1)"
-          elif [ "${{ startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload) }}" = "true" ]; then
+          elif [ "${{ needs.version.outputs.release != '' || (inputs.gui_dry_run && inputs.gui_full_payload) }}" = "true" ]; then
             echo "::error::the app bundle has no tax_k7.taxdb -- -species would fail in the shipped app"
             exit 1
           else
@@ -1427,6 +1679,33 @@ jobs:
           python3 tools/gui_third_party_notices.py --gui gui --target "$target" --platform macos \
             --out gui/src-tauri/resources/fastag/GUI-THIRD-PARTY-NOTICES.txt
 
+      # The release profile's compiled DEPENDENCIES (Cargo registry, deps/, build/,
+      # .fingerprint/ -- never bundle/, the staged resources or the app
+      # binary), keyed on the image, the architecture, rustc and Cargo.lock,
+      # falling back to the newest of the same toolchain. Restored only: job
+      # cargo-warm writes it from main pushes (cache budget: GitHub evicts at 10 GB).
+      - name: Cargo cache key
+        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && runner.os == 'macOS')
+        id: cargo-key
+        shell: bash
+        run: echo "key=cargo-release-${{ runner.os }}-${{ runner.arch }}-${ImageOS:-img}-$(rustc -V | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+      - name: Restore the Cargo cache
+        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && runner.os == 'macOS')
+        id: cargo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            gui/src-tauri/target/release/deps
+            gui/src-tauri/target/release/build
+            gui/src-tauri/target/release/.fingerprint
+            !gui/src-tauri/target/release/deps/*fastag*
+            !gui/src-tauri/target/release/build/fastag-*
+            !gui/src-tauri/target/release/.fingerprint/fastag-*
+          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
+          restore-keys: ${{ steps.cargo-key.outputs.key }}-
       - name: Build, sign and notarize the desktop app (macOS)
         if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && runner.os == 'macOS')
         timeout-minutes: 120
@@ -1444,8 +1723,20 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
         run: |
-          set -e
-          npm run tauri build
+          set -e -o pipefail
+          # Tauri notarizes the .app itself (its own submit-and-wait); a lost
+          # connection there (-1001 / -1005, the failure notarize.sh absorbs
+          # for the two disk images) gets one more build, which reuses the
+          # compiled target and submits the app again. Any other failure
+          # fails at once.
+          for i in 1 2; do
+            if npm run tauri build 2>&1 | tee "$RUNNER_TEMP/tauri-build.log"; then break; fi
+            if [ "$i" = 1 ] && grep -qE 'NSURLErrorDomain|-100[15]|network connection was lost|The request timed out' "$RUNNER_TEMP/tauri-build.log"; then
+              echo "::warning::Tauri's app notarization lost its connection; building once more"
+              continue
+            fi
+            exit 1
+          done
           ls -la src-tauri/target/release/bundle/dmg/
           # Assert the ticket is attached, HERE rather than at upload time: a
           # dry run skips the upload, and the staple is what the dry run
@@ -1466,6 +1757,7 @@ jobs:
             [ ${#dmgs[@]} -gt 0 ] || { echo "::error::tauri produced no .dmg"; exit 1; }
             codesign --verify --strict --verbose=2 "${dmgs[0]}"
           fi
+
 
       # Tauri's dmg is UDZO (zlib). Recompressed as ULMO (LZMA) it is about
       # 42% smaller (516.8 MB -> 300.4 MB measured with the full taxonomy
@@ -1519,11 +1811,9 @@ jobs:
           if [ "$SIGNED" = "true" ]; then
             codesign --force --sign "$MACOS_SIGNING_IDENTITY" --timestamp "$DMG"
             codesign --verify --strict --verbose=2 "$DMG"
-            xcrun notarytool submit "$DMG" \
-              --apple-id "$MACOS_APPLE_ID" --team-id "$MACOS_TEAM_ID" \
-              --password "$MACOS_NOTARY_PASSWORD" --wait
-            xcrun stapler staple "$DMG"
-            xcrun stapler validate "$DMG"
+            # Submitted, waited for by submission ID, stapled, validated
+            # (.github/scripts/notarize.sh).
+            bash .github/scripts/notarize.sh "$DMG" app-dmg
             spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG"
           else
             echo "::warning::unsigned dry run: the ULMO dmg is neither signed nor notarized"
@@ -1535,7 +1825,7 @@ jobs:
           mkdir -p "$MNT"
           # The image asks for the licence agreement: answered here, as a
           # user (or Homebrew) does.
-          PAGER=cat hdiutil attach "$DMG" -readonly -nobrowse -noautoopen -mountpoint "$MNT" < <(yes) > /dev/null
+          PAGER='cat' hdiutil attach "$DMG" -readonly -nobrowse -noautoopen -mountpoint "$MNT" < <(yes) > /dev/null
           trap 'hdiutil detach "$MNT" -force >/dev/null 2>&1 || true' EXIT
           apps=("$MNT"/*.app)
           [ ${#apps[@]} -eq 1 ] || { echo "::error::expected one .app in the dmg, found ${#apps[@]}"; exit 1; }
@@ -1549,7 +1839,7 @@ jobs:
           # staged resources (checked again here, where a user gets it):
           # each pinned file a regular file with the manifest's size and
           # sha256, so a truncated or substituted index fails too.
-          if [ "${{ startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload) }}" = "true" ]; then
+          if [ "${{ needs.version.outputs.release != '' || (inputs.gui_dry_run && inputs.gui_full_payload) }}" = "true" ]; then
             python3 tools/check_taxonomy_manifest.py --pinned "data/taxonomy/manifests/$TAXDB_TAG.json" "$(dirname "$(dirname "$CLI")")/share/FASTag/taxonomy" \
               || { echo "::error::the app in the dmg does not carry the pinned taxonomy index"; exit 1; }
           fi
@@ -1604,10 +1894,49 @@ jobs:
           echo "ULMO dmg: $size bytes ($(mb "$size") MB), was $before bytes"
           echo "### Desktop dmg: $(mb "$size") MB (ULMO), from $(mb "$before") MB (UDZO)" >> "$GITHUB_STEP_SUMMARY"
 
+      # The CLI image's notarization, submitted before the app: waited for by
+      # its submission ID, stapled -- a stapled, validated ticket or a red
+      # step, that is the entire reason this artifact exists -- and checked as
+      # a user gets it, mounted read-only with the licence answered: the
+      # pinned taxonomy index in it and its CLI reporting this version.
+      - name: Staple the CLI disk image and check it (macOS)
+        if: steps.mac-signing.outputs.enabled == 'true' && (needs.version.outputs.release != '' || (inputs.gui_dry_run && inputs.gui_full_payload))
+        timeout-minutes: 75
+        shell: bash
+        env:
+          MACOS_APPLE_ID: ${{ secrets.MACOS_APPLE_ID }}
+          MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          DMG="FASTag-${ASSET_VERSION}-${{ matrix.name }}.dmg"
+          bash .github/scripts/notarize.sh wait "$DMG" cli-dmg
+          CMNT="$RUNNER_TEMP/fastag-cli-dmg-mnt"
+          mkdir -p "$CMNT"
+          env PAGER='cat' hdiutil attach "$DMG" -readonly -nobrowse -noautoopen -mountpoint "$CMNT" < <(yes) > /dev/null
+          pinned=yes; runs=yes
+          python3 tools/check_taxonomy_manifest.py --pinned "data/taxonomy/manifests/$TAXDB_TAG.json" "$CMNT/FASTag/share-FASTag-taxonomy" || pinned=no
+          want=$(sed -n 's/^project(FASTag VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          env -i HOME="$HOME" PATH=/usr/bin:/bin "$CMNT/FASTag/FASTag" --help 2>&1 | grep -q "^Version: $want" || runs=no
+          hdiutil detach "$CMNT" -force > /dev/null 2>&1 || true
+          [ "$pinned" = yes ] || { echo "::error::the CLI disk image does not carry the pinned taxonomy index"; exit 1; }
+          [ "$runs" = yes ] || { echo "::error::the CLI in the disk image does not run or does not report version $want"; exit 1; }
+          echo "- ${{ matrix.name }}: the CLI disk image is notarized, stapled, carries the pinned index and runs" >> "$GITHUB_STEP_SUMMARY"
+      # The CLI image as an artifact: job macos-release attaches it; a
+      # full-payload dry run keeps it as the release would attach it.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: steps.mac-signing.outputs.enabled == 'true' && (needs.version.outputs.release != '' || (inputs.gui_dry_run && inputs.gui_full_payload))
+        with:
+          name: FASTag-${{ matrix.name }}-cli-dmg
+          path: FASTag-${{ env.ASSET_VERSION }}-${{ matrix.name }}.dmg
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
+
       # The release file name, given on a tag and on a dry run alike, so the
       # dry run's artifact holds the very name a release would attach.
       - name: Name the desktop app's disk image (macOS)
-        if: runner.os == 'macOS' && ((steps.mac-signing.outputs.enabled == 'true' && startsWith(github.ref, 'refs/tags/v')) || inputs.gui_dry_run)
+        if: runner.os == 'macOS' && ((steps.mac-signing.outputs.enabled == 'true' && needs.version.outputs.release != '') || inputs.gui_dry_run)
         shell: bash
         run: |
           set -euo pipefail
@@ -1617,27 +1946,35 @@ jobs:
           cp "${dmgs[0]}" "FASTag-${ASSET_VERSION}-gui-${{ matrix.name }}.dmg"
           tools/release_assets.sh check "$ASSET_VERSION" "FASTag-${ASSET_VERSION}-gui-${{ matrix.name }}.dmg"
 
-      - name: Attach the signed desktop app to the release (macOS)
-        if: steps.mac-signing.outputs.enabled == 'true' && startsWith(github.ref, 'refs/tags/v')
+      # The desktop app's disk image as an artifact: job macos-release attaches
+      # it on a release run, a dry run's is opened and checked by hand.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: runner.os == 'macOS' && ((steps.mac-signing.outputs.enabled == 'true' && needs.version.outputs.release != '') || inputs.gui_dry_run)
+        with:
+          name: FASTag-gui-${{ matrix.name }}-dmg
+          path: FASTag-${{ env.ASSET_VERSION }}-gui-${{ matrix.name }}.dmg
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
+
+      # A release candidate's two macOS images (signed builds only: the
+      # manifest of a candidate requires them).
+      - name: Release-candidate part (macOS)
+        if: env.RC_CANDIDATE == 'true' && runner.os == 'macOS' && steps.mac-signing.outputs.enabled == 'true'
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          gh release create "${{ github.ref_name }}" \
-            --title "${{ github.ref_name }}" \
-            --notes "Automated binary upload; the release notes follow from CHANGELOG.md (job release-notes)." \
-            2>/dev/null || true
-          gh release upload "${{ github.ref_name }}" "FASTag-${ASSET_VERSION}-gui-${{ matrix.name }}.dmg" --clobber
-
-      # A dry run has no release to attach to, so the .dmg comes back as a
-      # workflow artifact to be opened and checked by hand.
+          python3 .github/scripts/rc-manifest.py part --job "${{ matrix.name }}" --group "${{ matrix.name }}" \
+            --artifact "FASTag-gui-${{ matrix.name }}-dmg" --out "rc-part-${{ matrix.name }}-gui.json" \
+            "FASTag-${ASSET_VERSION}-gui-${{ matrix.name }}.dmg=FASTag-${ASSET_VERSION}-gui-${{ matrix.name }}.dmg"
+          python3 .github/scripts/rc-manifest.py part --job "${{ matrix.name }}" --group "${{ matrix.name }}" \
+            --artifact "FASTag-${{ matrix.name }}-cli-dmg" --out "rc-part-${{ matrix.name }}-cli.json" \
+            "FASTag-${ASSET_VERSION}-${{ matrix.name }}.dmg=FASTag-${ASSET_VERSION}-${{ matrix.name }}.dmg"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        if: inputs.gui_dry_run && runner.os == 'macOS'
+        if: env.RC_CANDIDATE == 'true' && runner.os == 'macOS' && steps.mac-signing.outputs.enabled == 'true'
         with:
-          name: FASTag-gui-${{ matrix.name }}-dryrun
-          path: FASTag-${{ env.ASSET_VERSION }}-gui-${{ matrix.name }}.dmg
+          name: rc-part-${{ matrix.name }}
+          path: rc-part-${{ matrix.name }}-*.json
           if-no-files-found: error
 
       # Filenames carry the version (FASTag-<version>-<platform>.<ext>, from
@@ -1646,84 +1983,11 @@ jobs:
       # the README and the project page now link the releases/latest page
       # instead, and the page resolves the newest files through the API.
       #
-      # `gh release create ... || true`: this job runs once per matrix entry,
-      # so whichever platform's build finishes first creates the release (a
-      # placeholder, if the real notes have not been written yet -- edited in
-      # afterward without touching assets); every later entry's create call
-      # fails harmlessly because it already exists, then --clobber lets each
-      # attach its own binary regardless of arrival order.
-      #
-      # Archives the WHOLE dist/FASTag/ folder now, not a single file: users
-      # run FASTag/FASTag (the wrapper), not the FASTag.bin it execs.
+      # Releases: job version makes the one DRAFT (release-draft.sh create);
+      # the uploader jobs attach files to it by id (release-upload.sh, after
+      # every gate of their files), and release-complete publishes it once the
+      # whole inventory, Windows included, is on it with the right digests.
       # ---------------------------------------------------------------------
-      # A signed, notarized, STAPLED disk image of the CLI.
-      #
-      # Why a .dmg when the tarball already carries the same signed binaries:
-      # Apple staples a notarization ticket only to app bundles, installers and
-      # DISK IMAGES -- never a lone Mach-O or a plain folder. The tarball is
-      # therefore verified by an ONLINE Gatekeeper lookup on first run, which
-      # fails for a user who is offline or behind a proxy that blocks Apple.
-      # The disk image can carry its ticket, so it opens with no network at all.
-      # Both ship: the .dmg for people installing by hand, the tarball for
-      # scripts and CI, where mounting an image is a nuisance.
-      #
-      # Built AFTER the taxonomy embed so the image contains a complete,
-      # -species-capable install, and BEFORE the keychain teardown because
-      # signing the image needs the identity.
-      - name: Package the CLI as a signed, notarized disk image (macOS)
-        if: steps.mac-signing.outputs.enabled == 'true' && startsWith(github.ref, 'refs/tags/v')
-        timeout-minutes: 90
-        shell: bash
-        env:
-          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
-          MACOS_APPLE_ID: ${{ secrets.MACOS_APPLE_ID }}
-          MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
-          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          DMG="FASTag-${ASSET_VERSION}-${{ matrix.name }}.dmg"
-          STAGE="${RUNNER_TEMP}/dmgroot"
-          rm -rf "$STAGE"; mkdir -p "$STAGE"
-          cp -R dist/FASTag "$STAGE/FASTag"
-          python3 tools/check_taxonomy_manifest.py --pinned "data/taxonomy/manifests/$TAXDB_TAG.json" "$STAGE/FASTag/share-FASTag-taxonomy" \
-            || { echo "::error::the CLI disk image would not carry the pinned taxonomy index"; exit 1; }
-
-          # A custom volume icon needs THREE things, and missing any one leaves
-          # the generic white disk: the icon at the volume root named
-          # .VolumeIcon.icns, the volume's "has custom icon" Finder flag, and a
-          # writable image while both are set -- a UDZO image is read-only, so
-          # this builds UDRW first and converts afterwards.
-          cp gui/src-tauri/icons/icon.icns "$STAGE/.VolumeIcon.icns"
-          RW="${RUNNER_TEMP}/FASTag-rw.dmg"
-          rm -f "$RW"
-          hdiutil create -volname "FASTag" -srcfolder "$STAGE" -ov -format UDRW "$RW"
-          MNT=$(hdiutil attach -readwrite -noverify -noautoopen "$RW" | grep -o '/Volumes/.*' | head -1)
-          SetFile -a C "$MNT" || echo "::warning::SetFile unavailable; the disk image will use the generic icon"
-          hdiutil detach "$MNT" -quiet
-          rm -f "$DMG"
-          hdiutil convert "$RW" -format UDZO -o "$DMG"
-          rm -f "$RW"
-          # The licence agreement (Thermo's RawFileReader terms, section 3.3).
-          python3 tools/dmg_license.py "$DMG" gui/src-tauri/installer-license.txt
-
-          codesign --force --timestamp --sign "$MACOS_SIGNING_IDENTITY" "$DMG"
-          xcrun notarytool submit "$DMG" \
-            --apple-id "$MACOS_APPLE_ID" --team-id "$MACOS_TEAM_ID" \
-            --password "$MACOS_NOTARY_PASSWORD" --wait
-          xcrun stapler staple "$DMG"
-          # Refuse to ship an image whose ticket is not attached -- that is the
-          # entire reason this artifact exists.
-          xcrun stapler validate "$DMG"
-          # The pinned taxonomy index in the final image itself, mounted
-          # read-only as a user gets it (the licence agreement answered).
-          CMNT="$RUNNER_TEMP/fastag-cli-dmg-mnt"
-          mkdir -p "$CMNT"
-          env PAGER=cat hdiutil attach "$DMG" -readonly -nobrowse -noautoopen -mountpoint "$CMNT" < <(yes) > /dev/null
-          pinned=yes
-          python3 tools/check_taxonomy_manifest.py --pinned "data/taxonomy/manifests/$TAXDB_TAG.json" "$CMNT/FASTag/share-FASTag-taxonomy" || pinned=no
-          hdiutil detach "$CMNT" -force > /dev/null 2>&1 || true
-          [ "$pinned" = yes ] || { echo "::error::the CLI disk image does not carry the pinned taxonomy index"; exit 1; }
-
       # Placed last on purpose: everything above that needs the identity has
       # run. `always()` so a failure earlier still tears the keychain down.
       - name: Delete signing keychain (macOS)
@@ -1731,44 +1995,56 @@ jobs:
         shell: bash
         run: security delete-keychain "${RUNNER_TEMP}/fastag-signing.keychain-db" || true
 
-      - name: Attach binary to the GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash -el {0}
-        env:
-          GH_TOKEN: ${{ github.token }}
+      # A release run without the macOS signing secrets ships the CLI as a
+      # tarball (an unsigned .dmg cannot be made); job macos-release attaches it.
+      - name: The unsigned macOS CLI tarball (release runs without signing)
+        if: runner.os == 'macOS' && needs.version.outputs.release != '' && steps.mac-signing.outputs.enabled != 'true'
+        shell: bash
         run: |
-          gh release create "${{ github.ref_name }}" \
-            --title "${{ github.ref_name }}" \
-            --notes "Automated binary upload; the release notes follow from CHANGELOG.md (job release-notes)." \
-            2>/dev/null || true
-          # macOS ships the DISK IMAGE ONLY. The tarball cannot carry a
-          # notarization ticket -- Apple staples one to disk images, installers
-          # and app bundles, never a plain folder -- so shipping both meant
-          # offering a second artifact that was strictly worse and warned on a
-          # machine with no network. One artifact, one behaviour.
-          #
-          # The tarball is still built and uploaded when signing is NOT
-          # configured, because an unsigned .dmg cannot be produced at all and
-          # shipping nothing for macOS would be worse than shipping a tarball.
-          if [ -f "FASTag-${ASSET_VERSION}-${{ matrix.name }}.dmg" ]; then
-            gh release upload "${{ github.ref_name }}" "FASTag-${ASSET_VERSION}-${{ matrix.name }}.dmg" --clobber
-          else
-            tar -C dist -czf "FASTag-${ASSET_VERSION}-${{ matrix.name }}.tar.gz" FASTag
-            bash tools/check_no_appledouble.sh "FASTag-${ASSET_VERSION}-${{ matrix.name }}.tar.gz"
-            gh release upload "${{ github.ref_name }}" "FASTag-${ASSET_VERSION}-${{ matrix.name }}.tar.gz" --clobber
-          fi
+          set -euo pipefail
+          tar -C dist -czf "FASTag-${ASSET_VERSION}-${{ matrix.name }}.tar.gz" FASTag
+          bash tools/check_no_appledouble.sh "FASTag-${ASSET_VERSION}-${{ matrix.name }}.tar.gz"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: runner.os == 'macOS' && needs.version.outputs.release != '' && steps.mac-signing.outputs.enabled != 'true'
+        with:
+          name: FASTag-${{ matrix.name }}-tarball
+          path: FASTag-${{ env.ASSET_VERSION }}-${{ matrix.name }}.tar.gz
+          compression-level: 0
+          if-no-files-found: error
 
-  # The macOS legs of build: the same steps, a job of their own so that the
-  # Linux GUI jobs do not wait for them (release-complete still needs both).
-  build-macos:
-    name: ${{ matrix.name }}
+  # The arm64 Linux leg: build-linux-x64's steps, a job of its own so that
+  # gui-linux-arm64 needs only it.
+  build-linux-arm64:
+    name: ${{ matrix.name }} build
+    if: (needs.version.outputs.promote != 'true') && needs.version.outputs.code != 'false'
     runs-on: ${{ matrix.runner }}
     needs: [version]
     env:
       ASSET_VERSION: ${{ needs.version.outputs.version }}
+      FASTAG_BUILD_TARGET: FASTag
     permissions:
-      contents: write
-      actions: read
+      contents: read
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.version.outputs.linux_arm64_leg) }}
+    steps: *build-steps
+
+  # The macOS legs of build: the same steps, a job of their own so that the
+  # Linux GUI jobs do not wait for them (release-complete still needs both).
+  build-macos:
+    name: ${{ matrix.name }} build
+    if: (needs.version.outputs.promote != 'true') && needs.version.outputs.code != 'false'
+    runs-on: ${{ matrix.runner }}
+    needs: [version]
+    outputs:
+      signed: ${{ steps.mac-signing.outputs.enabled }}
+    env:
+      ASSET_VERSION: ${{ needs.version.outputs.version }}
+      FASTAG_BUILD_TARGET: FASTag
+    permissions:
+      contents: read
     timeout-minutes: 330
     strategy:
       fail-fast: false
@@ -1776,11 +2052,140 @@ jobs:
         include: ${{ fromJSON(needs.version.outputs.macos_legs) }}
     steps: *build-steps
 
+  # ---------------------------------------------------------------- tests
+  # ctest, in jobs of their own that start with the build jobs below rather
+  # than inside them: the build jobs go on to bundle, sign and package (and
+  # the GUI jobs wait only for them) while the tests run. Each test job
+  # compiles FASTag and its tests itself from the same tree and toolchain.
+  # The job keeps the leg's name (linux-x64, ...): tested-tree.sh, on a v*
+  # tag, looks for an earlier run whose job of that name passed its "Test"
+  # step. release-complete needs these jobs.
+  test:
+    name: ${{ matrix.name }}
+    if: (needs.version.outputs.promote != 'true') && needs.version.outputs.code != 'false'
+    runs-on: ${{ matrix.runner }}
+    needs: [version]
+    permissions:
+      contents: read
+      # read: the Test step's reuse lookup on a v* tag (.github/scripts/tested-tree.sh)
+      # lists this workflow's earlier runs and their jobs.
+      actions: read
+    # 330: a cold OpenMS build (up to 240 minutes) plus the suite.
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.version.outputs.linux_legs) }}
+    steps: &test-steps
+      - *s01
+      # A v* tag build does not re-run ctest when an earlier push or dispatch
+      # run of this workflow (the release dry run, the main push of the merge
+      # commit) has the SAME git tree and a successful Test step in the job of
+      # the same name. Any API error, a PR, a main push or a dispatch: the
+      # tests run as before. The run it relied on is named in the log and the
+      # job summary.
+      - name: Look for an identical tree that already passed the tests (tag builds)
+        id: test-reuse
+        if: needs.version.outputs.publish == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash .github/scripts/tested-tree.sh "${{ matrix.name }}"
+          # The shared Configure, Build and validator steps read this.
+          grep -q '^reuse=true$' "$GITHUB_OUTPUT" && echo "TESTS_REUSED=true" >> "$GITHUB_ENV" || true
+
+      - *s02
+      - *s03
+      - *s03b
+      - *s04
+      - *s05
+      - *s06
+      - *s08
+      - *s07
+      - *s09
+      - *s10
+      - *s11
+      - *s12
+      - *s13
+      - *s14
+      - *s15
+      - *s16
+      - name: Test
+        if: steps.test-reuse.outputs.reuse != 'true'
+        shell: bash -el {0}
+        run: |
+          # pipefail, as in Configure: this shell has errexit but not pipefail.
+          set -o pipefail
+          # One test per core: the tests are independent (their own temp
+          # directories; fixtures, RUN_SERIAL and COST in CMakeLists.txt).
+          # The required-test checks below read the per-test result lines,
+          # which ctest prints the same way with -j.
+          NJ=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+          # Idle OpenMP workers sleep instead of spinning: with -j tests side by
+          # side, each FASTag's spinning workers (libomp: 200 ms after every
+          # parallel region) take the cores the other tests need. Output is
+          # unchanged; only the wait between regions differs.
+          export OMP_WAIT_POLICY=PASSIVE KMP_BLOCKTIME=0
+          echo "ctest -j $NJ (OMP_WAIT_POLICY=$OMP_WAIT_POLICY)"
+          ctest --test-dir build --output-on-failure -j "$NJ" 2>&1 | tee ctest.log
+          # The mzPeak tests SKIP themselves in a build without mzPeak support
+          # or without the validator. This job has both, so a skip here would
+          # be a broken harness presenting as green -- the very class of
+          # failure this coverage exists for. Require a Passed line for each.
+          # The vendor readers (1.15.2) likewise: bruker_cli_test reads the
+          # trimmed timsTOF fixture, thermo_cli_test checks the reader's gate
+          # and notice (its data part needs a peptide .raw, which CI has not).
+          # gui_cli_test and shipped_data_test: the shipped data in every
+          # layout and the build tree's staging (they skip without Python).
+          # The four parts of charge_cli_test (#6), which skip on a binary that
+          # cannot start.
+          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test bruker_cli_test thermo_cli_test gui_cli_test shipped_data_test charge_cli_test_defaults charge_cli_test_calls charge_cli_test_threads charge_cli_test_species; do
+            grep -E "Test +#[0-9]+: $t " ctest.log | grep -q 'Passed' \
+              || { echo "::error::$t did not pass (skipped, not run or missing)"; grep -E "$t" ctest.log || true; exit 1; }
+          done
+
+      # ctest's mzpeak_validate reports (the round-trip archives), pass or fail.
+      - name: Collect the ctest validator reports
+        if: always() && steps.test-reuse.outputs.reuse != 'true'
+        shell: bash
+        run: |
+          mkdir -p validator-reports
+          cp -r build/mzpeak-roundtrip/validator validator-reports/ctest 2>/dev/null || echo "no ctest validator reports"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always() && steps.test-reuse.outputs.reuse != 'true'
+        with:
+          name: mzpeak-validator-ctest-${{ matrix.name }}
+          path: validator-reports
+          if-no-files-found: warn
+
+  test-macos:
+    name: ${{ matrix.name }}
+    if: (needs.version.outputs.promote != 'true') && needs.version.outputs.code != 'false'
+    runs-on: ${{ matrix.runner }}
+    needs: [version]
+    permissions:
+      contents: read
+      actions: read
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.version.outputs.macos_legs) }}
+    steps: *test-steps
+
   # ----------------------------------------------------------- GUI checks
+  # On pull requests, main pushes, release candidates (whose job "release
+  # candidate" requires them, so a promoted tag has them green on its exact
+  # tree) and rebuilt releases (release-complete requires them); not on a
+  # plain dry run or a promoted tag, where they would only queue in front of
+  # the build jobs (20 concurrent jobs on this plan).
   # Independent on purpose: no `needs:` -- waiting for OpenMS to test
   # TypeScript would make nobody run it. webkit2gtk/rsvg are what the tauri
   # crate links on Linux; without them cargo cannot even typecheck the backend.
   gui:
+    needs: [version]
+    if: ${{ needs.version.outputs.promote != 'true' && (github.event_name != 'workflow_dispatch' || (inputs.gui_dry_run && inputs.gui_full_payload) || needs.version.outputs.release != '') && needs.version.outputs.code != 'false' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -1798,6 +2203,14 @@ jobs:
       # gui/src/fixtures/denovo/cases.json, and its output must equal the
       # committed golden files byte for byte (and pass the script's --check).
       # The vitest suite below then holds export/denovo.ts to the same files.
+      # The release scripts against written API responses (stub-gh): test
+      # reuse on a tag, the release-candidate lookup and manifest, the one
+      # draft per tag, notarization by submission ID. Seconds; they decide
+      # what a release attaches, so they run on every PR.
+      - name: Release scripts (stub tests)
+        run: |
+          bash .github/scripts/tests/release_scripts_test.sh
+          bash .github/scripts/tests/notarize_test.sh
       - name: De novo golden files from tools/tags_to_denovo.py
         working-directory: gui
         run: |
@@ -1857,6 +2270,8 @@ jobs:
   # pwsh, not bash: Git Bash's link.exe shadows MSVC's linker (windows.yml,
   # "Build the desktop app").
   gui-windows:
+    needs: [version]
+    if: ${{ needs.version.outputs.promote != 'true' && (github.event_name != 'workflow_dispatch' || (inputs.gui_dry_run && inputs.gui_full_payload) || needs.version.outputs.release != '') && needs.version.outputs.code != 'false' }}
     runs-on: windows-2022
     timeout-minutes: 45
     steps:
@@ -1942,6 +2357,8 @@ jobs:
   # branch-protection setting, not part of this file.
   # Independent of the CLI build, like the gui job.
   tauri-driver:
+    needs: [version]
+    if: ${{ needs.version.outputs.promote != 'true' && (github.event_name != 'workflow_dispatch' || (inputs.gui_dry_run && inputs.gui_full_payload) || needs.version.outputs.release != '') && needs.version.outputs.code != 'false' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -1993,7 +2410,7 @@ jobs:
           name: tauri-driver-stub
           path: gui/e2e-tauri/results
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 30
 
   # ------------------------------------------------- desktop app (Linux)
   # GUI-DESIGN section 8, Linux (D4). NOT on the linux-x64 leg: that leg runs
@@ -2012,8 +2429,8 @@ jobs:
   # below test the artifact first, and gui-linux-release attaches it.
   gui-linux:
     name: gui-linux-x64
-    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run) }}
-    needs: [version, build]
+    if: ${{ !cancelled() && needs.version.outputs.promote != 'true' && (needs.version.outputs.release != '' || inputs.gui_dry_run) }}
+    needs: [version, build-linux-x64]
     runs-on: ubuntu-22.04
     timeout-minutes: 120
     # GUI_ARCH names the FASTag files (linux-<GUI_ARCH>), DEB_ARCH the
@@ -2023,15 +2440,15 @@ jobs:
       GUI_ARCH: x64
       DEB_ARCH: amd64
     outputs:
-      appimage: ${{ steps.appimage.outputs.built }}
       deb: ${{ steps.assets.outputs.deb }}
       tarball: ${{ steps.assets.outputs.tarball }}
-      appimage_file: ${{ steps.assets.outputs.appimage_file }}
     steps: &gui-linux-steps
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - &gl-checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+      - &gl-download
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: FASTag-linux-${{ env.GUI_ARCH }}-portable
           path: ${{ runner.temp }}/cli
@@ -2044,7 +2461,8 @@ jobs:
           else
             echo "::warning::no libc::PR_SET_PDEATHSIG call in gui/src-tauri/src (P1 PR b not merged): a tag build would not attach the Linux desktop app"
           fi
-      - name: Stage the portable CLI as the app's bundled resources
+      - &gl-stage
+        name: Stage the portable CLI as the app's bundled resources
         shell: bash
         run: |
           set -euo pipefail
@@ -2080,7 +2498,7 @@ jobs:
           # index is due, so the release-sized bundle is what gets tested.
           if [ -s "$R/share/FASTag/taxonomy/tax_k7.taxdb" ]; then
             echo "taxonomy index present: $(du -h "$R/share/FASTag/taxonomy/tax_k7.taxdb" | cut -f1)"
-          elif [ "${{ startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload) }}" = "true" ]; then
+          elif [ "${{ needs.version.outputs.release != '' || (inputs.gui_dry_run && inputs.gui_full_payload) }}" = "true" ]; then
             echo "::error::the Linux app bundle has no tax_k7.taxdb -- -species would fail in the shipped app"
             exit 1
           else
@@ -2099,13 +2517,15 @@ jobs:
           # make three more copies.
           rm -rf "$RUNNER_TEMP/cli"
           df -h / "$RUNNER_TEMP" | tee -a /tmp/disk.txt
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+      - &gl-node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-      - name: Tauri build deps (apt, no conda)
+      - &gl-deps
+        name: Tauri build deps (apt, no conda)
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev file xdg-utils squashfs-tools
+          sudo apt-get install -y -q libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev file xdg-utils squashfs-tools pigz
           ldd --version | head -1
           pkg-config --modversion webkit2gtk-4.1
       # GUI-THIRD-PARTY-NOTICES.txt beside the CLI's notices in the app's
@@ -2113,7 +2533,8 @@ jobs:
       # packages and the fonts, each with its licence text. The .deb and the
       # tarball bundle no system library; the AppImage step below adds the
       # libraries linuxdeploy bundles to the AppImage's copy.
-      - name: Install the npm dependencies, write the desktop app's notices
+      - &gl-npm
+        name: Install the npm dependencies, write the desktop app's notices
         working-directory: gui
         run: |
           set -euo pipefail
@@ -2121,12 +2542,212 @@ jobs:
           target=$(rustc -vV | sed -n 's/^host: //p')
           python3 ../tools/gui_third_party_notices.py --gui . --target "$target" --platform linux \
             --out src-tauri/resources/fastag/GUI-THIRD-PARTY-NOTICES.txt
+      # The release profile's compiled DEPENDENCIES (Cargo registry, deps/, build/,
+      # .fingerprint/ -- never bundle/, the staged resources or the app
+      # binary), keyed on the image, the architecture, rustc and Cargo.lock,
+      # falling back to the newest of the same toolchain. Restored only: job
+      # cargo-warm writes it from main pushes (cache budget: GitHub evicts at 10 GB).
+      - name: Cargo cache key
+        id: cargo-key
+        shell: bash
+        run: echo "key=cargo-release-${{ runner.os }}-${{ runner.arch }}-${ImageOS:-img}-$(rustc -V | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+      - name: Restore the Cargo cache
+        id: cargo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            gui/src-tauri/target/release/deps
+            gui/src-tauri/target/release/build
+            gui/src-tauri/target/release/.fingerprint
+            !gui/src-tauri/target/release/deps/*fastag*
+            !gui/src-tauri/target/release/build/fastag-*
+            !gui/src-tauri/target/release/.fingerprint/fastag-*
+          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
+          restore-keys: ${{ steps.cargo-key.outputs.key }}-
       - name: Build the .deb
         working-directory: gui
         run: |
           npx tauri build --bundles deb
           ls -la src-tauri/target/release/bundle/deb/
           df -h / | tail -1
+      # The Debian package is named fastag-gui, not the `fas-tag` Tauri
+      # derives from productName: tauri.conf.json has no option for it, so
+      # the .deb is repacked with only the Package field changed. The name
+      # has to be right before the first Linux release -- dpkg treats a
+      # renamed package as a different one, so a later rename breaks
+      # upgrades. The download is fastag-gui_<version>_amd64.deb (GUI-DESIGN
+      # section 8, decision of 2026-11-07), Debian's own file name; the
+      # tarball and the AppImage are FASTag-<version>-gui-linux-x64.tar.gz
+      # and .AppImage, the version from job version.
+      - name: Name the assets, make the tarball, check the .deb
+        id: assets
+        shell: bash
+        env:
+          DEB_PACKAGE: fastag-gui
+          VER: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          [ -n "$VER" ] || { echo "::error::job version gave no version"; exit 1; }
+          DEB="${DEB_PACKAGE}_${VER}_${DEB_ARCH}.deb"
+          TGZ="FASTag-${VER}-gui-linux-${GUI_ARCH}.tar.gz"
+          B=gui/src-tauri/target/release/bundle
+          shopt -s nullglob
+          debs=("$B"/deb/*.deb)
+          [ ${#debs[@]} -eq 1 ] || { echo "::error::expected one .deb from tauri, found ${#debs[@]}"; exit 1; }
+          # Only the control member changes (Package), so only it is rebuilt: the
+          # .deb's ar members are taken apart and put back in their order
+          # (debian-binary, control.tar.gz, data.tar.*), Tauri's compressed
+          # data member untouched. A full dpkg-deb repack recompressed the
+          # whole ~1 GB payload single-threaded (3.4 min).
+          X="$RUNNER_TEMP/debx"; W="$RUNNER_TEMP/debar"; rm -rf "$X" "$W"; mkdir -p "$W/c"
+          deb_in=$(realpath "${debs[0]}")
+          (cd "$W" && ar x "$deb_in")
+          ls -l "$W"
+          ctrl=$(find "$W" -maxdepth 1 -name 'control.tar*'); data=$(find "$W" -maxdepth 1 -name 'data.tar*')
+          [ -n "$ctrl" ] && [ -n "$data" ] && [ "$(cat "$W/debian-binary")" = 2.0 ] || { echo "::error::Tauri's .deb is not debian-binary 2.0 + control + data"; exit 1; }
+          tar -xf "$ctrl" -C "$W/c"
+          echo "Tauri's package name: $(sed -n 's/^Package: //p' "$W/c/control")"
+          sed -i "s/^Package: .*/Package: $DEB_PACKAGE/" "$W/c/control"
+          rm -f "$ctrl"
+          (cd "$W/c" && tar --owner=0 --group=0 --numeric-owner --sort=name -czf ../control.tar.gz ./*)
+          rm -f "$DEB"
+          (cd "$W" && ar rcD "$GITHUB_WORKSPACE/$DEB" debian-binary control.tar.gz "$(basename "$data")")
+          rm -rf "$W" "${debs[0]}"
+          # Every content check below reads the generated $DEB itself, not
+          # the repack input: an omission or corruption introduced by the
+          # repack cannot pass them.
+          rm -rf "$X"
+          dpkg-deb -R "$DEB" "$X"
+          dpkg-deb -I "$DEB"
+          [ "$(dpkg-deb -f "$DEB" Package)" = "$DEB_PACKAGE" ] \
+            || { echo "::error::the .deb is not named $DEB_PACKAGE"; exit 1; }
+          [ "$(dpkg-deb -f "$DEB" Version)" = "$VER" ] \
+            || { echo "::error::the .deb's Version is $(dpkg-deb -f "$DEB" Version), not $VER"; exit 1; }
+          [ "$(dpkg-deb -f "$DEB" Architecture)" = "$DEB_ARCH" ] \
+            || { echo "::error::the .deb is for $(dpkg-deb -f "$DEB" Architecture), not $DEB_ARCH"; exit 1; }
+          echo "deb=$DEB" >> "$GITHUB_OUTPUT"
+          dep=$(dpkg-deb -f "$DEB" Depends)
+          for want in libwebkit2gtk-4.1-0 libgtk-3-0; do
+            grep -q "$want" <<< "$dep" || { echo "::error::the .deb does not depend on $want (Depends: $dep)"; exit 1; }
+          done
+          cli=$(find "$X" -path '*/resources/fastag/bin/FASTag' -type f -perm -u+x | head -1)
+          [ -n "$cli" ] || { echo "::error::the .deb carries no executable resources/fastag/bin/FASTag"; exit 1; }
+          echo "CLI in the .deb: ${cli#"$X"}"
+          bash tools/check_bundle_notices.sh "$(dirname "$(dirname "$cli")")"
+          # The k-mer index in the package itself, as extracted from $DEB
+          # above (the tarball is its /usr tree).
+          if [ "${{ needs.version.outputs.release != '' || (inputs.gui_dry_run && inputs.gui_full_payload) }}" = "true" ]; then
+            python3 tools/check_taxonomy_manifest.py --pinned "data/taxonomy/manifests/$TAXDB_TAG.json" "$(dirname "$(dirname "$cli")")/share/FASTag/taxonomy" \
+              || { echo "::error::the .deb does not carry the pinned taxonomy index in resources/fastag/share/FASTag/taxonomy"; exit 1; }
+          fi
+          # bundle.category in tauri.conf.json sets the menu category;
+          # without it Categories= is empty and menus file FASTag under
+          # "Other".
+          desk="$X/usr/share/applications/FASTag.desktop"
+          grep -qx 'Categories=Education;' "$desk" \
+            || { echo "::error::the .deb's FASTag.desktop has $(grep '^Categories=' "$desk" || echo 'no Categories='), not Categories=Education;"; exit 1; }
+          # The tarball is the .deb's /usr tree, renamed; moved, not copied,
+          # as the repacked .deb already holds it.
+          T="$RUNNER_TEMP/guitar"; rm -rf "$T"; mkdir -p "$T"
+          mv "$X/usr" "$T/FASTag-gui"
+          rm -rf "$X"
+          # gzip on every core (pigz): the same .tar.gz format.
+          tar -C "$T" -cf - FASTag-gui | pigz -6 > "$TGZ"
+          rm -rf "$T"
+          echo "tarball=$TGZ" >> "$GITHUB_OUTPUT"
+          # The names the release would attach, checked on a dry run too.
+          names=("$DEB" "$TGZ")
+          tools/release_assets.sh check "$VER" "${names[@]}"
+          # linux-1: no package carries macOS AppleDouble files (._*).
+          bash tools/check_no_appledouble.sh "${names[@]}"
+          # GitHub refuses a release asset of 2 GiB or more.
+          mb() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1000000 }'; }
+          echo "### Linux desktop app, $GUI_ARCH (ubuntu $(. /etc/os-release && echo "$VERSION_ID"), glibc $(ldd --version | head -1 | awk '{print $NF}'), WebKitGTK $(pkg-config --modversion webkit2gtk-4.1))" >> "$GITHUB_STEP_SUMMARY"
+          for f in "${names[@]}"; do
+            size=$(stat -c %s "$f")
+            echo "- $f: $(mb "$size") MB" >> "$GITHUB_STEP_SUMMARY"
+            [ "$size" -lt 2147483648 ] || { echo "::error::$f is $(mb "$size") MB, at or above GitHub's 2 GiB asset limit"; exit 1; }
+          done
+          # The headroom at release size is a gate input (a full disk would
+          # first show up on the tag): the free space after staging, and now.
+          { echo '- disk after staging:'; echo '```'; cat /tmp/disk.txt; echo '```'
+            echo '- disk with every asset written:'; echo '```'; df -h / "$RUNNER_TEMP"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      # The .deb and the tarball, as their own artifact: the .deb smoke jobs
+      # download these two, not the AppImage (job gui-linux-appimage).
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: FASTag-gui-linux-${{ env.GUI_ARCH }}-deb
+          path: |
+            fastag-gui_*_${{ env.DEB_ARCH }}.deb
+            FASTag-*-gui-linux-${{ env.GUI_ARCH }}.tar.gz
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
+      - name: Release-candidate part (.deb, tarball)
+        if: env.RC_CANDIDATE == 'true'
+        env:
+          DEB: ${{ steps.assets.outputs.deb }}
+          TGZ: ${{ steps.assets.outputs.tarball }}
+        run: |
+          python3 .github/scripts/rc-manifest.py part --job "gui-linux-$GUI_ARCH" --group "linux-$GUI_ARCH-gui" \
+            --artifact "FASTag-gui-linux-$GUI_ARCH-deb" --out "rc-part-gui-linux-$GUI_ARCH.json" "$DEB=$DEB" "$TGZ=$TGZ"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: env.RC_CANDIDATE == 'true'
+        with:
+          name: rc-part-gui-linux-${{ env.GUI_ARCH }}
+          path: rc-part-gui-linux-${{ env.GUI_ARCH }}.json
+          if-no-files-found: error
+
+  # The same app for Linux on arm64 (aarch64): gui-linux's steps (the YAML
+  # alias below) on GitHub's ubuntu-22.04-arm runner, so the floor is the
+  # same glibc 2.35 / WebKitGTK 4.1, with the linux-arm64 leg's portable CLI.
+  # Assets: fastag-gui_<version>_arm64.deb, FASTag-<version>-gui-linux-arm64
+  # .tar.gz and a best-effort .AppImage, artifact FASTag-gui-linux-arm64.
+  # Independent of the x64 jobs: a failure here holds back only arm64.
+  gui-linux-arm64:
+    name: gui-linux-arm64
+    if: ${{ !cancelled() && needs.version.outputs.promote != 'true' && (needs.version.outputs.release != '' || inputs.gui_dry_run) }}
+    needs: [version, build-linux-arm64]
+    runs-on: ubuntu-22.04-arm
+    timeout-minutes: 120
+    env:
+      GUI_ARCH: arm64
+      DEB_ARCH: arm64
+    outputs:
+      deb: ${{ steps.assets.outputs.deb }}
+      tarball: ${{ steps.assets.outputs.tarball }}
+    steps: *gui-linux-steps
+
+  # The AppImage, best-effort (GUI-DESIGN section 8), in a job of its own:
+  # beside the .deb job rather than after it, so the required .deb and
+  # tarball and their smoke jobs never wait for it, and a failure here holds
+  # back only the AppImage (continue-on-error: the run stays green, the
+  # AppImage smoke jobs and the upload skip it). The same staged CLI and
+  # notices as the .deb job (its steps by alias), then the Thermo reader
+  # removed, the AppImage built and checked, named, and uploaded as its own
+  # artifact, which only the AppImage smoke jobs download.
+  gui-linux-appimage:
+    name: gui-linux-x64 AppImage
+    if: ${{ !cancelled() && needs.version.outputs.promote != 'true' && (needs.version.outputs.release != '' || inputs.gui_dry_run) }}
+    needs: [version, build-linux-x64]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    continue-on-error: true
+    env:
+      GUI_ARCH: x64
+    outputs:
+      appimage: ${{ steps.name.outputs.built }}
+      appimage_file: ${{ steps.name.outputs.appimage_file }}
+    steps: &gui-linux-appimage-steps
+      - *gl-checkout
+      - *gl-download
+      - *gl-stage
+      - *gl-node
+      - *gl-deps
+      - *gl-npm
       # Best-effort (GUI-DESIGN section 8): linuxdeploy also bundles
       # WebKitGTK and GStreamer on top of the resources, and a failure here
       # must not hold back the .deb and the tarball. NO_STRIP: linuxdeploy's
@@ -2144,9 +2765,33 @@ jobs:
           R=gui/src-tauri/resources/fastag
           python3 tools/vendor_bundle.py strip --root "$R" --exe-dir "$R/bin" --share "$R/share/OpenMS"
           python3 tools/vendor_bundle.py check --absent --root "$R" --exe-dir "$R/bin" --share "$R/share/OpenMS"
-      - name: Build the AppImage (best-effort)
+      # The release profile's compiled DEPENDENCIES (Cargo registry, deps/, build/,
+      # .fingerprint/ -- never bundle/, the staged resources or the app
+      # binary), keyed on the image, the architecture, rustc and Cargo.lock,
+      # falling back to the newest of the same toolchain. Restored only: job
+      # cargo-warm writes it from main pushes (cache budget: GitHub evicts at 10 GB).
+      - name: Cargo cache key
+        id: cargo-key
+        shell: bash
+        run: echo "key=cargo-release-${{ runner.os }}-${{ runner.arch }}-${ImageOS:-img}-$(rustc -V | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+      - name: Restore the Cargo cache
+        id: cargo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            gui/src-tauri/target/release/deps
+            gui/src-tauri/target/release/build
+            gui/src-tauri/target/release/.fingerprint
+            !gui/src-tauri/target/release/deps/*fastag*
+            !gui/src-tauri/target/release/build/fastag-*
+            !gui/src-tauri/target/release/.fingerprint/fastag-*
+          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
+          restore-keys: ${{ steps.cargo-key.outputs.key }}-
+      - name: Build the AppImage
         id: appimage
-        continue-on-error: true
         working-directory: gui
         env:
           NO_STRIP: 'true'
@@ -2179,7 +2824,7 @@ jobs:
           # its taxonomy folder unpacked and each pinned file checked (a
           # regular file with the manifest's size and sha256), not a name in
           # the listing.
-          if [ "${{ startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload) }}" = "true" ]; then
+          if [ "${{ needs.version.outputs.release != '' || (inputs.gui_dry_run && inputs.gui_full_payload) }}" = "true" ]; then
             tdir=$(awk '{print $NF}' "$L" | grep '/resources/fastag/share/FASTag/taxonomy/tax_k7.taxdb$' | head -1)
             [ -n "$tdir" ] || { echo "::error::the AppImage carries no resources/fastag/share/FASTag/taxonomy/tax_k7.taxdb"; exit 1; }
             tdir=$(dirname "${tdir#squashfs-root/}")
@@ -2201,133 +2846,59 @@ jobs:
           python3 ../tools/gui_third_party_notices.py --appimage-listing "$L" --check-appimage "$X/${inside#squashfs-root/}"
           bash ../tools/check_bundle_notices.sh "$X/$(dirname "${inside#squashfs-root/}")" appimage
           rm -rf "$X"
-          echo "built=true" >> "$GITHUB_OUTPUT"
-      # The Debian package is named fastag-gui, not the `fas-tag` Tauri
-      # derives from productName: tauri.conf.json has no option for it, so
-      # the .deb is repacked with only the Package field changed. The name
-      # has to be right before the first Linux release -- dpkg treats a
-      # renamed package as a different one, so a later rename breaks
-      # upgrades. The download is fastag-gui_<version>_amd64.deb (GUI-DESIGN
-      # section 8, decision of 2026-11-07), Debian's own file name; the
-      # tarball and the AppImage are FASTag-<version>-gui-linux-x64.tar.gz
-      # and .AppImage, the version from job version.
-      - name: Name the assets, make the tarball, check the .deb
-        id: assets
+      - name: Name and check the AppImage
+        id: name
         shell: bash
         env:
-          DEB_PACKAGE: fastag-gui
           VER: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
-          [ -n "$VER" ] || { echo "::error::job version gave no version"; exit 1; }
-          DEB="${DEB_PACKAGE}_${VER}_${DEB_ARCH}.deb"
-          TGZ="FASTag-${VER}-gui-linux-${GUI_ARCH}.tar.gz"
           APPIMAGE="FASTag-${VER}-gui-linux-${GUI_ARCH}.AppImage"
-          B=gui/src-tauri/target/release/bundle
           shopt -s nullglob
-          debs=("$B"/deb/*.deb)
-          [ ${#debs[@]} -eq 1 ] || { echo "::error::expected one .deb from tauri, found ${#debs[@]}"; exit 1; }
-          X="$RUNNER_TEMP/debx"; rm -rf "$X"
-          dpkg-deb -R "${debs[0]}" "$X"
-          echo "Tauri's package name: $(sed -n 's/^Package: //p' "$X/DEBIAN/control")"
-          sed -i "s/^Package: .*/Package: $DEB_PACKAGE/" "$X/DEBIAN/control"
-          dpkg-deb --root-owner-group -Zgzip --build "$X" "$DEB"
-          rm -f "${debs[0]}"
-          # Every content check below reads the generated $DEB itself, not
-          # the repack input: an omission or corruption introduced by the
-          # repack cannot pass them.
-          rm -rf "$X"
-          dpkg-deb -R "$DEB" "$X"
-          dpkg-deb -I "$DEB"
-          [ "$(dpkg-deb -f "$DEB" Package)" = "$DEB_PACKAGE" ] \
-            || { echo "::error::the .deb is not named $DEB_PACKAGE"; exit 1; }
-          [ "$(dpkg-deb -f "$DEB" Version)" = "$VER" ] \
-            || { echo "::error::the .deb's Version is $(dpkg-deb -f "$DEB" Version), not $VER"; exit 1; }
-          [ "$(dpkg-deb -f "$DEB" Architecture)" = "$DEB_ARCH" ] \
-            || { echo "::error::the .deb is for $(dpkg-deb -f "$DEB" Architecture), not $DEB_ARCH"; exit 1; }
-          echo "deb=$DEB" >> "$GITHUB_OUTPUT"
-          dep=$(dpkg-deb -f "$DEB" Depends)
-          for want in libwebkit2gtk-4.1-0 libgtk-3-0; do
-            grep -q "$want" <<< "$dep" || { echo "::error::the .deb does not depend on $want (Depends: $dep)"; exit 1; }
-          done
-          cli=$(find "$X" -path '*/resources/fastag/bin/FASTag' -type f -perm -u+x | head -1)
-          [ -n "$cli" ] || { echo "::error::the .deb carries no executable resources/fastag/bin/FASTag"; exit 1; }
-          echo "CLI in the .deb: ${cli#"$X"}"
-          bash tools/check_bundle_notices.sh "$(dirname "$(dirname "$cli")")"
-          # The k-mer index in the package itself, as extracted from $DEB
-          # above (the tarball is its /usr tree).
-          if [ "${{ startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload) }}" = "true" ]; then
-            python3 tools/check_taxonomy_manifest.py --pinned "data/taxonomy/manifests/$TAXDB_TAG.json" "$(dirname "$(dirname "$cli")")/share/FASTag/taxonomy" \
-              || { echo "::error::the .deb does not carry the pinned taxonomy index in resources/fastag/share/FASTag/taxonomy"; exit 1; }
-          fi
-          # bundle.category in tauri.conf.json sets the menu category;
-          # without it Categories= is empty and menus file FASTag under
-          # "Other".
-          desk="$X/usr/share/applications/FASTag.desktop"
-          grep -qx 'Categories=Education;' "$desk" \
-            || { echo "::error::the .deb's FASTag.desktop has $(grep '^Categories=' "$desk" || echo 'no Categories='), not Categories=Education;"; exit 1; }
-          # The tarball is the .deb's /usr tree, renamed; moved, not copied,
-          # as the repacked .deb already holds it.
-          T="$RUNNER_TEMP/guitar"; rm -rf "$T"; mkdir -p "$T"
-          mv "$X/usr" "$T/FASTag-gui"
-          rm -rf "$X"
-          tar -C "$T" -czf "$TGZ" FASTag-gui
-          rm -rf "$T"
-          echo "tarball=$TGZ" >> "$GITHUB_OUTPUT"
+          apps=(gui/src-tauri/target/release/bundle/appimage/*.AppImage)
+          [ ${#apps[@]} -eq 1 ] || { echo "::error::expected one AppImage, found ${#apps[@]}"; exit 1; }
+          cp "${apps[0]}" "$APPIMAGE"
+          tools/release_assets.sh check "$VER" "$APPIMAGE"
+          bash tools/check_no_appledouble.sh "$APPIMAGE"
+          size=$(stat -c %s "$APPIMAGE")
+          [ "$size" -lt 2147483648 ] || { echo "::error::$APPIMAGE is $size bytes, at or above GitHub's 2 GiB asset limit"; exit 1; }
+          echo "- $APPIMAGE: $(awk -v b="$size" 'BEGIN { printf "%.1f", b / 1000000 }') MB" >> "$GITHUB_STEP_SUMMARY"
           echo "appimage_file=$APPIMAGE" >> "$GITHUB_OUTPUT"
-          # The AppImage only when its best-effort build finished every check
-          # (steps.appimage built=true): a half-checked image is never copied
-          # into the artifact.
-          apps=("$B"/appimage/*.AppImage)
-          if [ "${{ steps.appimage.outputs.built }}" = "true" ] && [ ${#apps[@]} -eq 1 ]; then cp "${apps[0]}" "$APPIMAGE"; fi
-          # The names the release would attach, checked on a dry run too.
-          names=("$DEB" "$TGZ"); [ -f "$APPIMAGE" ] && names+=("$APPIMAGE")
-          tools/release_assets.sh check "$VER" "${names[@]}"
-          # linux-1: no package carries macOS AppleDouble files (._*).
-          bash tools/check_no_appledouble.sh "${names[@]}"
-          # GitHub refuses a release asset of 2 GiB or more.
-          mb() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1000000 }'; }
-          echo "### Linux desktop app, $GUI_ARCH (ubuntu $(. /etc/os-release && echo "$VERSION_ID"), glibc $(ldd --version | head -1 | awk '{print $NF}'), WebKitGTK $(pkg-config --modversion webkit2gtk-4.1))" >> "$GITHUB_STEP_SUMMARY"
-          for f in "${names[@]}"; do
-            size=$(stat -c %s "$f")
-            echo "- $f: $(mb "$size") MB" >> "$GITHUB_STEP_SUMMARY"
-            [ "$size" -lt 2147483648 ] || { echo "::error::$f is $(mb "$size") MB, at or above GitHub's 2 GiB asset limit"; exit 1; }
-          done
-          # The headroom at release size is a gate input (a full disk would
-          # first show up on the tag): the free space after staging, and now.
-          { echo '- disk after staging:'; echo '```'; cat /tmp/disk.txt; echo '```'
-            echo '- disk with every asset written:'; echo '```'; df -h / "$RUNNER_TEMP"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          echo "built=true" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: FASTag-gui-linux-${{ env.GUI_ARCH }}
-          path: |
-            fastag-gui_*_${{ env.DEB_ARCH }}.deb
-            FASTag-*-gui-linux-${{ env.GUI_ARCH }}.*
+          name: FASTag-gui-linux-${{ env.GUI_ARCH }}-appimage
+          path: FASTag-*-gui-linux-${{ env.GUI_ARCH }}.AppImage
           compression-level: 0
-          retention-days: 14
+          retention-days: 30
+          if-no-files-found: error
+      - name: Release-candidate part (AppImage)
+        if: env.RC_CANDIDATE == 'true'
+        env:
+          APPIMAGE: ${{ steps.name.outputs.appimage_file }}
+        run: |
+          python3 .github/scripts/rc-manifest.py part --job "gui-linux-$GUI_ARCH-appimage" --group "linux-$GUI_ARCH-appimage" \
+            --artifact "FASTag-gui-linux-$GUI_ARCH-appimage" --out "rc-part-gui-linux-$GUI_ARCH-appimage.json" "$APPIMAGE=$APPIMAGE"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: env.RC_CANDIDATE == 'true'
+        with:
+          name: rc-part-gui-linux-${{ env.GUI_ARCH }}-appimage
+          path: rc-part-gui-linux-${{ env.GUI_ARCH }}-appimage.json
           if-no-files-found: error
 
-  # The same app for Linux on arm64 (aarch64): gui-linux's steps (the YAML
-  # alias below) on GitHub's ubuntu-22.04-arm runner, so the floor is the
-  # same glibc 2.35 / WebKitGTK 4.1, with the linux-arm64 leg's portable CLI.
-  # Assets: fastag-gui_<version>_arm64.deb, FASTag-<version>-gui-linux-arm64
-  # .tar.gz and a best-effort .AppImage, artifact FASTag-gui-linux-arm64.
-  # Independent of the x64 jobs: a failure here holds back only arm64.
-  gui-linux-arm64:
-    name: gui-linux-arm64
-    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run) }}
-    needs: [version, build]
+  gui-linux-arm64-appimage:
+    name: gui-linux-arm64 AppImage
+    if: ${{ !cancelled() && needs.version.outputs.promote != 'true' && (needs.version.outputs.release != '' || inputs.gui_dry_run) }}
+    needs: [version, build-linux-arm64]
     runs-on: ubuntu-22.04-arm
     timeout-minutes: 120
+    continue-on-error: true
     env:
       GUI_ARCH: arm64
-      DEB_ARCH: arm64
     outputs:
-      appimage: ${{ steps.appimage.outputs.built }}
-      deb: ${{ steps.assets.outputs.deb }}
-      tarball: ${{ steps.assets.outputs.tarball }}
-      appimage_file: ${{ steps.assets.outputs.appimage_file }}
-    steps: *gui-linux-steps
+      appimage: ${{ steps.name.outputs.built }}
+      appimage_file: ${{ steps.name.outputs.appimage_file }}
+    steps: *gui-linux-appimage-steps
 
   # The tarball, then the .deb, on the oldest and the newest supported Ubuntu
   # LTS (P1 acceptance).
@@ -2352,6 +2923,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, ubuntu-24.04]
+    permissions:
+      contents: read
+      actions: read
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
@@ -2362,10 +2936,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
-        with:
-          name: FASTag-gui-linux-${{ env.GUI_ARCH }}
-          path: ${{ runner.temp }}/gui
+      # This run's artifact (bounded, retried: .github/scripts/fetch-artifact.sh):
+      # the .deb job's, or in a promoted run the promoted files promote-assets
+      # attached and staged (SMOKE_ARTIFACT).
+      - name: Fetch the .deb and the tarball
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          bash .github/scripts/fetch-artifact.sh "$GITHUB_RUN_ID" "${SMOKE_ARTIFACT:-FASTag-gui-linux-$GUI_ARCH-deb}" "$RUNNER_TEMP/gui" 3 600
+          ls -l "$RUNNER_TEMP/gui"
       - name: The tarball runs from an arbitrary prefix
         run: |
           set -euo pipefail
@@ -2506,7 +3086,7 @@ jobs:
           name: tauri-driver-real-${{ matrix.os }}
           path: gui/e2e-tauri/results
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 30
 
   # gui-linux-smoke-deb's steps for the arm64 bundles, on the arm64 runners
   # of the same two Ubuntu LTS releases.
@@ -2518,6 +3098,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04-arm, ubuntu-24.04-arm]
+    permissions:
+      contents: read
+      actions: read
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
@@ -2530,8 +3113,8 @@ jobs:
   # libfuse2t64, absent on a fresh 24.04).
   gui-linux-smoke-appimage:
     name: gui-linux AppImage on ${{ matrix.os }}
-    if: ${{ !cancelled() && needs.gui-linux.outputs.appimage == 'true' }}
-    needs: [gui-linux]
+    if: ${{ !cancelled() && needs.gui-linux-appimage.outputs.appimage == 'true' }}
+    needs: [gui-linux-appimage]
     strategy:
       fail-fast: false
       matrix:
@@ -2544,11 +3127,12 @@ jobs:
     timeout-minutes: 30
     env:
       GUI_ARCH: x64
-      APPIMAGE_FILE: ${{ needs.gui-linux.outputs.appimage_file }}
+      APPIMAGE_FILE: ${{ needs.gui-linux-appimage.outputs.appimage_file }}
     steps: &gui-linux-smoke-appimage-steps
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        timeout-minutes: 10
         with:
-          name: FASTag-gui-linux-${{ env.GUI_ARCH }}
+          name: FASTag-gui-linux-${{ env.GUI_ARCH }}-appimage
           path: ${{ runner.temp }}/gui
       - name: The AppImage launches
         run: |
@@ -2573,8 +3157,8 @@ jobs:
 
   gui-linux-arm64-smoke-appimage:
     name: gui-linux-arm64 AppImage on ${{ matrix.os }}
-    if: ${{ !cancelled() && needs.gui-linux-arm64.outputs.appimage == 'true' }}
-    needs: [gui-linux-arm64]
+    if: ${{ !cancelled() && needs.gui-linux-arm64-appimage.outputs.appimage == 'true' }}
+    needs: [gui-linux-arm64-appimage]
     strategy:
       fail-fast: false
       matrix:
@@ -2587,7 +3171,7 @@ jobs:
     timeout-minutes: 30
     env:
       GUI_ARCH: arm64
-      APPIMAGE_FILE: ${{ needs.gui-linux-arm64.outputs.appimage_file }}
+      APPIMAGE_FILE: ${{ needs.gui-linux-arm64-appimage.outputs.appimage_file }}
     steps: *gui-linux-smoke-appimage-steps
 
   # Attaches the Linux desktop app to the release, mirroring the macOS and
@@ -2609,102 +3193,200 @@ jobs:
   # attaching anything, so a tag cut before PR b lands ships no Linux GUI
   # and release-complete turns red on the missing .deb and tarball.
   gui-linux-release:
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.gui-linux-smoke-deb.result == 'success' }}
-    needs: [gui-linux, gui-linux-smoke-deb, gui-linux-smoke-appimage]
+    if: ${{ !cancelled() && needs.version.outputs.release != '' && needs.version.outputs.promote != 'true' && needs.build-linux-x64.result == 'success' && needs.gui-linux.result == 'success' && needs.gui-linux-smoke-deb.result == 'success' }}
+    needs: [version, build-linux-x64, gui-linux, gui-linux-appimage, gui-linux-smoke-deb, gui-linux-smoke-appimage]
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: write
+      actions: read
+    env:
+      V: ${{ needs.version.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-          sparse-checkout: gui/src-tauri/src
+          sparse-checkout: |
+            gui/src-tauri/src
+            .github/scripts
+            tools/release_assets.sh
+            tools/check_no_appledouble.sh
+          sparse-checkout-cone-mode: false
       - name: The process lifetime of P1 PR b is in this build
         run: |
           grep -rqs 'libc::PR_SET_PDEATHSIG' gui/src-tauri/src || {
             echo "::error::no libc::PR_SET_PDEATHSIG call in gui/src-tauri/src: P1 PR b (process lifetime) must ship with the first Linux release (GUI-DESIGN section 8); not attaching the Linux desktop app"
             exit 1
           }
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
-        with:
-          name: FASTag-gui-linux-x64
-          path: gui-linux
-      - name: Attach the Linux desktop app to the release
+      # The files the smoke jobs passed, under their release names: the
+      # .deb and the GUI tarball, the CLI tarball (the portable one the GUI
+      # jobs staged), and the AppImage only when it launched on both Ubuntu
+      # releases. Attached by release id, each checked by its digest
+      # (release-upload.sh); what went up is recorded for release-complete.
+      - name: Attach the Linux x64 files to the draft
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+          ID: ${{ needs.version.outputs.release_id }}
           APPIMAGE_OK: ${{ needs.gui-linux-smoke-appimage.result == 'success' }}
           DEB: ${{ needs.gui-linux.outputs.deb }}
           TGZ: ${{ needs.gui-linux.outputs.tarball }}
-          APPIMAGE: ${{ needs.gui-linux.outputs.appimage_file }}
+          APPIMAGE: ${{ needs.gui-linux-appimage.outputs.appimage_file }}
         run: |
           set -euo pipefail
-          gh release create "${{ github.ref_name }}" \
-            --title "${{ github.ref_name }}" \
-            --notes "Automated binary upload; the release notes follow from CHANGELOG.md (job release-notes)." \
-            2>/dev/null || true
-          [ "$DEB" = "fastag-gui_${GITHUB_REF_NAME#v}_amd64.deb" ] && [ -f "gui-linux/$DEB" ] \
-            || { echo "::error::the artifact's .deb is '$DEB', not fastag-gui_${GITHUB_REF_NAME#v}_amd64.deb"; exit 1; }
-          [ "$TGZ" = "FASTag-${GITHUB_REF_NAME#v}-gui-linux-x64.tar.gz" ] && [ -f "gui-linux/$TGZ" ] \
-            || { echo "::error::the artifact's tarball is '$TGZ', not FASTag-${GITHUB_REF_NAME#v}-gui-linux-x64.tar.gz"; exit 1; }
-          gh release upload "${{ github.ref_name }}" \
-            "gui-linux/$DEB" "gui-linux/$TGZ" --clobber
-          if [ "$APPIMAGE_OK" = "true" ] && [ -f "gui-linux/$APPIMAGE" ]; then
-            gh release upload "${{ github.ref_name }}" "gui-linux/$APPIMAGE" --clobber
+          export FETCH_BUDGET=900
+          bash .github/scripts/fetch-artifact.sh "$GITHUB_RUN_ID" FASTag-gui-linux-x64-deb a/deb 3 300
+          bash .github/scripts/fetch-artifact.sh "$GITHUB_RUN_ID" FASTag-linux-x64-portable a/cli 3 300
+          mkdir -p up
+          [ "$DEB" = "fastag-gui_${V}_amd64.deb" ] && [ "$TGZ" = "FASTag-$V-gui-linux-x64.tar.gz" ] \
+            || { echo "::error::the artifact's files are '$DEB' and '$TGZ', not this version's"; exit 1; }
+          mv "a/deb/$DEB" "a/deb/$TGZ" up/
+          mv a/cli/FASTag-linux-x64-portable.tar.gz "up/FASTag-$V-linux-x64.tar.gz"
+          if [ "$APPIMAGE_OK" = true ]; then
+            bash .github/scripts/fetch-artifact.sh "$GITHUB_RUN_ID" FASTag-gui-linux-x64-appimage a/app 3 300
+            mv "a/app/$APPIMAGE" up/
           else
-            echo "::warning::no AppImage on this release (not built, or it did not launch on ubuntu-22.04 and 24.04)"
+            echo "::warning::no AppImage on this release (not built, or it did not launch on both Ubuntu releases)"
           fi
+          find up -type f -exec basename {} \; | tools/release_assets.sh check "$V"
+          # The AppImage was checked in its own job, on its own architecture
+          # (the check extracts it by running it).
+          find up -type f ! -name '*.AppImage' -exec bash tools/check_no_appledouble.sh {} +
+          bash .github/scripts/release-upload.sh "$ID" up/*
+          names=(); for f in up/*; do names+=("$(basename "$f")=$f"); done
+          python3 .github/scripts/rc-manifest.py part --job gui-linux-release --group linux-x64 --artifact release \
+            --out rel-part-linux-x64.json "${names[@]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: rel-part-linux-x64
+          path: rel-part-linux-x64.json
+          if-no-files-found: error
 
   # Attaches the arm64 bundles as gui-linux-release attaches x64: only on a
   # tag, only after the arm64 .deb smoke passed on both Ubuntu releases, the
   # AppImage only when it launched on both. release-complete requires the
   # arm64 .deb and tarball from 1.15.0 on, as it does the x64 ones.
   gui-linux-arm64-release:
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.gui-linux-arm64-smoke-deb.result == 'success' }}
-    needs: [gui-linux-arm64, gui-linux-arm64-smoke-deb, gui-linux-arm64-smoke-appimage]
+    if: ${{ !cancelled() && needs.version.outputs.release != '' && needs.version.outputs.promote != 'true' && needs.build-linux-arm64.result == 'success' && needs.gui-linux-arm64.result == 'success' && needs.gui-linux-arm64-smoke-deb.result == 'success' }}
+    needs: [version, build-linux-arm64, gui-linux-arm64, gui-linux-arm64-appimage, gui-linux-arm64-smoke-deb, gui-linux-arm64-smoke-appimage]
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: write
+      actions: read
+    env:
+      V: ${{ needs.version.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-          sparse-checkout: gui/src-tauri/src
+          sparse-checkout: |
+            gui/src-tauri/src
+            .github/scripts
+            tools/release_assets.sh
+            tools/check_no_appledouble.sh
+          sparse-checkout-cone-mode: false
       - name: The process lifetime of P1 PR b is in this build
         run: |
           grep -rqs 'libc::PR_SET_PDEATHSIG' gui/src-tauri/src || {
-            echo "::error::no libc::PR_SET_PDEATHSIG call in gui/src-tauri/src; not attaching the Linux arm64 desktop app"
+            echo "::error::no libc::PR_SET_PDEATHSIG call in gui/src-tauri/src: P1 PR b (process lifetime) must ship with the first Linux release (GUI-DESIGN section 8); not attaching the Linux desktop app"
             exit 1
           }
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
-        with:
-          name: FASTag-gui-linux-arm64
-          path: gui-linux
-      - name: Attach the Linux arm64 desktop app to the release
+      # The files the smoke jobs passed, under their release names: the
+      # .deb and the GUI tarball, the CLI tarball (the portable one the GUI
+      # jobs staged), and the AppImage only when it launched on both Ubuntu
+      # releases. Attached by release id, each checked by its digest
+      # (release-upload.sh); what went up is recorded for release-complete.
+      - name: Attach the Linux arm64 files to the draft
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+          ID: ${{ needs.version.outputs.release_id }}
           APPIMAGE_OK: ${{ needs.gui-linux-arm64-smoke-appimage.result == 'success' }}
           DEB: ${{ needs.gui-linux-arm64.outputs.deb }}
           TGZ: ${{ needs.gui-linux-arm64.outputs.tarball }}
-          APPIMAGE: ${{ needs.gui-linux-arm64.outputs.appimage_file }}
+          APPIMAGE: ${{ needs.gui-linux-arm64-appimage.outputs.appimage_file }}
         run: |
           set -euo pipefail
-          gh release create "${{ github.ref_name }}" \
-            --title "${{ github.ref_name }}" \
-            --notes "Automated binary upload; the release notes follow from CHANGELOG.md (job release-notes)." \
-            2>/dev/null || true
-          [ "$DEB" = "fastag-gui_${GITHUB_REF_NAME#v}_arm64.deb" ] && [ -f "gui-linux/$DEB" ] \
-            || { echo "::error::the artifact's .deb is '$DEB', not fastag-gui_${GITHUB_REF_NAME#v}_arm64.deb"; exit 1; }
-          [ "$TGZ" = "FASTag-${GITHUB_REF_NAME#v}-gui-linux-arm64.tar.gz" ] && [ -f "gui-linux/$TGZ" ] \
-            || { echo "::error::the artifact's tarball is '$TGZ', not FASTag-${GITHUB_REF_NAME#v}-gui-linux-arm64.tar.gz"; exit 1; }
-          gh release upload "${{ github.ref_name }}" \
-            "gui-linux/$DEB" "gui-linux/$TGZ" --clobber
-          if [ "$APPIMAGE_OK" = "true" ] && [ -f "gui-linux/$APPIMAGE" ]; then
-            gh release upload "${{ github.ref_name }}" "gui-linux/$APPIMAGE" --clobber
+          export FETCH_BUDGET=900
+          bash .github/scripts/fetch-artifact.sh "$GITHUB_RUN_ID" FASTag-gui-linux-arm64-deb a/deb 3 300
+          bash .github/scripts/fetch-artifact.sh "$GITHUB_RUN_ID" FASTag-linux-arm64-portable a/cli 3 300
+          mkdir -p up
+          [ "$DEB" = "fastag-gui_${V}_arm64.deb" ] && [ "$TGZ" = "FASTag-$V-gui-linux-arm64.tar.gz" ] \
+            || { echo "::error::the artifact's files are '$DEB' and '$TGZ', not this version's"; exit 1; }
+          mv "a/deb/$DEB" "a/deb/$TGZ" up/
+          mv a/cli/FASTag-linux-arm64-portable.tar.gz "up/FASTag-$V-linux-arm64.tar.gz"
+          if [ "$APPIMAGE_OK" = true ]; then
+            bash .github/scripts/fetch-artifact.sh "$GITHUB_RUN_ID" FASTag-gui-linux-arm64-appimage a/app 3 300
+            mv "a/app/$APPIMAGE" up/
           else
-            echo "::warning::no arm64 AppImage on this release (not built, or it did not launch on ubuntu-22.04-arm and 24.04-arm)"
+            echo "::warning::no AppImage on this release (not built, or it did not launch on both Ubuntu releases)"
           fi
+          find up -type f -exec basename {} \; | tools/release_assets.sh check "$V"
+          # The AppImage was checked in its own job, on its own architecture
+          # (the check extracts it by running it).
+          find up -type f ! -name '*.AppImage' -exec bash tools/check_no_appledouble.sh {} +
+          bash .github/scripts/release-upload.sh "$ID" up/*
+          names=(); for f in up/*; do names+=("$(basename "$f")=$f"); done
+          python3 .github/scripts/rc-manifest.py part --job gui-linux-arm64-release --group linux-arm64 --artifact release \
+            --out rel-part-linux-arm64.json "${names[@]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: rel-part-linux-arm64
+          path: rel-part-linux-arm64.json
+          if-no-files-found: error
+
+  # The macOS files, as build-macos made and checked them: the desktop app's
+  # disk image and the CLI's (signed, notarized, stapled), or without the
+  # signing secrets the CLI tarball. Attached by release id, recorded for
+  # release-complete.
+  macos-release:
+    if: ${{ !cancelled() && needs.version.outputs.release != '' && needs.version.outputs.promote != 'true' && needs.build-macos.result == 'success' }}
+    needs: [version, build-macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+    env:
+      V: ${{ needs.version.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/scripts
+            tools/release_assets.sh
+          sparse-checkout-cone-mode: false
+      - name: Attach the macOS files to the draft
+        env:
+          ID: ${{ needs.version.outputs.release_id }}
+          SIGNED: ${{ needs.build-macos.outputs.signed }}
+        run: |
+          set -euo pipefail
+          export FETCH_BUDGET=900
+          mkdir -p up
+          if [ "$SIGNED" = true ]; then
+            bash .github/scripts/fetch-artifact.sh "$GITHUB_RUN_ID" FASTag-gui-macos-arm64-dmg a/gui 3 300
+            bash .github/scripts/fetch-artifact.sh "$GITHUB_RUN_ID" FASTag-macos-arm64-cli-dmg a/cli 3 300
+            mv "a/gui/FASTag-$V-gui-macos-arm64.dmg" "a/cli/FASTag-$V-macos-arm64.dmg" up/
+          else
+            echo "::warning::no macOS signing secrets: the CLI ships as a tarball, the desktop app not at all"
+            bash .github/scripts/fetch-artifact.sh "$GITHUB_RUN_ID" FASTag-macos-arm64-tarball a/tgz 3 300
+            mv "a/tgz/FASTag-$V-macos-arm64.tar.gz" up/
+          fi
+          find up -type f -exec basename {} \; | tools/release_assets.sh check "$V"
+          bash .github/scripts/release-upload.sh "$ID" up/*
+          names=(); for f in up/*; do names+=("$(basename "$f")=$f"); done
+          python3 .github/scripts/rc-manifest.py part --job macos-release --group macos-arm64 --artifact release \
+            --out rel-part-macos.json "${names[@]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: rel-part-macos
+          path: rel-part-macos.json
+          if-no-files-found: error
 
   # ----------------------------------------- GUI argv against the real CLI
   # GUI-DESIGN section 9, "Re-enabled (P1)": gui/src/adversarial/
@@ -2715,8 +3397,8 @@ jobs:
   # current GUI must work with the current CLI before merging. Both are built
   # from this checkout. release-complete also requires this job to pass.
   gui-cli-consistency:
-    if: ${{ !cancelled() && (github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run) }}
-    needs: [build]
+    if: ${{ !cancelled() && needs.version.outputs.promote != 'true' && (github.event_name == 'pull_request' || needs.version.outputs.release != '' || inputs.gui_dry_run) && needs.version.outputs.code != 'false' }}
+    needs: [version, build-linux-x64]
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -2792,9 +3474,10 @@ jobs:
   # a release without the asset. Creates the release if it is first to arrive
   # (same harmless-race pattern as the attach steps).
   taxonomy-asset:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: (needs.version.outputs.release != '' && needs.version.outputs.promote != 'true') || (inputs.gui_dry_run && inputs.gui_full_payload)
     needs: [version]
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
@@ -2805,6 +3488,7 @@ jobs:
             tools/taxonomy_release_asset.sh
             tools/check_taxonomy_manifest.py
             data/taxonomy/manifests
+            .github/scripts
           sparse-checkout-cone-mode: false
       # The data tag's asset keeps its fixed name (FASTag-taxonomy-k7.tar.gz:
       # assets under a data tag are never mutated); the copy on this release
@@ -2824,10 +3508,7 @@ jobs:
           V: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
-          gh release create "${{ github.ref_name }}" \
-            --title "${{ github.ref_name }}" \
-            --notes "Automated binary upload; the release notes follow from CHANGELOG.md (job release-notes)." \
-            2>/dev/null || true
+          sudo apt-get install -y -q pigz > /dev/null || echo "::warning::no pigz; the .tar.gz is made by gzip"
           gh release download "$TAXDB_TAG" -p 'FASTag-taxonomy-k7.tar.gz' -D "$RUNNER_TEMP/pinned"
           got=$(sha256sum "$RUNNER_TEMP/pinned/FASTag-taxonomy-k7.tar.gz" | cut -d' ' -f1)
           [ "$got" = "$TAXDB_SHA256" ] || { echo "taxonomy sha256 mismatch: $got"; exit 1; }
@@ -2835,9 +3516,178 @@ jobs:
             "data/taxonomy/manifests/$TAXDB_TAG.json" "$V"
           rm -rf "$RUNNER_TEMP/pinned"
           N="FASTag-${V}-taxonomy-k7"
-          gh release upload "${{ github.ref_name }}" \
-            "$N.tar.gz" "$N.tar.gz.sha256" \
-            "$N.tar.xz" "$N.tar.xz.sha256" --clobber
+          if [ "$RC_CANDIDATE" = true ]; then
+            # A release candidate keeps the four files as an artifact.
+            python3 .github/scripts/rc-manifest.py part --job taxonomy-asset --group taxonomy \
+              --artifact FASTag-taxonomy-asset --out rc-part-taxonomy.json \
+              "$N.tar.gz=$N.tar.gz" "$N.tar.gz.sha256=$N.tar.gz.sha256" "$N.tar.xz=$N.tar.xz" "$N.tar.xz.sha256=$N.tar.xz.sha256"
+            exit 0
+          fi
+          # Attached to the draft by id, digests checked, and recorded for
+          # release-complete.
+          bash .github/scripts/release-upload.sh "${{ needs.version.outputs.release_id }}" \
+            "$N.tar.gz" "$N.tar.gz.sha256" "$N.tar.xz" "$N.tar.xz.sha256"
+          python3 .github/scripts/rc-manifest.py part --job taxonomy-asset --group taxonomy --artifact release \
+            --out rel-part-taxonomy.json \
+            "$N.tar.gz=$N.tar.gz" "$N.tar.gz.sha256=$N.tar.gz.sha256" "$N.tar.xz=$N.tar.xz" "$N.tar.xz.sha256=$N.tar.xz.sha256"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: env.RC_CANDIDATE != 'true'
+        with:
+          name: rel-part-taxonomy
+          path: rel-part-taxonomy.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: env.RC_CANDIDATE == 'true'
+        with:
+          name: FASTag-taxonomy-asset
+          path: FASTag-*-taxonomy-k7.tar.*
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: env.RC_CANDIDATE == 'true'
+        with:
+          name: rc-part-taxonomy
+          path: rc-part-taxonomy.json
+          if-no-files-found: error
+
+  # ------------------------------------------------- prebuilt OpenMS
+  # The OpenMS installs the build jobs staged, as immutable assets of the
+  # deps release deps-openms-<OPENMS_REF, 8> (created here as a PRERELEASE,
+  # never Latest, at this commit; existing assets are never replaced). Only
+  # main and v* tag pushes: no pull request or dispatch ever writes it.
+  deps-openms:
+    if: ${{ !cancelled() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+    needs: [build-linux-x64, build-linux-arm64, build-macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        timeout-minutes: 10
+        with:
+          pattern: openms-prebuilt-*
+          path: prebuilt
+          merge-multiple: true
+      - name: Upload what the deps release lacks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(prebuilt/*.tar.gz)
+          [ ${#files[@]} -gt 0 ] || { echo "nothing staged: the deps release has every install"; exit 0; }
+          rel=${OPENMS_DEPS_RELEASE:-deps-openms-${OPENMS_REF:0:8}}
+          if ! gh release view "$rel" > /dev/null 2>&1; then
+            gh release create "$rel" --prerelease --latest=false --target "$GITHUB_SHA" --title "$rel" \
+              --notes "OpenMS $OPENMS_REF, built for FASTag's CI (one install per platform and toolchain, the actions/cache key as the file name, with its sha256). Not a FASTag release." \
+              || gh release view "$rel" > /dev/null
+          fi
+          have=$(gh release view "$rel" --json assets,isPrerelease --jq '.assets[].name')
+          [ "$(gh release view "$rel" --json isPrerelease --jq .isPrerelease)" = true ] || { echo "::error::$rel is not a prerelease"; exit 1; }
+          for f in "${files[@]}"; do
+            n=$(basename "$f")
+            if grep -qxF "$n" <<< "$have"; then echo "$rel has $n"; continue; fi
+            gh release upload "$rel" "$f" "$f.sha256"
+            echo "- uploaded $n to $rel" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+  # ------------------------------------------------- Rust dependency cache
+  # The release profile's compiled dependencies for the Tauri builds, saved
+  # ONLY from main pushes (a branch's or a dispatch's cache would only crowd
+  # the 10 GB the OpenMS caches live in; branches and tags restore main's,
+  # GitHub's cache scoping). Dependencies only: the app crate (fastag) and
+  # everything bundle- or resource-related stay out. Nothing to do -- a
+  # lookup of about a second -- unless Cargo.lock or the toolchain changed.
+  cargo-warm:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-22.04, ubuntu-22.04-arm, macos-15]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Cargo cache key
+        id: cargo-key
+        shell: bash
+        run: echo "key=cargo-release-${{ runner.os }}-${{ runner.arch }}-${ImageOS:-img}-$(rustc -V | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+      - name: Is it there already?
+        id: exact
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          lookup-only: true
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            gui/src-tauri/target/release/deps
+            gui/src-tauri/target/release/build
+            gui/src-tauri/target/release/.fingerprint
+            !gui/src-tauri/target/release/deps/*fastag*
+            !gui/src-tauri/target/release/build/fastag-*
+            !gui/src-tauri/target/release/.fingerprint/fastag-*
+          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
+      - name: Restore the newest one of this toolchain
+        if: steps.exact.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            gui/src-tauri/target/release/deps
+            gui/src-tauri/target/release/build
+            gui/src-tauri/target/release/.fingerprint
+            !gui/src-tauri/target/release/deps/*fastag*
+            !gui/src-tauri/target/release/build/fastag-*
+            !gui/src-tauri/target/release/.fingerprint/fastag-*
+          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
+          restore-keys: ${{ steps.cargo-key.outputs.key }}-
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        if: steps.exact.outputs.cache-hit != 'true'
+        with:
+          node-version: 24
+      - name: Tauri build deps (Linux)
+        if: steps.exact.outputs.cache-hit != 'true' && runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev
+      # The release build of the app, as the packaging jobs make it (tauri
+      # build: the same profile, features and deployment target), without the
+      # bundle and with empty resources.
+      - name: Build the app's dependencies (release profile)
+        if: steps.exact.outputs.cache-hit != 'true'
+        working-directory: gui
+        env:
+          MACOSX_DEPLOYMENT_TARGET: ${{ env.MACOS_MIN_VERSION }}
+        run: |
+          set -euo pipefail
+          mkdir -p src-tauri/resources/fastag
+          npm ci --ignore-scripts
+          npx tauri build --no-bundle
+          du -sh src-tauri/target/release/deps src-tauri/target/release/build ~/.cargo/registry || true
+      - name: Save the Cargo cache
+        if: steps.exact.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            gui/src-tauri/target/release/deps
+            gui/src-tauri/target/release/build
+            gui/src-tauri/target/release/.fingerprint
+            !gui/src-tauri/target/release/deps/*fastag*
+            !gui/src-tauri/target/release/build/fastag-*
+            !gui/src-tauri/target/release/.fingerprint/fastag-*
+          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
 
   # ---------------------------------------------------------- release notes
   # The release body is the CHANGELOG.md section of the tag's version
@@ -2848,7 +3698,7 @@ jobs:
   # CITATION.cff / codemeta.json name another release, is red here. A
   # manual dispatch only renders the notes into the job summary.
   release-notes:
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: needs.version.outputs.publish == 'true' || github.event_name == 'workflow_dispatch'
     needs: [version]
     runs-on: ubuntu-24.04
     permissions:
@@ -2879,7 +3729,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           V: ${{ needs.version.outputs.version }}
-          TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          # The notes are written only by the tag push that publishes.
+          TAG: ${{ needs.version.outputs.publish == 'true' && needs.version.outputs.release || '' }}
+          ID: ${{ needs.version.outputs.release_id }}
         run: |
           set -euo pipefail
           python3 tools/release_notes.py "$V" CHANGELOG.md > "$RUNNER_TEMP/notes.md"
@@ -2888,13 +3740,12 @@ jobs:
             echo "not a tag: notes rendered into the job summary only"
             exit 0
           fi
-          gh release create "$TAG" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" 2>/dev/null \
-            || gh release edit "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
-          gh release view "$TAG" --json body --jq .body | head -3
+          # By id: the draft job version made.
+          gh api -X PATCH "repos/$GH_REPO/releases/$ID" -F "body=@$RUNNER_TEMP/notes.md" --jq .body | head -3
       # Ask Software Heritage to archive the repository with this tag. Not
       # blocking: the archive's queue or rate limit must not fail a release.
       - name: Request a Software Heritage save
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: needs.version.outputs.publish == 'true'
         continue-on-error: true
         run: |
           set -euo pipefail
@@ -2902,6 +3753,283 @@ jobs:
             "https://archive.softwareheritage.org/api/1/origin/save/git/url/https://github.com/okohlbacher/FASTag/" \
             | tee "$RUNNER_TEMP/swh-save.json"
           echo "- Software Heritage save requested: $(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("save_request_status"), d.get("save_task_status"))' "$RUNNER_TEMP/swh-save.json")" >> "$GITHUB_STEP_SUMMARY"
+
+  # ------------------------------------------------------ release candidate
+  # A gui_dry_run + gui_full_payload dispatch is a release CANDIDATE (see
+  # RC_CANDIDATE): this job runs when every gate of the run passed -- both
+  # suites, every build, the .deb smoke tests with the real-CLI specs, the
+  # macOS images notarized, stapled, mounted and started, the GUI's argv
+  # against the CLI, the taxonomy asset and the release notes -- and merges
+  # the parts the producing jobs wrote into manifest.json: tree, commit,
+  # version, run and attempt, every file's artifact, size and sha256. An
+  # AppImage enters only when it launched on both Ubuntu releases, as on a
+  # tag. A v* tag of the same tree promotes exactly these files (job
+  # version, promote-assets).
+  release-candidate:
+    name: release candidate
+    if: ${{ !cancelled() && inputs.gui_dry_run && inputs.gui_full_payload }}
+    needs: [version, test, test-macos, build-linux-x64, build-linux-arm64, build-macos, gui-linux, gui-linux-arm64,
+            gui-linux-smoke-deb, gui-linux-arm64-smoke-deb, gui-linux-appimage, gui-linux-arm64-appimage,
+            gui-linux-smoke-appimage, gui-linux-arm64-smoke-appimage, gui-cli-consistency, taxonomy-asset, release-notes,
+            gui, gui-windows, tauri-driver]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    env:
+      V: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Every gate passed
+        env:
+          RESULTS: >-
+            test=${{ needs.test.result }} test-macos=${{ needs.test-macos.result }}
+            build-linux-x64=${{ needs.build-linux-x64.result }} build-linux-arm64=${{ needs.build-linux-arm64.result }}
+            build-macos=${{ needs.build-macos.result }} gui-linux=${{ needs.gui-linux.result }}
+            gui-linux-arm64=${{ needs.gui-linux-arm64.result }} gui-linux-smoke-deb=${{ needs.gui-linux-smoke-deb.result }}
+            gui-linux-arm64-smoke-deb=${{ needs.gui-linux-arm64-smoke-deb.result }}
+            gui-cli-consistency=${{ needs.gui-cli-consistency.result }} taxonomy-asset=${{ needs.taxonomy-asset.result }}
+            release-notes=${{ needs.release-notes.result }}
+            gui=${{ needs.gui.result }} gui-windows=${{ needs.gui-windows.result }} tauri-driver=${{ needs.tauri-driver.result }}
+        run: |
+          echo "$RESULTS"
+          for r in $RESULTS; do
+            [ "${r#*=}" = success ] || { echo "::error::${r%%=*} was ${r#*=}: no release candidate"; exit 1; }
+          done
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        timeout-minutes: 10
+        with:
+          pattern: rc-part-*
+          path: parts
+          merge-multiple: true
+      - name: Write the manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPIMAGE_X64: ${{ needs.gui-linux-smoke-appimage.result }}
+          APPIMAGE_ARM64: ${{ needs.gui-linux-arm64-smoke-appimage.result }}
+        run: |
+          set -euo pipefail
+          # An AppImage only when it launched on both Ubuntu releases.
+          [ "$APPIMAGE_X64" = success ] || rm -f parts/rc-part-gui-linux-x64-appimage.json
+          [ "$APPIMAGE_ARM64" = success ] || rm -f parts/rc-part-gui-linux-arm64-appimage.json
+          find parts -type f
+          tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$GITHUB_SHA" --jq .tree.sha)
+          wid=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .workflow_id)
+          req=()
+          for f in "FASTag-$V-linux-x64.tar.gz" "FASTag-$V-linux-arm64.tar.gz" \
+                   "FASTag-$V-macos-arm64.dmg" "FASTag-$V-gui-macos-arm64.dmg" \
+                   "fastag-gui_${V}_amd64.deb" "FASTag-$V-gui-linux-x64.tar.gz" \
+                   "fastag-gui_${V}_arm64.deb" "FASTag-$V-gui-linux-arm64.tar.gz" \
+                   "FASTag-$V-taxonomy-k7.tar.gz" "FASTag-$V-taxonomy-k7.tar.gz.sha256" \
+                   "FASTag-$V-taxonomy-k7.tar.xz" "FASTag-$V-taxonomy-k7.tar.xz.sha256"; do
+            req+=(--require "$f")
+          done
+          mkdir -p rc
+          python3 .github/scripts/rc-manifest.py merge --out rc/manifest.json "${req[@]}" \
+            --meta "tree=$tree" --meta "version=$V" --meta "run_id=$GITHUB_RUN_ID" --meta "run_attempt=$GITHUB_RUN_ATTEMPT" \
+            --meta "workflow_id=$wid" --meta "workflow=$GITHUB_WORKFLOW" --meta "commit=$GITHUB_SHA" --meta "ref=$GITHUB_REF" \
+            --meta macos_signed=true parts/*.json
+          { echo "### Release candidate $V (tree \`$tree\`)"; echo; echo '| file | sha256 |'; echo '|---|---|'
+            python3 .github/scripts/rc-manifest.py list rc/manifest.json | awk -F'\t' '{ print "| " $3 " | `" $4 "` |" }'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: release-candidate-manifest
+          path: rc/manifest.json
+          retention-days: 30
+          if-no-files-found: error
+
+  # ------------------------------------------------------ promotion
+  # On a v* tag (or a promote_to dry run) whose tree has a release candidate
+  # (job version): the manifest job version selected (its sha256 checked,
+  # verified again for this tree, version, run, attempt and workflow), the
+  # candidate's files downloaded from its run, each checked against the
+  # manifest, attached to the draft by id (digests checked), and staged as
+  # this run's artifacts for the smoke jobs, which then need only read access.
+  promote-assets:
+    if: needs.version.outputs.promote == 'true'
+    needs: [version]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      actions: read
+    env:
+      RUN: ${{ needs.version.outputs.candidate_run }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/scripts
+            tools/release_assets.sh
+          sparse-checkout-cone-mode: false
+      - name: Fetch the candidate's files and check every byte
+        env:
+          MSHA: ${{ needs.version.outputs.manifest_sha256 }}
+          ATTEMPT: ${{ needs.version.outputs.candidate_attempt }}
+          V: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          export FETCH_BUDGET=1500
+          bash .github/scripts/fetch-artifact.sh "$RUN" release-candidate-manifest "$RUNNER_TEMP/m" 3 120
+          M="$RUNNER_TEMP/m/manifest.json"
+          got=$(sha256sum "$M" | cut -d' ' -f1)
+          [ "$got" = "$MSHA" ] || { echo "::error::the manifest is not the one job version selected ($got, not $MSHA)"; exit 1; }
+          tree=$(gh api "repos/$GH_REPO/git/commits/$GITHUB_SHA" --jq .tree.sha)
+          wid=$(gh api "repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID" --jq .workflow_id)
+          python3 .github/scripts/rc-manifest.py verify "$M" --tree "$tree" --version "$V" --run-id "$RUN" \
+            --workflow-id "$wid" --meta "run_attempt=$ATTEMPT" --meta macos_signed=true
+          echo "MANIFEST=$M" >> "$GITHUB_ENV"
+          pids=()
+          for a in $(python3 .github/scripts/rc-manifest.py list "$M" | cut -f1 | sort -u); do
+            bash .github/scripts/fetch-artifact.sh "$RUN" "$a" "$RUNNER_TEMP/a/$a" 3 900 & pids+=($!)
+          done
+          for p in "${pids[@]}"; do wait "$p"; done
+          python3 .github/scripts/rc-manifest.py check "$M" --dir "$RUNNER_TEMP/a" --out promoted
+          rm -rf "$RUNNER_TEMP/a"
+          find promoted -type f -exec basename {} \; | tools/release_assets.sh check "$V"
+      - name: Attach them to the draft by id and check its digests
+        env:
+          ID: ${{ needs.version.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          # Six uploads at a time (each replaces its own name, checks its digest).
+          find promoted -type f -print0 | xargs -0 -P 6 -n 1 bash .github/scripts/release-upload.sh "$ID"
+          gh api "repos/$GH_REPO/releases/$ID" > "$RUNNER_TEMP/release.json"
+          python3 .github/scripts/rc-manifest.py release "$MANIFEST" "$RUNNER_TEMP/release.json"
+          cp "$MANIFEST" promoted-manifest.json
+          mkdir -p smoke/linux-x64 smoke/linux-arm64 smoke/macos
+          cp promoted/fastag-gui_*_amd64.deb promoted/FASTag-*-gui-linux-x64.tar.gz smoke/linux-x64/
+          cp promoted/fastag-gui_*_arm64.deb promoted/FASTag-*-gui-linux-arm64.tar.gz smoke/linux-arm64/
+          cp promoted/FASTag-*-macos-arm64.dmg smoke/macos/
+          echo "### Promoted $(find promoted -type f | wc -l) files of candidate run $RUN onto release $ID (draft), each digest as in the manifest" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: promoted-manifest
+          path: promoted-manifest.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: promoted-linux-x64-gui
+          path: smoke/linux-x64
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: promoted-linux-arm64-gui
+          path: smoke/linux-arm64
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: promoted-macos-arm64
+          path: smoke/macos
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+
+  # The .deb smoke jobs' steps on the promoted .deb and tarball (the bytes
+  # promote-assets attached and checked, staged as promoted-linux-<arch>-gui),
+  # on both Ubuntu releases and both architectures, with read access only.
+  # The AppImages and the other files were launched and checked in the
+  # candidate run, and their digests on the release are the candidate's.
+  promoted-smoke-deb:
+    name: promoted .deb on ${{ matrix.os }}
+    if: needs.version.outputs.promote == 'true'
+    needs: [version, promote-assets]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-22.04, arch: x64, deb_arch: amd64}
+          - {os: ubuntu-24.04, arch: x64, deb_arch: amd64}
+          - {os: ubuntu-22.04-arm, arch: arm64, deb_arch: arm64}
+          - {os: ubuntu-24.04-arm, arch: arm64, deb_arch: arm64}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GUI_ARCH: ${{ matrix.arch }}
+      DEB: fastag-gui_${{ needs.version.outputs.version }}_${{ matrix.deb_arch }}.deb
+      TGZ: FASTag-${{ needs.version.outputs.version }}-gui-linux-${{ matrix.arch }}.tar.gz
+      SMOKE_ARTIFACT: promoted-linux-${{ matrix.arch }}-gui
+    steps: *gui-linux-smoke-deb-steps
+
+  # The promoted macOS images (staged by promote-assets), checked as a user
+  # gets them: tickets stapled and valid, Gatekeeper's assessment, the app
+  # mounted and started (its self-test runs the bundled CLI), the CLI image's
+  # CLI reporting this version, the pinned index in both. Read access only;
+  # the token is only in the download step, never beside the app.
+  promoted-smoke-macos:
+    name: promoted macOS images
+    if: needs.version.outputs.promote == 'true'
+    needs: [version, promote-assets]
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    env:
+      V: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          # tools/ whole: check_bundle_notices.sh runs vendor_bundle.py beside it.
+          sparse-checkout: |
+            CMakeLists.txt
+            tools
+            data/taxonomy/manifests
+            .github/scripts
+          sparse-checkout-cone-mode: false
+      - name: Fetch the promoted images
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/fetch-artifact.sh "$GITHUB_RUN_ID" promoted-macos-arm64 "$RUNNER_TEMP/d" 3 600
+      - name: The promoted disk images
+        shell: bash
+        run: |
+          set -euo pipefail
+          D="$RUNNER_TEMP/d"
+          want=$(sed -n 's/^project(FASTag VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          PIN="data/taxonomy/manifests/$TAXDB_TAG.json"
+          for dmg in "$D/FASTag-$V-gui-macos-arm64.dmg" "$D/FASTag-$V-macos-arm64.dmg"; do
+            xcrun stapler validate "$dmg"
+            spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
+          done
+          MNT="$RUNNER_TEMP/gui"; mkdir -p "$MNT"
+          PAGER='cat' hdiutil attach "$D/FASTag-$V-gui-macos-arm64.dmg" -readonly -nobrowse -noautoopen -mountpoint "$MNT" < <(yes) > /dev/null
+          trap 'hdiutil detach "$MNT" -force >/dev/null 2>&1 || true' EXIT
+          apps=("$MNT"/*.app); app=${apps[0]}
+          codesign --verify --deep --strict --verbose=2 "$app"
+          CLI="$app/Contents/Resources/resources/fastag/bin/FASTag"
+          bash tools/check_bundle_notices.sh "$(dirname "$(dirname "$CLI")")"
+          python3 tools/check_taxonomy_manifest.py --pinned "$PIN" "$(dirname "$(dirname "$CLI")")/share/FASTag/taxonomy"
+          env -i HOME="$HOME" "$CLI" --help 2>&1 | grep -q "^Version: $want" || { echo "::error::the app's CLI does not report $want"; exit 1; }
+          exe="$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")"
+          st="$RUNNER_TEMP/selftest.json"
+          if ! FASTAG_SELFTEST_OUT="$st" perl -e 'alarm 180; exec @ARGV or die "exec: $!"' "$exe" > "$RUNNER_TEMP/selftest.log" 2>&1 \
+             || ! grep -q '"ok": true' "$st"; then
+            cat "$st" "$RUNNER_TEMP/selftest.log" 2>/dev/null; echo "::error::the promoted app did not run its bundled CLI"; exit 1
+          fi
+          hdiutil detach "$MNT"; trap - EXIT
+          CM="$RUNNER_TEMP/cli"; mkdir -p "$CM"
+          PAGER='cat' hdiutil attach "$D/FASTag-$V-macos-arm64.dmg" -readonly -nobrowse -noautoopen -mountpoint "$CM" < <(yes) > /dev/null
+          ok=yes
+          python3 tools/check_taxonomy_manifest.py --pinned "$PIN" "$CM/FASTag/share-FASTag-taxonomy" || ok=no
+          env -i HOME="$HOME" PATH=/usr/bin:/bin "$CM/FASTag/FASTag" --help 2>&1 | grep -q "^Version: $want" || ok=no
+          hdiutil detach "$CM" -force > /dev/null 2>&1 || true
+          [ "$ok" = yes ] || { echo "::error::the promoted CLI image does not carry the index or does not run"; exit 1; }
+          echo "### promoted macOS images: stapled, assessed, the app starts and runs its CLI, the CLI image runs" >> "$GITHUB_STEP_SUMMARY"
 
   # ------------------------------------------------- release completeness
   # No more silently partial releases: v0.19.1 went out with no linux-x64
@@ -2911,14 +4039,26 @@ jobs:
   # so by its end every asset should exist and it checks the FULL list.
   # Non-destructive: the release stays up; the red run is the signal.
   release-complete:
-    # !cancelled(), not always(): cancel-in-progress on a superseding push
-    # would otherwise turn the cancelled run's completeness check red for
-    # uploads the NEW run will finish.
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
-    needs: [version, build, build-macos, taxonomy-asset, release-notes, gui-linux-release, gui-linux-arm64-release, gui-cli-consistency]
+    # !cancelled(), not always(): a cancelled run must not publish.
+    if: ${{ !cancelled() && needs.version.outputs.release != '' && needs.version.result == 'success' }}
+    needs: [version, test, test-macos, build-linux-x64, build-linux-arm64, build-macos, taxonomy-asset, release-notes,
+            gui-linux, gui-linux-arm64, gui-linux-smoke-deb, gui-linux-arm64-smoke-deb,
+            gui-linux-release, gui-linux-arm64-release, macos-release, gui-cli-consistency, gui, gui-windows, tauri-driver,
+            promote-assets, promoted-smoke-deb, promoted-smoke-macos]
     runs-on: ubuntu-24.04
+    # 120: the bounded wait for windows.yml's gates (90 minutes) and the checks.
+    timeout-minutes: 120
+    # write: the release is a draft (visible only with write access) until
+    # the last step publishes it.
+    permissions:
+      contents: write
+      actions: read
     env:
       V: ${{ needs.version.outputs.version }}
+      REL: ${{ needs.version.outputs.release }}
+      ID: ${{ needs.version.outputs.release_id }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -2926,55 +4066,116 @@ jobs:
           sparse-checkout: |
             CMakeLists.txt
             tools/release_assets.sh
+            .github/scripts
           sparse-checkout-cone-mode: false
-      - name: The release notes were set from CHANGELOG.md
-        if: needs.release-notes.result != 'success'
-        run: |
-          echo "::error::release-notes was ${{ needs.release-notes.result }}: the release body is not the CHANGELOG section"
-          exit 1
-      - name: The GUI's argv passed against the release CLI
-        if: needs.gui-cli-consistency.result != 'success'
-        run: |
-          echo "::error::gui-cli-consistency was ${{ needs.gui-cli-consistency.result }}: the GUI may send this CLI options it refuses"
-          exit 1
-      - name: Assert this workflow's assets are on the release
+      # Every job that made, checked or attached a file of this release
+      # succeeded: on a promoted release the promotion and its smoke jobs (the
+      # candidate passed every gate, or it would have no manifest); on a
+      # rebuilt one the suites (or an identical tree's, tested-tree.sh), the
+      # builds, the smoke jobs, the uploaders and the unit-test jobs. An asset
+      # left by an earlier attempt can never stand in for a failed job.
+      - name: Every job of this release passed
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+          PROMOTED: ${{ needs.version.outputs.promote }}
+          PUBLISH: ${{ needs.version.outputs.publish }}
+          PROMOTION: >-
+            promote-assets=${{ needs.promote-assets.result }} promoted-smoke-deb=${{ needs.promoted-smoke-deb.result }}
+            promoted-smoke-macos=${{ needs.promoted-smoke-macos.result }}
+          REBUILD: >-
+            test=${{ needs.test.result }} test-macos=${{ needs.test-macos.result }}
+            build-linux-x64=${{ needs.build-linux-x64.result }} build-linux-arm64=${{ needs.build-linux-arm64.result }}
+            build-macos=${{ needs.build-macos.result }} gui-linux=${{ needs.gui-linux.result }}
+            gui-linux-arm64=${{ needs.gui-linux-arm64.result }} gui-linux-smoke-deb=${{ needs.gui-linux-smoke-deb.result }}
+            gui-linux-arm64-smoke-deb=${{ needs.gui-linux-arm64-smoke-deb.result }}
+            gui-linux-release=${{ needs.gui-linux-release.result }} gui-linux-arm64-release=${{ needs.gui-linux-arm64-release.result }}
+            macos-release=${{ needs.macos-release.result }} taxonomy-asset=${{ needs.taxonomy-asset.result }}
+            gui-cli-consistency=${{ needs.gui-cli-consistency.result }}
+            gui=${{ needs.gui.result }} gui-windows=${{ needs.gui-windows.result }} tauri-driver=${{ needs.tauri-driver.result }}
+          NOTES: release-notes=${{ needs.release-notes.result }}
+        run: |
+          set -u
+          list=$REBUILD; [ "$PROMOTED" = true ] && list=$PROMOTION
+          [ "$PUBLISH" = true ] && list="$list $NOTES"
+          echo "$list"
+          for r in $list; do
+            [ "${r#*=}" = success ] || { echo "::error::${r%%=*} was ${r#*=}: not publishing"; exit 1; }
+          done
+      # What this workflow's part of the release is, file by file with its
+      # sha256: the candidate's manifest (the one job version selected), or
+      # what this run's uploaders attached.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        if: needs.version.outputs.promote != 'true'
+        timeout-minutes: 10
+        with:
+          pattern: rel-part-*
+          path: expect/parts
+          merge-multiple: true
+      - name: This workflow's files
+        env:
+          PROMOTED: ${{ needs.version.outputs.promote }}
+          RUN: ${{ needs.version.outputs.candidate_run }}
+          MSHA: ${{ needs.version.outputs.manifest_sha256 }}
         run: |
           set -euo pipefail
-          # macOS ships DISK IMAGES, not tarballs -- a stapled ticket needs a
-          # .app/.pkg/.dmg to live on. This list lagged that change and failed
-          # v1.4.2 on assets that are deliberately no longer built, which is the
-          # gate working: it compares what shipped against what we SAID ships,
-          # so it fires on a stale expectation as loudly as on a missing file.
-          # The Linux desktop app from 1.13.0 (P1): the .deb
-          # (fastag-gui_<version>_amd64.deb) and the tarball, for arm64 too
-          # from 1.15.0; the AppImages are best-effort and not asserted.
-          want="FASTag-$V-linux-x64.tar.gz FASTag-$V-linux-arm64.tar.gz \
-                FASTag-$V-macos-arm64.dmg FASTag-$V-gui-macos-arm64.dmg \
-                fastag-gui_${V}_amd64.deb FASTag-$V-gui-linux-x64.tar.gz \
-                fastag-gui_${V}_arm64.deb FASTag-$V-gui-linux-arm64.tar.gz \
-                FASTag-$V-taxonomy-k7.tar.gz FASTag-$V-taxonomy-k7.tar.gz.sha256 \
-                FASTag-$V-taxonomy-k7.tar.xz FASTag-$V-taxonomy-k7.tar.xz.sha256"
-          have=$(gh release view "${{ github.ref_name }}" --json assets --jq '.assets[].name')
+          mkdir -p expect
+          if [ "$PROMOTED" = true ]; then
+            bash .github/scripts/fetch-artifact.sh "$RUN" release-candidate-manifest "$RUNNER_TEMP/m" 3 120
+            [ "$(sha256sum "$RUNNER_TEMP/m/manifest.json" | cut -d' ' -f1)" = "$MSHA" ] || { echo "::error::not the selected manifest"; exit 1; }
+            cp "$RUNNER_TEMP/m/manifest.json" expect/unix.json
+          else
+            jq -s '{files: (map(.files) | add)}' expect/parts/*.json > expect/unix.json
+          fi
+          jq -r '.files[] | "\(.sha256)  \(.name)"' expect/unix.json
+          # The files every release of this version carries from this
+          # workflow (the AppImages are best-effort: in the set only when they
+          # launched and were attached, and then exactly those bytes).
           missing=0
-          for a in $want; do
-            echo "$have" | grep -qx "$a" || { echo "MISSING: $a"; missing=1; }
+          for a in "FASTag-$V-linux-x64.tar.gz" "FASTag-$V-linux-arm64.tar.gz" \
+                   "FASTag-$V-macos-arm64.dmg" "FASTag-$V-gui-macos-arm64.dmg" \
+                   "fastag-gui_${V}_amd64.deb" "FASTag-$V-gui-linux-x64.tar.gz" \
+                   "fastag-gui_${V}_arm64.deb" "FASTag-$V-gui-linux-arm64.tar.gz" \
+                   "FASTag-$V-taxonomy-k7.tar.gz" "FASTag-$V-taxonomy-k7.tar.gz.sha256" \
+                   "FASTag-$V-taxonomy-k7.tar.xz" "FASTag-$V-taxonomy-k7.tar.xz.sha256"; do
+            jq -e --arg n "$a" '.files | any(.name == $n)' expect/unix.json > /dev/null || { echo "MISSING: $a"; missing=1; }
           done
           exit $missing
-      # Every file on the release, whichever workflow attached it, carries
-      # the version: FASTag-<version>-<variant>.<ext>, or the .deb's
-      # fastag-gui_<version>_amd64.deb. windows.yml's mirror job runs the
-      # same check, so the last workflow to finish sees every asset.
-      - name: Every asset name carries the version
+      # The one publisher waits (bounded) for windows.yml: its run for this
+      # commit passed its gates and left its two files' digests
+      # (wait-release-gates.sh). No gates in time, or a failed Windows run:
+      # the release stays a draft.
+      - name: Wait for windows.yml's release gates
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+          WAIT_S: ${{ needs.version.outputs.publish == 'true' && '5400' || '3600' }}
+        run: bash .github/scripts/wait-release-gates.sh windows.yml "$REL" expect/windows "$WAIT_S"
+      # Exactly these files, nothing else: the draft's assets against the
+      # union of this workflow's set and windows.yml's, name, size and
+      # sha256. An asset of neither (left by an earlier attempt or another
+      # tree) is removed from the DRAFT and the check repeated; a missing
+      # file or another digest fails the run.
+      - name: The release holds exactly the gated files
         run: |
           set -euo pipefail
-          gh release view "${{ github.ref_name }}" --json assets --jq '.assets[].name' \
-            | tools/release_assets.sh check "$V"
+          gh api "repos/$GH_REPO/releases/$ID" > "$RUNNER_TEMP/release.json"
+          [ "$(jq -r .draft "$RUNNER_TEMP/release.json")" = true ] || { echo "::error::release $ID is not a draft"; exit 1; }
+          if ! python3 .github/scripts/rc-manifest.py inventory "$RUNNER_TEMP/release.json" expect/unix.json expect/windows/gates.json \
+               --unexpected-out "$RUNNER_TEMP/extra"; then
+            [ -s "$RUNNER_TEMP/extra" ] || exit 1
+            while read -r aid; do
+              echo "removing asset $aid from the draft (not a file of this release)"
+              gh api -X DELETE "repos/$GH_REPO/releases/assets/$aid"
+            done < "$RUNNER_TEMP/extra"
+            gh api "repos/$GH_REPO/releases/$ID" > "$RUNNER_TEMP/release.json"
+            python3 .github/scripts/rc-manifest.py inventory "$RUNNER_TEMP/release.json" expect/unix.json expect/windows/gates.json
+          fi
+          jq -r '.assets[].name' "$RUNNER_TEMP/release.json" | tools/release_assets.sh check "$V"
+          echo "### $REL: $(jq '.assets | length' "$RUNNER_TEMP/release.json") files, exactly the gated ones (Unix and Windows), every digest checked" >> "$GITHUB_STEP_SUMMARY"
+      # Published only now, by id, with the whole release on it and checked:
+      # until here it was a draft nobody else could see. Only a tag push.
+      - name: Publish the release
+        if: needs.version.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          gh api -X PATCH "repos/$GH_REPO/releases/$ID" -F draft=false --jq '"published: \(.html_url) (draft \(.draft))"'
 
   # ------------------------------------------------- Homebrew tap (macOS)
   # okohlbacher/homebrew-fastag carries two casks (fastag = the desktop app,
@@ -3002,8 +4203,8 @@ jobs:
   # tap_dry_run (workflow_dispatch) runs this job without a tag: it checks the
   # token exists and can see the tap's workflow, and dispatches nothing.
   homebrew-tap:
-    if: ${{ !cancelled() && (needs.release-complete.result == 'success' || inputs.tap_dry_run) }}
-    needs: [release-complete]
+    if: ${{ !cancelled() && ((needs.release-complete.result == 'success' && needs.version.outputs.publish == 'true') || inputs.tap_dry_run) }}
+    needs: [version, release-complete]
     runs-on: ubuntu-24.04
     permissions: {}
     steps:
@@ -3011,7 +4212,7 @@ jobs:
         id: tap-token
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ needs.version.outputs.release }}
         run: |
           if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
             echo "::error title=Homebrew tap not updated::secret HOMEBREW_TAP_TOKEN is not set in okohlbacher/FASTag. Add a fine-grained PAT (repository access: only okohlbacher/homebrew-fastag; permission Actions: Read and write), then publish this release with: gh workflow run update-casks.yml -R okohlbacher/homebrew-fastag -f tag=$TAG"
@@ -3034,13 +4235,13 @@ jobs:
           echo "update-casks.yml in $GH_REPO is '$state'; dry run, nothing dispatched"
 
       - name: Ask the tap to publish this release
-        if: steps.tap-token.outputs.enabled == 'true' && !inputs.tap_dry_run && startsWith(github.ref, 'refs/tags/v')
+        if: steps.tap-token.outputs.enabled == 'true' && !inputs.tap_dry_run && needs.version.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           GH_REPO: okohlbacher/homebrew-fastag
           # Through env and quoted below: a tag name is any valid Git ref,
           # not only vX.Y.Z, and the tap validates it again on its side.
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ needs.version.outputs.release }}
         run: |
           # GitHub disables a scheduled workflow after 60 days without a
           # commit to its repository and then refuses to dispatch it, so
