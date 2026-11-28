@@ -243,6 +243,7 @@ jobs:
               [ "$hit" = 1 ] || { code=true; echo "code change: $f"; break; }
             done <<< "$files"
           fi
+          [ "$EVENT" = workflow_dispatch ] && [ "${{ inputs.gui_dry_run }}" != true ] && code=false  # EXPERIMENT ONLY: warm job alone
           echo "code=$code" >> "$GITHUB_OUTPUT"
           [ "$code" = true ] || echo "### Documentation only ($(wc -l <<< "$files") files): build and test jobs skipped" >> "$GITHUB_STEP_SUMMARY"
       - id: v
@@ -3600,7 +3601,7 @@ jobs:
   # everything bundle- or resource-related stay out. Nothing to do -- a
   # lookup of about a second -- unless Cargo.lock or the toolchain changed.
   cargo-warm:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'  # EXPERIMENT ONLY
     strategy:
       fail-fast: false
       matrix:
