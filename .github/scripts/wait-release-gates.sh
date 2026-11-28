@@ -6,25 +6,30 @@
 # the release with the right digests, uploads the artifact
 # release-gates-<release> (gates.json: the release, the commit, the run and
 # the files with size and sha256). This waits, bounded, for a run of
-# <workflow file> for this same commit ($GITHUB_SHA) that has that artifact
-# and a successful release-complete job in its latest attempt, and puts
-# gates.json into <dir>. A push run of <release> that completed without it
+# <workflow file> for this same commit ($GITHUB_SHA), created within 15
+# minutes of this run (the two workflows start on the same push or the same
+# pair of dispatches; an older run of the same release, e.g. an earlier
+# dry run, does not count), that has that artifact and a successful
+# release-complete job in its latest attempt, and puts gates.json into <dir>. A push run of <release> that completed without it
 # fails at once; otherwise the wait ends after [seconds] (default 5400) and
 # fails, and the release stays a draft.
 #
-# Needs GH_TOKEN (actions: read), GITHUB_REPOSITORY and GITHUB_SHA.
+# Needs GH_TOKEN (actions: read), GITHUB_REPOSITORY, GITHUB_SHA and GITHUB_RUN_ID.
 set -uo pipefail
 WF="${1:?workflow file}"; REL="${2:?release}"; DIR="${3:?dir}"; WAIT="${4:-5400}"
-REPO="${GITHUB_REPOSITORY:?}"; SHA="${GITHUB_SHA:?}"
+REPO="${GITHUB_REPOSITORY:?}"; SHA="${GITHUB_SHA:?}"; RUN_ID="${GITHUB_RUN_ID:?}"
 HERE=$(cd "$(dirname "$0")" && pwd)
 NAME="release-gates-$REL"
 end=$(( $(date +%s) + WAIT ))
 api() { gh api -H "Accept: application/vnd.github+json" "$@"; }
+epoch() { python3 -c 'import sys,datetime; print(int(datetime.datetime.fromisoformat(sys.argv[1].replace("Z","+00:00")).timestamp()))' "$1"; }
+me=$(epoch "$(api "repos/$REPO/actions/runs/$RUN_ID" --jq .created_at)") || { echo "::error::cannot read this run's creation time"; exit 1; }
 while :; do
   runs=$(api "repos/$REPO/actions/workflows/$WF/runs?head_sha=$SHA&per_page=20" \
-    | jq -r '.workflow_runs[] | "\(.id) \(.run_attempt) \(.event) \(.status) \(.conclusion) \(.head_branch)"') || runs=""
-  while read -r id attempt event status conclusion branch; do
+    | jq -r '.workflow_runs[] | "\(.id) \(.run_attempt) \(.event) \(.status) \(.conclusion) \(.head_branch) \(.created_at)"') || runs=""
+  while read -r id attempt event status conclusion branch created; do
     [ -n "$id" ] || continue
+    d=$(( $(epoch "$created") - me )); [ "${d#-}" -le 900 ] || continue
     has=$(api "repos/$REPO/actions/runs/$id/artifacts?per_page=100" \
       | jq -r --arg n "$NAME" '[.artifacts[] | select(.name == $n and .expired == false)] | length') || has=0
     if [ "${has:-0}" -ge 1 ]; then

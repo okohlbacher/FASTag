@@ -202,7 +202,8 @@ ru 50 "$F/g.deb" > /dev/null && bad "release-upload: a wrong digest after upload
   || { [ "$(grep -c uploads "$F/calls")" = 3 ] && ok "release-upload: a wrong digest is retried 3 times, then fails" || bad "release-upload: retries" "$F/calls"; }
 
 # ------------------------------------------------------------------ wait-release-gates.sh
-wg() { env GITHUB_REPOSITORY=$R GITHUB_SHA=$SHA GH_TOKEN=x GATES_POLL=0 bash "$S/wait-release-gates.sh" windows.yml "$@" > "$F/log" 2>&1; }
+wg() { echo '{"workflow_id": 7, "created_at": "2026-11-28T10:00:00Z"}' > "$F/repos_o_r_actions_runs_$RUN.json"
+  env GITHUB_REPOSITORY=$R GITHUB_SHA=$SHA GITHUB_RUN_ID=$RUN GH_TOKEN=x GATES_POLL=0 bash "$S/wait-release-gates.sh" windows.yml "$@" > "$F/log" 2>&1; }
 gates() {  # run-id release
   mkdir -p "$F/artifacts/$1/release-gates-$2"
   echo "{\"release\": \"$2\", \"commit\": \"$SHA\", \"run\": $1, \"files\": [{\"name\": \"c.exe\", \"size\": 5, \"sha256\": \"cc\"}]}" > "$F/artifacts/$1/release-gates-$2/gates.json"
@@ -210,14 +211,16 @@ gates() {  # run-id release
   jobs release-complete x success > "$F/repos_o_r_actions_runs_$1_attempts_1_jobs_per_page_100.json"
 }
 wruns() { echo "{\"workflow_runs\": [$1]}" > "$F/repos_o_r_actions_workflows_windows.yml_runs_head_sha_${SHA}_per_page_20.json"; }
-fixtures; wruns '{"id": 950, "run_attempt": 1, "event": "push", "status": "completed", "conclusion": "success", "head_branch": "v1.2.3"}'; gates 950 v1.2.3
+fixtures; wruns '{"id": 950, "run_attempt": 1, "event": "push", "status": "completed", "conclusion": "success", "head_branch": "v1.2.3", "created_at": "2026-11-28T10:00:05Z"}'; gates 950 v1.2.3
 wg v1.2.3 "$F/g" 5 && grep -q c.exe "$F/g/gates.json" && ok "wait-release-gates: Windows passed its gates for this release" || bad "wait-release-gates: passed" "$F/log"
-fixtures; wruns '{"id": 950, "run_attempt": 1, "event": "push", "status": "completed", "conclusion": "failure", "head_branch": "v1.2.3"}'; arts 950 x
+fixtures; wruns '{"id": 950, "run_attempt": 1, "event": "push", "status": "completed", "conclusion": "failure", "head_branch": "v1.2.3", "created_at": "2026-11-28T10:00:05Z"}'; arts 950 x
 wg v1.2.3 "$F/g" 60 && bad "wait-release-gates: a failed Windows run fails at once" || { grep -q 'without passing' "$F/log" && ok "wait-release-gates: a failed Windows tag run fails at once" || bad "wait-release-gates: fail fast" "$F/log"; }
-fixtures; wruns '{"id": 950, "run_attempt": 1, "event": "workflow_dispatch", "status": "in_progress", "conclusion": null, "head_branch": "b"}'; arts 950 x
+fixtures; wruns '{"id": 950, "run_attempt": 1, "event": "workflow_dispatch", "status": "in_progress", "conclusion": null, "head_branch": "b", "created_at": "2026-11-28T09:59:50Z"}'; arts 950 x
 wg ci-promotion-test-x "$F/g" 2 && bad "wait-release-gates: no gates in time fails" || ok "wait-release-gates: no gates within the wait fails (the release stays a draft)"
-fixtures; wruns '{"id": 950, "run_attempt": 1, "event": "workflow_dispatch", "status": "completed", "conclusion": "success", "head_branch": "b"}'; gates 950 ci-promotion-test-y
+fixtures; wruns '{"id": 950, "run_attempt": 1, "event": "workflow_dispatch", "status": "completed", "conclusion": "success", "head_branch": "b", "created_at": "2026-11-28T09:59:50Z"}'; gates 950 ci-promotion-test-y
 wg ci-promotion-test-x "$F/g" 2 && bad "wait-release-gates: another release's gates do not count" || ok "wait-release-gates: another release's gates do not count"
+fixtures; wruns '{"id": 940, "run_attempt": 1, "event": "workflow_dispatch", "status": "completed", "conclusion": "success", "head_branch": "b", "created_at": "2026-11-28T08:00:00Z"}'; gates 940 ci-promotion-test-x
+wg ci-promotion-test-x "$F/g" 2 && bad "wait-release-gates: an older run's gates of the same release do not count" || ok "wait-release-gates: an older run's gates of the same release do not count"
 
 echo "release_scripts_test: $pass passed, $fail failed"
 [ "$fail" = 0 ]
