@@ -18,7 +18,7 @@ The same table is in the README ("Species detection"). Release bundles are
 built by `.github/workflows/ci.yml` and `windows.yml` on a `v*` tag, which
 embed the pinned index (`TAXDB_TAG`, sha256-checked) before packing:
 
-| bundle | NCBI dumps (`nodes.dmp`, `names.dmp`) | k-mer index `tax_k7.taxdb` (~1.06 GB) | `MANIFEST.json` |
+| bundle | NCBI dumps (`nodes.dmp`, `names.dmp`) | k-mer index `tax_k7.taxdb` (~1.06 GB), or packed `tax_k7.ftz` (219 MB, below) | `MANIFEST.json` |
 |---|---|---|---|
 | CLI: Linux x64/arm64 `.tar.gz`, macOS arm64/x64 `.dmg`, Windows x64 `.zip` (`share-FASTag-taxonomy/`) | yes | **yes** | yes |
 | Desktop app: macOS `.dmg`, Linux `.deb`, `.tar.gz` and `.AppImage` (x64, arm64), Windows installer (`resources/fastag/share/FASTag/taxonomy/`) | yes | **yes** | yes |
@@ -104,6 +104,79 @@ loads instantly (nothing is deserialized):
 
 The earlier `FTXI` format (a serialized hash map, ~10× the RAM) still loads for
 backward compatibility. `save()` always writes `FTX2`.
+
+## The packed form (`FTZ1`, `tax_k7.ftz`)
+
+The `FTX2` image compresses badly as it is (zstd -19: 1138 → 366 MB; gzip, as in
+the release tarball: 450 MB; LZMA, as in the Windows installer and the ULMO dmg:
+245 MB), because its sorted keys and its offsets are arithmetic progressions
+that LZ matching does not see. The packed form stores the key **deltas** and the
+taxon-set **sizes** instead, each escape-coded to one byte (a value of 255 or
+more is `0xFF` and the full value), and the postings as they are; each of the
+four sections is one zstd frame with a content checksum. The shipped index packs
+to **219 MB** at zstd level 12 (the default; 10 s) or 207 MB at level 19 (110 s),
+and no general-purpose compressor shrinks that further, so a packager that
+compresses its payload (makensis, hdiutil, dpkg-deb, mksquashfs, tar) passes over
+it quickly.
+
+**Unpacked once, then mapped.** The first run that loads a `.ftz` decodes it into
+the exact `FTX2` image, writes that to a per-user cache folder and maps it from
+there; every later run maps the cached file, as it would a `.taxdb` beside the
+binary. The file is named by the sha256 of the image, which the `.ftz` header
+records (`tax_k7-<sha256>.taxdb`), so another index unpacks afresh.
+
+| folder | |
+|---|---|
+| `$FASTAG_TAXDB_CACHE` | if set; `off` (or `0`, `none`) decodes in memory instead. For clusters: node-local scratch |
+| macOS | `~/Library/Caches/de.openms.fastag/taxdb` |
+| Linux | `$XDG_CACHE_HOME/de.openms.fastag/taxdb`, else `~/.cache/de.openms.fastag/taxdb` |
+| Windows | `%LOCALAPPDATA%\de.openms.fastag\taxdb` (removed by the uninstaller's "Delete app data") |
+
+- **Atomic.** The image goes to a temp file in the same folder, is flushed to
+  disk (fsync), hashed as written and renamed into place, under an exclusive
+  lock on `tax_k7-<sha256>.lock`. Concurrent first runs (the harness starts 28)
+  wait for one unpack and then map its file; no run sees a partial file.
+- **Verified.** A file is used only after its sha256 matched: right after the
+  unpack, or, for a file without a matching stamp (`<file>.ok`: size and
+  modification time, written after the hash matched), before its first use. A
+  mismatch unpacks it again. With a matching stamp a run does not hash the
+  1.1 GB again; the structural checks of every mapped index still run.
+- **Fallback.** A cache folder that cannot be created or written (read-only
+  home, sandbox, full disk) decodes the image in memory instead, and the run
+  logs why (`taxonomy index: no cache for ... decoded in memory`).
+- **Precedence.** A `tax_k7.taxdb` beside the `.ftz` still wins
+  (`TaxIndex::findInDir`; the desktop app looks the same way), and nothing is
+  unpacked.
+
+Measured on an M4 Max with the shipped index, a species + census run of
+PXD000001 (tag table, `-species`, `-species_call decoy` and `-census` byte for
+byte the same in every case):
+
+| index | wall | RSS | phys footprint |
+|---|---|---|---|
+| `tax_k7.taxdb` beside the binary (mapped) | 2.6 s | 1.44 GB | 0.29 GB |
+| `tax_k7.ftz`, first run (unpack 3.1 s: decode, write, fsync, hash) | 5.6 s | 2.82 GB | 1.43 GB |
+| `tax_k7.ftz`, later runs (cache mapped) | 2.5 s | 1.45 GB | 0.29 GB |
+| `tax_k7.ftz`, no cache (`FASTAG_TAXDB_CACHE=off`) | 2.8 s | 1.69 GB | 1.43 GB |
+
+The cache costs 1.14 GB of disk per index version; delete the folder to reclaim
+it (the next run unpacks again).
+
+```
+buildtaxdb --pack   share-FASTag-taxonomy/tax_k7.taxdb share-FASTag-taxonomy/tax_k7.ftz [level=12]
+buildtaxdb --unpack share-FASTag-taxonomy/tax_k7.ftz   share-FASTag-taxonomy/tax_k7.taxdb
+buildtaxdb --verify share-FASTag-taxonomy/tax_k7.ftz   [<sha256 of the .taxdb>]
+```
+
+`--pack` decodes what it wrote and compares it with its input byte for byte;
+packing is deterministic (each section is compressed single-threaded), so the
+same index and level give the same `.ftz`. `--unpack` restores the `.taxdb`;
+`--verify` decodes, hashes the image and checks it against the recorded and the
+given digest (it prints the digest on stdout). These three decode in memory and
+never touch the cache. `tools/check_taxonomy_manifest.py` and
+`tools/windows_installed_check.ps1` accept a `tax_k7.ftz` in place of the pinned
+`tax_k7.taxdb` when its header records the pinned size and sha256 and its
+sections add up to its length. The index-only release assets keep the `.taxdb`.
 
 ## Rebuilding the index
 

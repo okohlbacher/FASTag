@@ -63,8 +63,12 @@ foreach ($f in @('LICENSE', 'THIRD-PARTY-NOTICES.txt', 'GUI-THIRD-PARTY-NOTICES.
   if (-not (Test-Path (Join-Path $R $f))) { Fail "the installed app has no resources\fastag\$f" }
 }
 $taxdb = Join-Path $R 'share\FASTag\taxonomy\tax_k7.taxdb'
+# The installers ship the index packed (tax_k7.ftz, `buildtaxdb --pack`); its
+# header records the size and sha256 of the tax_k7.taxdb it decodes to.
+$taxftz = Join-Path $R 'share\FASTag\taxonomy\tax_k7.ftz'
+$packed = (-not (Test-Path $taxdb)) -and (Test-Path $taxftz) -and (Get-Item $taxftz).Length -gt 0
 if ($RequireTaxonomyIndex) {
-  if (-not (Test-Path $taxdb) -or (Get-Item $taxdb).Length -eq 0) { Fail "the installed app has no resources\fastag\share\FASTag\taxonomy\tax_k7.taxdb (-species would fail)" }
+  if (-not $packed -and (-not (Test-Path $taxdb) -or (Get-Item $taxdb).Length -eq 0)) { Fail "the installed app has no resources\fastag\share\FASTag\taxonomy\tax_k7.taxdb or tax_k7.ftz (-species would fail)" }
   if (-not $TaxonomyManifest) {
     $mans = Join-Path $PSScriptRoot '..\data\taxonomy\manifests'
     $TaxonomyManifest = Get-ChildItem -Path $mans -Filter '*.json' -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1 -ExpandProperty FullName
@@ -73,6 +77,21 @@ if ($RequireTaxonomyIndex) {
   $pin = Get-Content -Raw $TaxonomyManifest | ConvertFrom-Json
   foreach ($f in $pin.files.PSObject.Properties) {
     $p = Join-Path $R "share\FASTag\taxonomy\$($f.Name)"
+    if ($packed -and $f.Name -eq 'tax_k7.taxdb') {
+      $it = Get-Item -LiteralPath $taxftz -Force -ErrorAction SilentlyContinue
+      if (-not $it -or $it.PSIsContainer -or ($it.Attributes -band [IO.FileAttributes]::ReparsePoint)) { Fail "the installed app's taxonomy has no regular file tax_k7.ftz" }
+      $h = New-Object byte[] 160
+      $fs = [IO.File]::OpenRead($taxftz); try { $n = $fs.Read($h, 0, 160) } finally { $fs.Close() }
+      if ($n -ne 160 -or [Text.Encoding]::ASCII.GetString($h, 0, 4) -ne 'FTZ1' -or [BitConverter]::ToUInt32($h, 4) -ne 1) { Fail "the installed tax_k7.ftz is not a packed taxonomy index" }
+      $comp = [uint64]0; for ($i = 0; $i -lt 4; $i++) { $comp += [BitConverter]::ToUInt64($h, 96 + 16 * $i) }
+      if ((160 + $comp) -ne [uint64]$it.Length) { Fail "the installed tax_k7.ftz is $($it.Length) bytes, its sections add up to $(160 + $comp) (truncated?)" }
+      $ib = [BitConverter]::ToUInt64($h, 40)
+      $isha = -join ($h[56..87] | ForEach-Object { $_.ToString('x2') })
+      if ($ib -ne [uint64]$f.Value.bytes) { Fail "the installed tax_k7.ftz packs a $ib-byte tax_k7.taxdb, $(Split-Path -Leaf $TaxonomyManifest) pins $($f.Value.bytes)" }
+      if ($isha -ne $f.Value.sha256) { Fail "the installed tax_k7.ftz packs tax_k7.taxdb sha256 $isha, $(Split-Path -Leaf $TaxonomyManifest) pins $($f.Value.sha256)" }
+      Write-Host "taxonomy: tax_k7.ftz, $($it.Length) bytes, packs tax_k7.taxdb with the pinned sha256"
+      continue
+    }
     $it = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
     if (-not $it -or $it.PSIsContainer -or ($it.Attributes -band [IO.FileAttributes]::ReparsePoint)) { Fail "the installed app's taxonomy has no regular file $($f.Name)" }
     if ($it.Length -ne [int64]$f.Value.bytes) { Fail "the installed $($f.Name) is $($it.Length) bytes, $(Split-Path -Leaf $TaxonomyManifest) pins $($f.Value.bytes)" }
@@ -128,7 +147,7 @@ function Invoke-Cli([string]$label, [string[]]$argv) {
   $psi.WorkingDirectory = $Out
   $psi.EnvironmentVariables['OPENMS_DATA_PATH'] = (Join-Path $R 'share\OpenMS')
   $tax = Join-Path $R 'share\FASTag\taxonomy'
-  if (Test-Path (Join-Path $tax 'tax_k7.taxdb')) { $psi.EnvironmentVariables['FASTAG_TAXONOMY_DIR'] = $tax }
+  if ((Test-Path (Join-Path $tax 'tax_k7.taxdb')) -or (Test-Path (Join-Path $tax 'tax_k7.ftz'))) { $psi.EnvironmentVariables['FASTAG_TAXONOMY_DIR'] = $tax }
   $psi.EnvironmentVariables['OPENBLAS_NUM_THREADS'] = '1'
   # The installed app's own .NET runtime (bin\dotnet), never this runner's.
   $psi.EnvironmentVariables.Remove('DOTNET_ROOT')

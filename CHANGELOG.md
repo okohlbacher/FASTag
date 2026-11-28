@@ -2,13 +2,27 @@
 
 ## Unreleased
 
-- **Census columns `tic` and `xrea` (census format 4).** `-census` writes two more columns after
-  `res_cover_exact`: `tic`, the summed intensity of the spectrum's peaks as read, and `xrea`, Xrea (Na & Paek,
-  J Proteome Res 2006) over the same peaks (area between the diagonal and the cumulative intensity curve of the
-  intensity-sorted peaks, divided by 1/2 plus the most intense peak's share). Both are candidate features for
-  predicting identification. `census_version` is 4; the columns before them keep their positions, the optional
-  columns (`best_ion_series`, `pre_*`, `identified`, `triage`, `ident_score`) move two to the right. Tags and
-  every other output are unchanged. The desktop app labels the two columns in the census table.
+- **Packed taxonomy index (`tax_k7.ftz`).** FASTag also loads the k-mer index from a compressed file,
+  `tax_k7.ftz`: 219 MB at zstd level 12 for the 1.14 GB `tax_k7.taxdb` (the release tarball's gzip: 450 MB;
+  LZMA, as in the Windows installer and the ULMO dmg: 245 MB). It stores the key deltas and the taxon-set sizes,
+  escape-coded to a byte, and the postings, as four zstd frames with checksums, and records the sha256 of the
+  `.taxdb` image it decodes to. The first run unpacks it once into a per-user cache folder
+  (`~/Library/Caches/de.openms.fastag/taxdb`, `$XDG_CACHE_HOME` or `~/.cache` + `de.openms.fastag/taxdb`,
+  `%LOCALAPPDATA%\de.openms.fastag\taxdb`; `FASTAG_TAXDB_CACHE` overrides it, `off` decodes in memory), named by
+  that sha256: written to a temp file, fsynced, hashed and renamed into place under a lock, so concurrent first
+  runs unpack once and never see a partial file; a cached file without a matching stamp is hashed before use and
+  unpacked again on a mismatch. Later runs map it like a `.taxdb`. A folder that cannot be written falls back to
+  decoding in memory, with a log line. Measured on an M4 Max (species + census run of PXD000001): first run 5.6 s
+  (unpack 3.1 s, once), later runs 2.5 s and 0.29 GB phys footprint, as with the mapped `.taxdb` (2.6 s, 0.29 GB);
+  in memory 2.8 s and 1.43 GB. Tag table, `-species`, `-species_call decoy` and `-census` are the same byte for
+  byte in every case (`packed_taxdb_cli_test` checks the same, with six concurrent first runs and an unwritable
+  cache, on every CI platform). A `tax_k7.taxdb` beside the `.ftz` wins and is mapped as before; `FTX2` and `FTXI`
+  files load unchanged. New `buildtaxdb --pack` (level 12 by default), `--unpack` (restores the `.taxdb` byte for
+  byte) and `--verify`. The desktop app's taxonomy checks, `tools/check_taxonomy_manifest.py` and
+  `tools/windows_installed_check.ps1` accept the packed index (its header must record the pinned size and
+  sha256). The index-only release assets keep the `.taxdb`. With the release workflows packing it, the installers
+  no longer compress 1.14 GB (makensis LZMA, hdiutil, dpkg-deb, mksquashfs) and get smaller (desktop dmg, ULMO,
+  measured with the level-19 file: 336 -> 296 MB).
 
 ## 1.16.4 (2026-11-27)
 

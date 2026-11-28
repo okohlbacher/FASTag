@@ -94,9 +94,10 @@ fn dev_cache() -> Option<PathBuf> {
     set("XDG_CACHE_HOME").map(|x| x.join("fastag")).or_else(|| set("HOME").map(|h| h.join(".cache").join("fastag")))
 }
 
-/// A taxonomy folder -species can use: the dumps and the k-mer index.
+/// A taxonomy folder -species can use: the dumps and the k-mer index
+/// (tax_k7.taxdb or its packed form tax_k7.ftz).
 fn has_index(d: &Path) -> bool {
-    ["nodes.dmp", "names.dmp", "tax_k7.taxdb"].iter().all(|f| d.join(f).is_file())
+    ["nodes.dmp", "names.dmp"].iter().all(|f| d.join(f).is_file()) && crate::species::index_in(d).is_some()
 }
 
 /// The sha256 of the file @p p, lower-case hex.
