@@ -3602,10 +3602,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          # tools/ whole: check_bundle_notices.sh runs vendor_bundle.py beside it.
           sparse-checkout: |
             CMakeLists.txt
-            tools/check_taxonomy_manifest.py
-            tools/check_bundle_notices.sh
+            tools
             data/taxonomy/manifests
           sparse-checkout-cone-mode: false
       - name: The promoted disk images
