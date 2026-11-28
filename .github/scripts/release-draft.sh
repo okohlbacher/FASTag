@@ -1,52 +1,64 @@
 #!/usr/bin/env bash
-# release-draft.sh <tag>
+# release-draft.sh create|find <tag>
 #
-# The one release of <tag>: the existing one (published or draft), or a new
-# DRAFT. Every job that attaches files calls this first, then uploads with
-# `gh release upload <tag>`; ci.yml's release-complete publishes the draft
-# once this workflow's files are all there and checked, so no half-attached
-# release is ever public.
+# The one release of <tag>, by id (printed on stdout). Every job that writes
+# to a release works on that id (release-upload.sh, gh api .../releases/<id>),
+# never on the tag name, which GitHub resolves to any of several drafts.
 #
-# Race-safe: several jobs (and both workflows) start on the same tag push,
-# and GitHub allows any number of DRAFTS with the same tag name (unlike
-# published releases). So after creating one this lists again, keeps the
-# published release or else the oldest draft, and deletes the other drafts
-# -- which, being newer, nobody has uploaded to: every caller keeps the
-# same, oldest one. A draft to delete that has assets fails the job
-# instead (that is not a race this script made).
+#   create  (ci.yml's job version only: the single creator) the existing
+#           release, or a new DRAFT when there is none;
+#   find    every other writer: waits for it (RELEASE_WAIT seconds, default
+#           0) and never creates one.
 #
-# Prints the kept release's id. Needs GH_TOKEN (contents: write) and GH_REPO
-# or GITHUB_REPOSITORY. RELEASE_DRAFT_ONLY=1 refuses a published release
-# (the promote_to dry run's target must be a draft).
+# Refused, before any mutation:
+#   - more than one release with this tag (GitHub allows several drafts with
+#     one tag name; nothing is deleted -- an ambiguous state stops the run);
+#   - a published release, unless RELEASE_ALLOW_PUBLISHED=1 (an explicit
+#     repair: windows.yml's release_tag upload, or the repository variable
+#     RELEASE_REPAIR naming the tag); a tag run never writes to a release
+#     the public already sees;
+#   - with RELEASE_DRAFT_ONLY=1 (promote_to), anything but a draft.
+#
+# Needs GH_TOKEN (contents: write: drafts are invisible otherwise) and
+# GH_REPO or GITHUB_REPOSITORY.
 set -euo pipefail
-TAG="${1:?tag}"
+MODE="${1:?create|find}"; TAG="${2:?tag}"
+case "$MODE" in create|find) ;; *) echo "::error::release-draft.sh: unknown mode $MODE" >&2; exit 2 ;; esac
 REPO="${GH_REPO:-${GITHUB_REPOSITORY:?GH_REPO or GITHUB_REPOSITORY}}"
+WAIT=${RELEASE_WAIT:-0}
+# id draft assets, one line per release of TAG (the tag compared as a jq
+# argument, never spliced into the program).
 list() {
   gh api "repos/$REPO/releases?per_page=100" --paginate \
-    --jq ".[] | select(.tag_name == \"$TAG\") | \"\(.id) \(.draft) \(.assets | length)\""
+    | jq -r --arg t "$TAG" '.[] | select(.tag_name == $t) | "\(.id) \(.draft) \(.assets | length)"'
 }
-rels=$(list)
-if [ -z "$rels" ]; then
-  gh api -X POST "repos/$REPO/releases" -f tag_name="$TAG" -f name="$TAG" -F draft=true \
-    -f body="Automated binary upload; the release notes follow from CHANGELOG.md (job release-notes)." > /dev/null
-  rels=$(list)
-fi
-[ -n "$rels" ] || { echo "::error::no release of $TAG after creating one" >&2; exit 1; }
-# Keep: the published one, else the lowest id (the oldest draft).
-keep=$(awk '$2 == "false" { print $1; exit }' <<< "$rels")
-[ -n "$keep" ] || keep=$(sort -n <<< "$rels" | head -1 | cut -d' ' -f1)
-while read -r id draft assets; do
-  [ "$id" = "$keep" ] && continue
-  if [ "$draft" = true ] && [ "$assets" = 0 ]; then
-    gh api -X DELETE "repos/$REPO/releases/$id" > /dev/null 2>&1 || true
-    echo "release-draft: removed the duplicate empty draft $id of $TAG (keeping $keep)" >&2
-  else
-    echo "::error::$TAG has another release ($id, draft $draft, $assets assets) besides $keep" >&2
-    exit 1
+check() {  # one acceptable release: its id, rc 0; none: rc 1; refused: rc 3
+  local rels=$1 n
+  n=$(grep -c . <<< "$rels" || true)
+  [ "$n" -le 1 ] || { echo "::error::$TAG has $n releases ($(tr '\n' ' ' <<< "$rels")); resolve by hand -- nothing was changed" >&2; return 3; }
+  [ "$n" = 1 ] || return 1
+  read -r id draft _ <<< "$rels"
+  if [ "$draft" != true ]; then
+    [ "${RELEASE_DRAFT_ONLY:-0}" != 1 ] || { echo "::error::$TAG is a published release; this run may only write to a draft" >&2; return 3; }
+    [ "${RELEASE_ALLOW_PUBLISHED:-0}" = 1 ] || { echo "::error::$TAG is already published; a tag build does not change a public release (repair: repository variable RELEASE_REPAIR=$TAG)" >&2; return 3; }
   fi
-done <<< "$rels"
-if [ "${RELEASE_DRAFT_ONLY:-0}" = 1 ] && awk -v k="$keep" '$1 == k && $2 == "false"' <<< "$rels" | grep -q .; then
-  echo "::error::$TAG is a published release; this run may only write to a draft" >&2
-  exit 1
-fi
-echo "$keep"
+  echo "$id"
+}
+end=$(( $(date +%s) + WAIT ))
+while :; do
+  rels=$(list)
+  rc=0; id=$(check "$rels") || rc=$?
+  [ "$rc" = 0 ] && { echo "$id"; exit 0; }
+  [ "$rc" = 1 ] || exit 1
+  if [ "$MODE" = create ]; then
+    [ "${RELEASE_DRAFT_ONLY:-0}" != 1 ] || { echo "::error::$TAG: no draft to write to (promote_to needs an existing draft)" >&2; exit 1; }
+    gh api -X POST "repos/$REPO/releases" -f tag_name="$TAG" -f name="$TAG" -F draft=true \
+      -f body="Automated binary upload; the release notes follow from CHANGELOG.md (job release-notes)." > /dev/null
+    rels=$(list)
+    rc=0; id=$(check "$rels") || rc=$?
+    [ "$rc" = 0 ] || { [ "$rc" = 1 ] && echo "::error::no release of $TAG after creating one" >&2; exit 1; }
+    echo "$id"; exit 0
+  fi
+  [ "$(date +%s)" -lt "$end" ] || { echo "::error::no release of $TAG after ${WAIT} s (ci.yml's job version creates it)" >&2; exit 1; }
+  sleep "${RELEASE_POLL:-15}"
+done

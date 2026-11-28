@@ -21,6 +21,12 @@ this script checks every byte).
   rc-manifest.py release M ASSETS.json [--group G]
         the release's assets (gh api .../releases/<id> .assets) carry the
         manifest's sha256 digest for each file of the group
+  rc-manifest.py inventory ASSETS.json EXPECT.json... [--unexpected-out F]
+        the release holds EXACTLY the files of the EXPECT documents (any
+        JSON with a "files" list of name, size, sha256: a manifest, a part,
+        windows.yml's release gates): nothing missing, every digest and size
+        as expected, nothing else (the ids of other assets go to F, one per
+        line, for the caller to remove from the draft)
 Exit 0 on success; any mismatch prints the reason and exits 1.
 """
 import argparse
@@ -172,6 +178,42 @@ def cmd_release(a):
     sys.exit(bad)
 
 
+def cmd_inventory(a):
+    with open(a.assets) as f:
+        assets = json.load(f)
+    if isinstance(assets, dict):
+        assets = assets.get("assets", [])
+    want = {}
+    for e in a.expect:
+        with open(e) as f:
+            doc = json.load(f)
+        for x in doc.get("files", []):
+            if x["name"] in want and want[x["name"]]["sha256"] != x["sha256"]:
+                die("%s is expected twice with different digests" % x["name"])
+            want[x["name"]] = x
+    if not want:
+        die("nothing expected")
+    have = {x["name"]: x for x in assets}
+    bad = 0
+    for n, x in sorted(want.items()):
+        r = have.get(n)
+        d = ((r or {}).get("digest") or "").replace("sha256:", "")
+        if r is None:
+            print("MISSING     %s" % n); bad = 1
+        elif d != x["sha256"] or int(r.get("size", -1)) != int(x["size"]):
+            print("DIFFERS     %s (release %s, %s bytes; expected %s, %s bytes)" % (n, d or "no digest", r.get("size"), x["sha256"], x["size"])); bad = 1
+        else:
+            print("ok          %s  %s" % (d, n))
+    extra = [r for n, r in sorted(have.items()) if n not in want]
+    for r in extra:
+        print("UNEXPECTED  %s (asset %s)" % (r["name"], r.get("id")))
+    if a.unexpected_out:
+        with open(a.unexpected_out, "w") as f:
+            f.write("".join("%s\n" % r.get("id") for r in extra))
+    print("inventory: %d expected, %d on the release, %d unexpected" % (len(want), len(have), len(extra)))
+    sys.exit(1 if bad or extra else 0)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
@@ -186,9 +228,11 @@ def main():
     p = sp.add_parser("check"); p.add_argument("manifest"); p.add_argument("--dir", required=True)
     p.add_argument("--out", required=True); p.add_argument("--group")
     p = sp.add_parser("release"); p.add_argument("manifest"); p.add_argument("assets"); p.add_argument("--group")
+    p = sp.add_parser("inventory"); p.add_argument("assets"); p.add_argument("expect", nargs="+")
+    p.add_argument("--unexpected-out")
     a = ap.parse_args()
     {"part": cmd_part, "merge": cmd_merge, "verify": cmd_verify, "list": cmd_list,
-     "check": cmd_check, "release": cmd_release}[a.cmd](a)
+     "check": cmd_check, "release": cmd_release, "inventory": cmd_inventory}[a.cmd](a)
 
 
 if __name__ == "__main__":

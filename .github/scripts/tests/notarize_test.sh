@@ -14,12 +14,15 @@ cat > "$W/bin/xcrun" <<'EOF'
 tool=$1; sub=$2
 key="$tool-$sub"; [ "$tool" = stapler ] && key="stapler-$sub"
 echo "$key" >> "$CASE/calls"
+[ "${HANG:-}" = "$key" ] && sleep 60
 n=$(grep -c "^$key\$" "$CASE/calls")
 f="$CASE/$key"
 [ -f "$f" ] || { echo "no answer for $key" >&2; exit 9; }
 line=$(sed -n "${n}p" "$f"); [ -n "$line" ] || line=$(tail -1 "$f")
-rc=${line%%|*}; out=${line#*|}
+rc=${line%%|*}; rest=${line#*|}
+out=${rest%%||*}; err=""; [ "$rest" != "$out" ] && err=${rest#*||}
 echo "$out"
+[ -n "$err" ] && echo "$err" >&2
 exit "$rc"
 EOF
 chmod +x "$W/bin/xcrun"
@@ -91,6 +94,20 @@ SPLIT="submit" run_case "submit alone uploads and stops" 0 notarytool-submit=1 n
 SPLIT="wait" KEEP=1 run_case "wait alone uses the kept ID" 0 notarytool-submit=0 notarytool-wait=1 stapler-staple=1
 new_case wait-without-submit
 SPLIT="wait" run_case "wait without a submit fails" 1 notarytool-submit=0 notarytool-wait=0
+
+# a warning on stderr beside valid JSON on stdout: no second upload
+new_case stderr-warning
+echo '0|{"id":"S8","message":"ok"}||Warning: notarytool is deprecated' > "$CASE/notarytool-submit"
+echo '0|{"id":"S8","status":"Accepted"}||Warning: slow network' > "$CASE/notarytool-wait"
+echo '0|stapled' > "$CASE/stapler-staple"; echo '0|valid' > "$CASE/stapler-validate"
+run_case "stderr warnings do not spoil the JSON" 0 notarytool-submit=1 notarytool-wait=1
+
+# a hanging wait is cut at the deadline (NOTARY_DEADLINE=5), and stapling
+# an accepted submission is not cut short
+new_case hang
+echo '0|{"id":"S9","message":"ok"}' > "$CASE/notarytool-submit"
+echo '0|{"id":"S9","status":"In Progress"}' > "$CASE/notarytool-wait"
+HANG=notarytool-wait run_case "a hanging wait ends at the deadline" 1 notarytool-submit=1 stapler-staple=0
 
 echo "notarize_test: $pass passed, $fail failed"
 [ "$fail" = 0 ]
