@@ -91,6 +91,9 @@ d=$("$PY" -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").r
 echo "{\"assets\": [{\"name\": \"FASTag-1.2.3-gui-macos-arm64.dmg\", \"size\": 4, \"digest\": \"sha256:$d\"}]}" > "$M/assets.json"
 "$PY" "$S/rc-manifest.py" release "$M/m.json" "$M/assets.json" --group macos > /dev/null \
   && ok "rc-manifest: release digests match" || bad "rc-manifest: release digests match"
+echo "{\"assets\": [{\"name\": \"FASTag-1.2.3-gui-macos-arm64.dmg\", \"size\": 4, \"digest\": \"sha256:$d\"}]}" > "$M/assets.json"
+"$PY" "$S/rc-manifest.py" release "$M/p2.json" "$M/assets.json" > /dev/null \
+  && ok "rc-manifest: release digests against a part (not a manifest)" || bad "rc-manifest: release digests against a part"
 echo '{"assets": [{"name": "FASTag-1.2.3-gui-macos-arm64.dmg", "size": 4, "digest": "sha256:00"}]}' > "$M/assets.json"
 "$PY" "$S/rc-manifest.py" release "$M/m.json" "$M/assets.json" --group macos > /dev/null \
   && bad "rc-manifest: another release digest is refused" || ok "rc-manifest: another release digest is refused"

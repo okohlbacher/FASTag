@@ -3161,7 +3161,9 @@ jobs:
             echo "::warning::no AppImage on this release (not built, or it did not launch on both Ubuntu releases)"
           fi
           find up -type f -exec basename {} \; | tools/release_assets.sh check "$V"
-          bash tools/check_no_appledouble.sh up/*
+          # The AppImage was checked in its own job, on its own architecture
+          # (the check extracts it by running it).
+          find up -type f ! -name '*.AppImage' -exec bash tools/check_no_appledouble.sh {} +
           bash .github/scripts/release-upload.sh "$ID" up/*
           names=(); for f in up/*; do names+=("$(basename "$f")=$f"); done
           python3 .github/scripts/rc-manifest.py part --job gui-linux-release --group linux-x64 --artifact release \
@@ -3233,7 +3235,9 @@ jobs:
             echo "::warning::no AppImage on this release (not built, or it did not launch on both Ubuntu releases)"
           fi
           find up -type f -exec basename {} \; | tools/release_assets.sh check "$V"
-          bash tools/check_no_appledouble.sh up/*
+          # The AppImage was checked in its own job, on its own architecture
+          # (the check extracts it by running it).
+          find up -type f ! -name '*.AppImage' -exec bash tools/check_no_appledouble.sh {} +
           bash .github/scripts/release-upload.sh "$ID" up/*
           names=(); for f in up/*; do names+=("$(basename "$f")=$f"); done
           python3 .github/scripts/rc-manifest.py part --job gui-linux-arm64-release --group linux-arm64 --artifact release \

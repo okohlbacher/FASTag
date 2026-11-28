@@ -20,7 +20,7 @@ this script checks every byte).
         D/<artifact>/<path> must have the manifest's sha256; copied to O/<name>
   rc-manifest.py release M ASSETS.json [--group G]
         the release's assets (gh api .../releases/<id> .assets) carry the
-        manifest's sha256 digest for each file of the group
+        sha256 digest of each file of M (a manifest or a part) in the group
   rc-manifest.py inventory ASSETS.json EXPECT.json... [--unexpected-out F]
         the release holds EXACTLY the files of the EXPECT documents (any
         JSON with a "files" list of name, size, sha256: a manifest, a part,
@@ -158,8 +158,20 @@ def cmd_check(a):
         print("%s  %s: as in the candidate" % (got, x["name"]))
 
 
+def load_files(path):
+    """any JSON with a "files" list (a manifest, a part, release gates)"""
+    try:
+        with open(path) as f:
+            m = json.load(f)
+    except (OSError, ValueError) as e:
+        die("cannot read %s: %s" % (path, e))
+    if not isinstance(m, dict) or not isinstance(m.get("files"), list):
+        die("%s has no files list" % path)
+    return m
+
+
 def cmd_release(a):
-    m = load(a.manifest)
+    m = load_files(a.manifest)
     with open(a.assets) as f:
         assets = json.load(f)
     if isinstance(assets, dict):
