@@ -163,6 +163,8 @@ env:
   # those files instead of building them again (job version, promote).
   RC_CANDIDATE: ${{ inputs.gui_dry_run && inputs.gui_full_payload && 'true' || 'false' }}
 
+  OPENMS_DEPS_RELEASE: ci-deps-test-20261128  # EXPERIMENT ONLY
+
 jobs:
   # ------------------------------------------------------ release version
   # The ONE place this workflow decides the version the release files carry
@@ -365,7 +367,7 @@ jobs:
     # Read-only: the build jobs make artifacts; the uploader jobs
     # (gui-linux-release, gui-linux-arm64-release, macos-release) attach them.
     permissions:
-      contents: read
+      contents: write
     # A ceiling, not an estimate. Linux finishes in minutes once OpenMS is
     # cached; this exists so a job that hangs dies rather than holding a
     # concurrency group. It does NOT cover a job stuck waiting for a runner --
@@ -552,7 +554,7 @@ jobs:
       # later miss downloads it instead of building (job deps-openms uploads).
       - name: Stage the OpenMS install for the deps release (main and tag pushes)
         id: openms-stage
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        if: github.event_name == 'workflow_dispatch'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -2020,7 +2022,7 @@ jobs:
       ASSET_VERSION: ${{ needs.version.outputs.version }}
       FASTAG_BUILD_TARGET: FASTag
     permissions:
-      contents: read
+      contents: write
     timeout-minutes: 330
     strategy:
       fail-fast: false
@@ -2041,7 +2043,7 @@ jobs:
       ASSET_VERSION: ${{ needs.version.outputs.version }}
       FASTAG_BUILD_TARGET: FASTag
     permissions:
-      contents: read
+      contents: write
     timeout-minutes: 330
     strategy:
       fail-fast: false
@@ -2063,7 +2065,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     needs: [version]
     permissions:
-      contents: read
+      contents: write
       # read: the Test step's reuse lookup on a v* tag (.github/scripts/tested-tree.sh)
       # lists this workflow's earlier runs and their jobs.
       actions: read
@@ -2162,7 +2164,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     needs: [version]
     permissions:
-      contents: read
+      contents: write
       actions: read
     timeout-minutes: 330
     strategy:
@@ -2921,7 +2923,7 @@ jobs:
       matrix:
         os: [ubuntu-22.04, ubuntu-24.04]
     permissions:
-      contents: read
+      contents: write
       actions: read
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -3096,7 +3098,7 @@ jobs:
       matrix:
         os: [ubuntu-22.04-arm, ubuntu-24.04-arm]
     permissions:
-      contents: read
+      contents: write
       actions: read
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -3554,7 +3556,7 @@ jobs:
   # never Latest, at this commit; existing assets are never replaced). Only
   # main and v* tag pushes: no pull request or dispatch ever writes it.
   deps-openms:
-    if: ${{ !cancelled() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
     needs: [build-linux-x64, build-linux-arm64, build-macos]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -3771,7 +3773,7 @@ jobs:
             gui, gui-windows, tauri-driver]
     runs-on: ubuntu-24.04
     permissions:
-      contents: read
+      contents: write
       actions: read
     env:
       V: ${{ needs.version.outputs.version }}
@@ -3951,7 +3953,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     permissions:
-      contents: read
+      contents: write
       actions: read
     env:
       GUI_ARCH: ${{ matrix.arch }}
@@ -3972,7 +3974,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     permissions:
-      contents: read
+      contents: write
       actions: read
     env:
       V: ${{ needs.version.outputs.version }}

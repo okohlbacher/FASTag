@@ -131,6 +131,8 @@ env:
   # installer and zip a v* tag of the same tree attaches instead of building
   # them again (job version, promote-assets).
   RC_CANDIDATE: ${{ inputs.gui_dry_run && inputs.gui_full_payload && 'true' || 'false' }}
+  OPENMS_DEPS_RELEASE: ci-deps-test-20261128  # EXPERIMENT ONLY
+
 jobs:
   # ------------------------------------------------------ release version
   # The ONE place this workflow decides the version the release files carry
@@ -295,7 +297,7 @@ jobs:
     # read only: job release-assets attaches the assets, after job
     # installed-app checked them.
     permissions:
-      contents: read
+      contents: write
       # read: SignPath fetches the unsigned artifacts through the run's token
       actions: read
     outputs:
@@ -515,7 +517,7 @@ jobs:
       # later miss downloads it instead of building (job deps-openms uploads).
       - name: Stage the OpenMS install for the deps release (main and tag pushes)
         id: openms-stage
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        if: github.event_name == 'workflow_dispatch'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1630,7 +1632,7 @@ jobs:
     runs-on: windows-2022
     needs: [version]
     permissions:
-      contents: read
+      contents: write
       # read: the Test step's reuse lookup on a v* tag (fastag/.github/scripts/tested-tree.sh)
       # lists this workflow's earlier runs and their jobs.
       actions: read
@@ -2026,7 +2028,7 @@ jobs:
   # never Latest, at this commit; existing assets are never replaced). Only
   # main and v* tag pushes: no pull request or dispatch ever writes it.
   deps-openms:
-    if: ${{ !cancelled() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
     needs: [windows-x64]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -2160,7 +2162,7 @@ jobs:
     needs: [version, windows-x64, windows-x64-test, installed-app, installed-app-scopes]
     runs-on: ubuntu-24.04
     permissions:
-      contents: read
+      contents: write
       actions: read
     env:
       V: ${{ needs.version.outputs.version }}
@@ -2288,7 +2290,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     permissions:
-      contents: read
+      contents: write
       actions: read
     env:
       V: ${{ needs.version.outputs.version }}
