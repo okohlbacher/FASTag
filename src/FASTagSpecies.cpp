@@ -30,7 +30,10 @@ std::optional<TOPPFASTag::ExitCodes> TOPPFASTag::detectSpecies_(bool want_specie
     const bool any_explicit = !taxdb.empty() || !nodes.empty() || !names.empty();
     if (!any_explicit && !tdir.empty())
     {
-      taxdb = tdir + "/tax_k7.taxdb";
+      // tax_k7.taxdb (mapped) or, failing that, its packed form tax_k7.ftz
+      // (decoded at load), which the installers ship.
+      taxdb = FASTag::TaxIndex::findInDir(tdir);
+      if (taxdb.empty()) taxdb = tdir + "/" + FASTag::TaxIndex::BUNDLED_NAME;
       nodes = tdir + "/nodes.dmp";
       names = tdir + "/names.dmp";
     }
@@ -59,7 +62,7 @@ std::optional<TOPPFASTag::ExitCodes> TOPPFASTag::detectSpecies_(bool want_specie
           // separate asset). Missing index is the common case, so name it:
           // the release asset of this version, FASTag-<version>-taxonomy-k7.tar.gz.
           OPENMS_LOG_ERROR << "The taxonomy dumps are present in '" << tdir
-                           << "' but the k-mer index (tax_k7.taxdb) is not. Download "
+                           << "' but the k-mer index (tax_k7.taxdb, or tax_k7.ftz) is not. Download "
                            << "FASTag-" FASTAG_VERSION "-taxonomy-k7.tar.gz from the release and extract it "
                            << "there, or set FASTAG_TAXONOMY_DIR / pass -taxdb." << std::endl;
         }

@@ -4,12 +4,18 @@
 // $Authors: Oliver Kohlbacher $
 
 #include "TaxIndex.h"
+#include "Sha256.h"
+
+#include <zstd.h>
 
 #include <algorithm>
 #include <array>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
+#include <new>
+#include <thread>
 
 #ifdef _WIN32
 #  include <windows.h>
@@ -122,6 +128,7 @@ namespace FASTag
       map_base_ = nullptr;
       map_len_ = 0;
     }
+    image_ = nullptr; image_len_ = 0; heap_.reset(); packed_sha256_.clear();
     keys_ = nullptr; post_ = nullptr; offsets_ = nullptr; taxa_ = nullptr; taxpost_ = nullptr;
     n_kmers_ = 0; n_taxa_ = 0; key_bytes_ = 0; tax_bytes_ = 0; k_ = 0;
     index_.clear(); postings_.clear(); legacy_ = false;
@@ -468,9 +475,9 @@ namespace FASTag
       return true;
     }
 
+    if (std::memcmp(magic, "FTZ1", 4) == 0) return loadPacked_(path, err);
     if (std::memcmp(magic, "FTX2", 4) != 0)
     { if (err) *err = "not a FASTag taxonomy index"; return false; }
-
     // ---- v2: map it and point into the image -------------------------------
 #ifdef _WIN32
     HANDLE fh = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
@@ -500,8 +507,15 @@ namespace FASTag
 #endif
     map_base_ = base;
 
-    if (map_len_ < 40) { reset_(); if (err) *err = "index is truncated"; return false; }
-    const uint8_t* p = static_cast<const uint8_t*>(base);
+    image_ = static_cast<const uint8_t*>(base);
+    image_len_ = map_len_;
+    return bindImage_(err);
+  }
+
+  bool TaxIndex::bindImage_(std::string* err)
+  {
+    if (image_len_ < 40) { reset_(); if (err) *err = "index is truncated"; return false; }
+    const uint8_t* p = image_;
     auto u32at = [p](size_t o) { uint32_t v; std::memcpy(&v, p + o, 4); return v; };
     auto u64at = [p](size_t o) { uint64_t v; std::memcpy(&v, p + o, 8); return v; };
 
@@ -531,8 +545,8 @@ namespace FASTag
     // `size` bytes fits iff count <= avail/size.
     size_t off = 40;
     auto fits = [&](uint64_t count, size_t size) -> bool {
-      if (off > map_len_) return false;
-      const size_t avail = map_len_ - off;
+      if (off > image_len_) return false;
+      const size_t avail = image_len_ - off;
       return size == 0 || count <= avail / size;
     };
     auto bump = [&](uint64_t count, size_t size) { off = align8(off + static_cast<size_t>(count) * size); };
@@ -562,6 +576,412 @@ namespace FASTag
       { reset_(); if (err) *err = "index offsets are not monotonic"; return false; }
 
     legacy_ = false;
+    return true;
+  }
+
+  // --- Packed form ("FTZ1") ---------------------------------------------------
+  //
+  // Little-endian. Bytes 0..39 mirror the v2 header field for field (only the
+  // magic and the version differ), so a header peek reads k at offset 8 from
+  // either:
+  //
+  //   0  magic "FTZ1" | 4 u32 version=1 | 8 u32 k | 12 u32 n_taxa
+  //   16 u64 n_kmers  | 24 u64 n_postings | 32 u8 key_bytes | 33 u8 tax_bytes
+  //   34 u8 reserved[6]
+  //   40 u64 image_bytes                 the length of the v2 image it decodes to
+  //   48 u64 head_bytes                  the image's header + taxa + taxon_postings, padded
+  //   56 u8  image_sha256[32]            of the decoded image (buildtaxdb --verify)
+  //   88 u32 n_sections=4 | 92 u32 zstd level (informational)
+  //   96 {u64 compressed, u64 raw}[4]
+  //   160 the sections, each one zstd frame with a content checksum:
+  //       0 head      the image's first head_bytes bytes, verbatim
+  //       1 keys      key deltas (the first from 0), escape-coded at key_bytes
+  //       2 sizes     postings per k-mer (offset deltas), escape-coded at 4 bytes
+  //       3 postings  verbatim
+  //
+  // Escape code: a value below 255 is one byte; any other is 0xFF followed by
+  // the value in the stated width. 99.9% of the k=7 deltas and every set size
+  // take one byte, and zstd's entropy stage does the rest.
+  namespace
+  {
+    constexpr size_t FTZ_HEADER = 160;
+    constexpr int FTZ_SECTIONS = 4;
+    constexpr size_t ESC_CHUNK = size_t(1) << 20;
+
+    /// The v2 image's section offsets for the given header counts, or false
+    /// when they cannot describe an image (sizes that overflow, or a postings
+    /// count the 32-bit offsets cannot address).
+    struct Layout { size_t head = 0, keys = 0, offs = 0, post = 0, end = 0; };
+    bool layoutOf(uint32_t n_taxa, uint64_t n_kmers, uint64_t n_post, int kb, int tb, Layout& L)
+    {
+      if (n_kmers == 0 || n_kmers > 0xFFFFFFFFull || n_post > 0xFFFFFFFFull) return false;
+      if (kb < 1 || kb > 8 || tb < 1 || tb > 4) return false;
+      L.head = align8(align8(40 + size_t(4) * n_taxa) + size_t(8) * n_taxa);
+      L.keys = L.head;
+      L.offs = align8(L.keys + size_t(n_kmers) * size_t(kb));
+      L.post = align8(L.offs + size_t(4) * (size_t(n_kmers) + 1));
+      L.end = L.post + size_t(n_post) * size_t(tb);
+      return true;
+    }
+
+    inline void putEsc(std::string& out, uint64_t v, int width)
+    {
+      if (v < 255) { out.push_back(static_cast<char>(v)); return; }
+      out.push_back(static_cast<char>(0xFF));
+      for (int i = 0; i < width; ++i) { out.push_back(static_cast<char>(v & 0xFF)); v >>= 8; }
+    }
+
+    /// A read-only mapping of a whole file, released on destruction. The
+    /// compressed sections are read through it rather than copied to the heap:
+    /// clean file-backed pages, not another 200 MB of anonymous memory.
+    struct ReadMap
+    {
+      const uint8_t* p = nullptr;
+      size_t n = 0;
+#ifdef _WIN32
+      HANDLE fh = INVALID_HANDLE_VALUE, mh = nullptr;
+#else
+      int fd = -1;
+#endif
+      ReadMap() = default;
+      ReadMap(const ReadMap&) = delete;
+      ReadMap& operator=(const ReadMap&) = delete;
+      ~ReadMap()
+      {
+#ifdef _WIN32
+        if (p != nullptr) UnmapViewOfFile(p);
+        if (mh != nullptr) CloseHandle(mh);
+        if (fh != INVALID_HANDLE_VALUE) CloseHandle(fh);
+#else
+        if (p != nullptr) munmap(const_cast<uint8_t*>(p), n);
+        if (fd >= 0) ::close(fd);
+#endif
+      }
+      bool open(const std::string& path)
+      {
+#ifdef _WIN32
+        fh = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (fh == INVALID_HANDLE_VALUE) return false;
+        LARGE_INTEGER sz;
+        if (GetFileSizeEx(fh, &sz) == 0 || sz.QuadPart <= 0) return false;
+        mh = CreateFileMappingA(fh, nullptr, PAGE_READONLY, 0, 0, nullptr);
+        if (mh == nullptr) return false;
+        void* b = MapViewOfFile(mh, FILE_MAP_READ, 0, 0, 0);
+        if (b == nullptr) return false;
+        p = static_cast<const uint8_t*>(b);
+        n = static_cast<size_t>(sz.QuadPart);
+#else
+        fd = ::open(path.c_str(), O_RDONLY);
+        if (fd < 0) return false;
+        struct stat st;
+        if (fstat(fd, &st) != 0 || st.st_size <= 0) return false;
+        void* b = mmap(nullptr, static_cast<size_t>(st.st_size), PROT_READ, MAP_PRIVATE, fd, 0);
+        if (b == MAP_FAILED) return false;
+        p = static_cast<const uint8_t*>(b);
+        n = static_cast<size_t>(st.st_size);
+#endif
+        return true;
+      }
+    };
+
+    struct DCtxFree { void operator()(ZSTD_DCtx* d) const { ZSTD_freeDCtx(d); } };
+    struct CCtxFree { void operator()(ZSTD_CCtx* c) const { ZSTD_freeCCtx(c); } };
+
+    /// Decompresses the single zstd frame [src, src+n) of @p raw bytes and
+    /// hands each of its @p count escape-coded values to @p f, in order,
+    /// streaming through a 1 MB buffer. @p f returns false to stop (a value
+    /// out of range). False with @p err on a corrupt, short or long stream.
+    template <class F>
+    bool decodeEsc(const uint8_t* src, size_t n, uint64_t raw, int width, uint64_t count, F&& f, std::string& err)
+    {
+      std::unique_ptr<ZSTD_DCtx, DCtxFree> d(ZSTD_createDCtx());
+      if (!d) { err = "out of memory"; return false; }
+      std::vector<uint8_t> buf(ESC_CHUNK + 16);
+      size_t have = 0;
+      uint64_t produced = 0, got = 0;
+      ZSTD_inBuffer in{src, n, 0};
+      for (;;)
+      {
+        ZSTD_outBuffer out{buf.data() + have, buf.size() - have, 0};
+        const size_t ret = ZSTD_decompressStream(d.get(), &out, &in);
+        if (ZSTD_isError(ret)) { err = ZSTD_getErrorName(ret); return false; }
+        have += out.pos;
+        produced += out.pos;
+        size_t i = 0;
+        while (i < have)
+        {
+          uint64_t v = buf[i];
+          size_t step = 1;
+          if (v == 0xFF)
+          {
+            if (have - i < size_t(1) + size_t(width)) break;   // the rest comes with the next chunk
+            v = rdKey(buf.data() + i + 1, width);
+            step += size_t(width);
+          }
+          if (got == count) { err = "more values than the header says"; return false; }
+          if (!f(v)) { err = "value out of range"; return false; }
+          ++got;
+          i += step;
+        }
+        std::memmove(buf.data(), buf.data() + i, have - i);
+        have -= i;
+        if (ret == 0) break;                                   // frame decoded and flushed
+        if (in.pos == in.size && out.pos == 0) { err = "truncated"; return false; }
+      }
+      if (have != 0 || in.pos != in.size) { err = "trailing bytes"; return false; }
+      if (got != count || produced != raw) { err = "fewer values than the header says"; return false; }
+      return true;
+    }
+
+    /// One-shot decompression of a frame of exactly @p raw bytes into @p dst.
+    bool decodeRaw(const uint8_t* src, size_t n, uint8_t* dst, uint64_t raw, std::string& err)
+    {
+      const unsigned long long fcs = ZSTD_getFrameContentSize(src, n);
+      if (fcs != raw) { err = "frame size does not match the header"; return false; }
+      const size_t got = ZSTD_decompress(dst, static_cast<size_t>(raw), src, n);
+      if (ZSTD_isError(got)) { err = ZSTD_getErrorName(got); return false; }
+      if (got != raw) { err = "short frame"; return false; }
+      return true;
+    }
+
+    std::string toHex(const uint8_t* d, size_t n)
+    {
+      static const char* hx = "0123456789abcdef";
+      std::string s(2 * n, '0');
+      for (size_t i = 0; i < n; ++i) { s[2 * i] = hx[d[i] >> 4]; s[2 * i + 1] = hx[d[i] & 15]; }
+      return s;
+    }
+    bool fromHex(const std::string& s, uint8_t* d, size_t n)
+    {
+      if (s.size() != 2 * n) return false;
+      auto nib = [](char c) -> int {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        return -1;
+      };
+      for (size_t i = 0; i < n; ++i)
+      {
+        const int a = nib(s[2 * i]), b = nib(s[2 * i + 1]);
+        if (a < 0 || b < 0) return false;
+        d[i] = static_cast<uint8_t>(a * 16 + b);
+      }
+      return true;
+    }
+  }
+
+  std::string TaxIndex::findInDir(const std::string& dir)
+  {
+    for (const char* name : {BUNDLED_NAME, BUNDLED_PACKED_NAME})
+    {
+      const std::filesystem::path p = std::filesystem::path(dir) / name;
+      std::error_code ec;
+      if (std::filesystem::is_regular_file(p, ec) && std::filesystem::file_size(p, ec) > 0 && !ec)
+        return dir + "/" + name;
+    }
+    return std::string();
+  }
+
+  bool TaxIndex::saveImage(const std::string& path, std::string* err) const
+  {
+    if (image_ == nullptr || image_len_ == 0)
+    { if (err) *err = "no v2 image to write (save() an in-memory index instead)"; return false; }
+    std::ofstream o(path, std::ios::binary);
+    if (!o) { if (err) *err = "cannot open " + path + " for writing"; return false; }
+    o.write(reinterpret_cast<const char*>(image_), static_cast<std::streamsize>(image_len_));
+    o.flush();
+    if (!o) { if (err) *err = "write failed: " + path; return false; }
+    return true;
+  }
+
+  bool TaxIndex::savePacked(const std::string& path, int level, std::string* err) const
+  {
+    if (legacy_ || image_ == nullptr || keys_ == nullptr)
+    { if (err) *err = "only a loaded v2 index can be packed (save() it, then load() it)"; return false; }
+    if (level < 1 || level > ZSTD_maxCLevel())
+    { if (err) *err = "zstd level out of range"; return false; }
+    const uint64_t n_post = offsets_[n_kmers_];
+    Layout L;
+    if (!layoutOf(n_taxa_, n_kmers_, n_post, key_bytes_, tax_bytes_, L) || L.end != image_len_)
+    { if (err) *err = "the image is not in the canonical v2 layout (save() it again)"; return false; }
+    // The decoder writes zeros into the alignment gaps, so they must be zeros
+    // here, or the round trip would not be byte for byte.
+    auto zeros = [this](size_t a, size_t b) {
+      for (size_t i = a; i < b; ++i) if (image_[i] != 0) return false;
+      return true;
+    };
+    if (!zeros(L.keys + size_t(n_kmers_) * size_t(key_bytes_), L.offs)
+        || !zeros(L.offs + size_t(4) * (size_t(n_kmers_) + 1), L.post))
+    { if (err) *err = "the image has non-zero padding (save() it again)"; return false; }
+
+    // The four section inputs.
+    std::string keys_esc, sizes_esc;
+    keys_esc.reserve(static_cast<size_t>(n_kmers_) + 1024);
+    sizes_esc.reserve(static_cast<size_t>(n_kmers_) + 1024);
+    uint64_t prev = 0;
+    for (uint64_t i = 0; i < n_kmers_; ++i)
+    {
+      const uint64_t key = rdKey(keys_ + i * static_cast<size_t>(key_bytes_), key_bytes_);
+      putEsc(keys_esc, key - prev, key_bytes_);   // keys ascend: never negative
+      prev = key;
+      putEsc(sizes_esc, uint64_t(offsets_[i + 1]) - offsets_[i], 4);
+    }
+    struct Sec { const void* src; size_t n; std::string out; std::string err; };
+    Sec sec[FTZ_SECTIONS] = {
+      {image_, L.head, {}, {}},
+      {keys_esc.data(), keys_esc.size(), {}, {}},
+      {sizes_esc.data(), sizes_esc.size(), {}, {}},
+      {image_ + L.post, image_len_ - L.post, {}, {}},
+    };
+    // One thread per section, each compressing single-threaded: the output is
+    // a function of the input and the level only (no worker-count dependence).
+    auto compress = [level](Sec& s) {
+      std::unique_ptr<ZSTD_CCtx, CCtxFree> c(ZSTD_createCCtx());
+      if (!c) { s.err = "out of memory"; return; }
+      ZSTD_CCtx_setParameter(c.get(), ZSTD_c_compressionLevel, level);
+      ZSTD_CCtx_setParameter(c.get(), ZSTD_c_checksumFlag, 1);
+      ZSTD_CCtx_setParameter(c.get(), ZSTD_c_contentSizeFlag, 1);
+      s.out.resize(ZSTD_compressBound(s.n));
+      const size_t r = ZSTD_compress2(c.get(), &s.out[0], s.out.size(), s.src, s.n);
+      if (ZSTD_isError(r)) { s.err = ZSTD_getErrorName(r); return; }
+      s.out.resize(r);
+    };
+    {
+      std::vector<std::thread> th;
+      for (int i = 1; i < FTZ_SECTIONS; ++i) th.emplace_back(compress, std::ref(sec[i]));
+      compress(sec[0]);
+      for (auto& t : th) t.join();
+    }
+    for (const Sec& s : sec)
+      if (!s.err.empty()) { if (err) *err = "zstd: " + s.err; return false; }
+
+    Sha256 h;
+    h.update(image_, image_len_);
+    uint8_t digest[32];
+    if (!fromHex(h.hexDigest(), digest, 32)) { if (err) *err = "sha256 failed"; return false; }
+
+    std::string hdr(FTZ_HEADER, '\0');
+    std::memcpy(&hdr[0], image_, 40);           // the v2 header fields, as they are
+    std::memcpy(&hdr[0], "FTZ1", 4);
+    const uint32_t ver = 1;
+    std::memcpy(&hdr[4], &ver, 4);
+    const uint64_t ib = image_len_, hb = L.head;
+    std::memcpy(&hdr[40], &ib, 8);
+    std::memcpy(&hdr[48], &hb, 8);
+    std::memcpy(&hdr[56], digest, 32);
+    const uint32_t ns = FTZ_SECTIONS, lv = static_cast<uint32_t>(level);
+    std::memcpy(&hdr[88], &ns, 4);
+    std::memcpy(&hdr[92], &lv, 4);
+    for (int i = 0; i < FTZ_SECTIONS; ++i)
+    {
+      const uint64_t c = sec[i].out.size(), r = sec[i].n;
+      std::memcpy(&hdr[96 + 16 * i], &c, 8);
+      std::memcpy(&hdr[96 + 16 * i + 8], &r, 8);
+    }
+    std::ofstream o(path, std::ios::binary);
+    if (!o) { if (err) *err = "cannot open " + path + " for writing"; return false; }
+    o.write(hdr.data(), static_cast<std::streamsize>(hdr.size()));
+    for (const Sec& s : sec) o.write(s.out.data(), static_cast<std::streamsize>(s.out.size()));
+    o.flush();
+    if (!o) { if (err) *err = "write failed: " + path; return false; }
+    return true;
+  }
+
+  bool TaxIndex::loadPacked_(const std::string& path, std::string* err)
+  {
+    auto fail = [&](const std::string& why) { reset_(); if (err) *err = why; return false; };
+    ReadMap m;
+    if (!m.open(path)) return fail("cannot open " + path);
+    const uint64_t flen = m.n;
+    if (flen < FTZ_HEADER) return fail("packed index is truncated (header)");
+    const uint8_t* h = m.p;
+    auto u32at = [h](size_t o) { uint32_t v; std::memcpy(&v, h + o, 4); return v; };
+    auto u64at = [h](size_t o) { uint64_t v; std::memcpy(&v, h + o, 8); return v; };
+    if (std::memcmp(h, "FTZ1", 4) != 0) return fail("not a FASTag taxonomy index");
+    if (u32at(4) != 1) return fail("unsupported packed index version");
+    if (u32at(88) != FTZ_SECTIONS) return fail("packed index header is malformed (sections)");
+
+    const uint32_t n_taxa = u32at(12);
+    const uint64_t n_kmers = u64at(16), n_post = u64at(24);
+    const int kb = h[32], tb = h[33];
+    const int k = static_cast<int>(u32at(8));
+    Layout L;
+    if (k < 1 || k > MAX_K || kb != keyBytes(k) || n_taxa == 0
+        || !layoutOf(n_taxa, n_kmers, n_post, kb, tb, L)
+        || u64at(40) != L.end || u64at(48) != L.head)
+      return fail("packed index header is malformed");
+
+    uint64_t comp[FTZ_SECTIONS], raw[FTZ_SECTIONS];
+    uint64_t total = FTZ_HEADER;
+    for (int i = 0; i < FTZ_SECTIONS; ++i)
+    {
+      comp[i] = u64at(96 + 16 * i);
+      raw[i] = u64at(96 + 16 * i + 8);
+      if (comp[i] > flen) return fail("packed index header is malformed (section size)");
+      total += comp[i];
+    }
+    if (total != flen) return fail("packed index is truncated or has trailing bytes");
+    if (raw[0] != L.head || raw[3] != L.end - L.post) return fail("packed index header is malformed (section size)");
+
+    const uint8_t* src[FTZ_SECTIONS];
+    {
+      size_t o = FTZ_HEADER;
+      for (int i = 0; i < FTZ_SECTIONS; ++i) { src[i] = m.p + o; o += static_cast<size_t>(comp[i]); }
+    }
+
+    // The image, 8-byte aligned like a mapping. Only the alignment gaps need
+    // zeroing; every other byte is written by a section below.
+    heap_.reset(new (std::nothrow) uint64_t[(L.end + 7) / 8]);
+    if (!heap_) return fail("out of memory for the index image");
+    uint8_t* img = reinterpret_cast<uint8_t*>(heap_.get());
+    std::memset(img + L.keys + size_t(n_kmers) * size_t(kb), 0, L.offs - (L.keys + size_t(n_kmers) * size_t(kb)));
+    std::memset(img + L.offs + size_t(4) * (size_t(n_kmers) + 1), 0, L.post - (L.offs + size_t(4) * (size_t(n_kmers) + 1)));
+    std::memset(img + L.end, 0, (L.end + 7) / 8 * 8 - L.end);
+
+    std::string e[FTZ_SECTIONS];
+    const uint64_t max_key = kb >= 8 ? UINT64_MAX : (uint64_t(1) << (8 * kb)) - 1;
+    auto keys = [&]() {
+      uint8_t* dst = img + L.keys;
+      uint64_t prev = 0, i = 0;
+      decodeEsc(src[1], static_cast<size_t>(comp[1]), raw[1], kb, n_kmers,
+                [&](uint64_t v) {
+                  if (v > max_key - prev) return false;
+                  prev += v;
+                  wrKey(dst + (i++) * static_cast<size_t>(kb), kb, prev);
+                  return true;
+                }, e[1]);
+    };
+    auto sizes = [&]() {
+      uint32_t* off = reinterpret_cast<uint32_t*>(img + L.offs);
+      uint64_t run = 0, i = 0;
+      off[0] = 0;
+      decodeEsc(src[2], static_cast<size_t>(comp[2]), raw[2], 4, n_kmers,
+                [&](uint64_t v) {
+                  if (v > n_post - run) return false;
+                  run += v;
+                  off[++i] = static_cast<uint32_t>(run);
+                  return true;
+                }, e[2]);
+      if (e[2].empty() && run != n_post) e[2] = "postings do not add up";
+    };
+    auto post = [&]() { decodeRaw(src[3], static_cast<size_t>(comp[3]), img + L.post, raw[3], e[3]); };
+    {
+      std::thread t1(keys), t2(sizes);
+      post();
+      decodeRaw(src[0], static_cast<size_t>(comp[0]), img, raw[0], e[0]);
+      t1.join();
+      t2.join();
+    }
+    static const char* names[FTZ_SECTIONS] = {"head", "keys", "sizes", "postings"};
+    for (int i = 0; i < FTZ_SECTIONS; ++i)
+      if (!e[i].empty()) return fail(std::string("packed index section ") + names[i] + ": " + e[i]);
+    // The decoded v2 header must say what the packed header says.
+    if (std::memcmp(img + 8, h + 8, 32) != 0) return fail("packed index header does not match its image");
+
+    const std::string digest = toHex(h + 56, 32);
+    image_ = img;
+    image_len_ = L.end;
+    if (!bindImage_(err)) return false;   // the same checks as a mapped .taxdb
+    packed_sha256_ = digest;
     return true;
   }
 }

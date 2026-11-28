@@ -126,6 +126,25 @@ endif()
 # zlib for the direct mzML peak decoder (src/MzMLDirectDecoder.cpp); OpenMS
 # links the same library.
 find_package(ZLIB REQUIRED)
+# zstd for the packed taxonomy index (tax_k7.ftz, src/TaxIndex.cpp). The same
+# conda-forge library OpenMS links (libOpenMS already depends on it, so the
+# bundles carry it); its CMake package where it has one, else a plain search.
+find_package(zstd CONFIG QUIET)
+if(TARGET zstd::libzstd_shared)
+  set(FASTAG_ZSTD zstd::libzstd_shared)
+elseif(TARGET zstd::libzstd)
+  set(FASTAG_ZSTD zstd::libzstd)
+else()
+  find_path(FASTAG_ZSTD_INCLUDE zstd.h REQUIRED)
+  find_library(FASTAG_ZSTD_LIB NAMES zstd libzstd zstd_static REQUIRED)
+  add_library(fastag_zstd UNKNOWN IMPORTED)
+  set_target_properties(fastag_zstd PROPERTIES IMPORTED_LOCATION "${FASTAG_ZSTD_LIB}"
+                        INTERFACE_INCLUDE_DIRECTORIES "${FASTAG_ZSTD_INCLUDE}")
+  set(FASTAG_ZSTD fastag_zstd)
+endif()
+message(STATUS "zstd for the packed taxonomy index: ${FASTAG_ZSTD}")
+find_package(Threads REQUIRED)
+target_link_libraries(fastag_core PRIVATE ${FASTAG_ZSTD} Threads::Threads)
 
 # ---- 1.12 G: executable sources ----
 # G1: -probe_input and -dump_spectrum, which read through the readers below.
@@ -716,6 +735,16 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
   set_tests_properties(charge_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # The packed taxonomy index (tax_k7.ftz): buildtaxdb --pack/--unpack/--verify
+  # round-trip, and -species/-census write the same bytes from it as from the
+  # .taxdb; a truncated one is refused.
+  add_test(NAME packed_taxdb_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/packed_taxdb_cli_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:buildtaxdb>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
+  set_tests_properties(packed_taxdb_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # 1.13 (backlog #14): -check_header_charge on the fixture MGF and on a copy
   # whose 3+/4+ headers are given as 2+: off and warn change no output, the
   # wrong headers are found, both tags them under two charges, threads, refusals.

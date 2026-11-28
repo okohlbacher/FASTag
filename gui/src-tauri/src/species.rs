@@ -21,7 +21,19 @@ fn is_regular(path: &str) -> bool {
     std::fs::metadata(path).map(|m| m.is_file()).unwrap_or(false)
 }
 
-// Layout: magic "FTXI"/"FTX2" | u32 version | u32 k | ...; only k is needed.
+/// The k-mer index in the taxonomy folder @p d, as the CLI picks it
+/// (TaxIndex::findInDir): tax_k7.taxdb, else its packed form tax_k7.ftz
+/// (what the installers ship; the CLI decodes it at load). Non-empty
+/// regular files only.
+pub(crate) fn index_in(d: &Path) -> Option<PathBuf> {
+    ["tax_k7.taxdb", "tax_k7.ftz"]
+        .iter()
+        .map(|n| d.join(n))
+        .find(|p| std::fs::metadata(p).map(|m| m.is_file() && m.len() > 0).unwrap_or(false))
+}
+
+// Layout: magic "FTXI"/"FTX2"/"FTZ1" (the packed form keeps the v2 header
+// fields in place) | u32 version | u32 k | ...; only k is needed.
 fn read_taxdb_info(path: &str) -> Option<TaxdbInfo> {
     if !is_regular(path) {
         return None;
@@ -29,7 +41,7 @@ fn read_taxdb_info(path: &str) -> Option<TaxdbInfo> {
     let mut f = std::fs::File::open(path).ok()?;
     let mut buf = [0u8; 12];
     f.read_exact(&mut buf).ok()?;
-    if &buf[0..4] != b"FTX2" && &buf[0..4] != b"FTXI" {
+    if &buf[0..4] != b"FTX2" && &buf[0..4] != b"FTXI" && &buf[0..4] != b"FTZ1" {
         return None;
     }
     let k = u32::from_le_bytes(buf[8..12].try_into().ok()?);
@@ -59,13 +71,7 @@ pub(crate) fn taxonomy_dirs(app: &AppHandle) -> Vec<PathBuf> {
 // The same search order the CLI uses (taxonomyDir_ in FASTag.cpp), so the GUI
 // reports on the index the run will actually load.
 fn bundled_taxdb(app: &AppHandle) -> Option<String> {
-    for d in taxonomy_dirs(app) {
-        let p = d.join("tax_k7.taxdb");
-        if p.exists() {
-            return Some(p.display().to_string());
-        }
-    }
-    None
+    taxonomy_dirs(app).iter().find_map(|d| index_in(d)).map(|p| p.display().to_string())
 }
 
 #[tauri::command]
@@ -89,7 +95,8 @@ pub struct TaxonomyStatus {
     /// The folder the CLI looks in (where the index belongs), None when it
     /// finds no taxonomy folder at all. For an explicit -taxdb: that file's.
     dir: Option<String>,
-    /// The index the CLI would look for: <dir>/tax_k7.taxdb or the explicit
+    /// The index the CLI would look for: the one in <dir> (tax_k7.taxdb or
+    /// tax_k7.ftz), <dir>/tax_k7.taxdb when there is none, or the explicit
     /// -taxdb.
     expected: Option<String>,
     /// The folder comes from FASTAG_TAXONOMY_DIR.
@@ -110,7 +117,7 @@ fn cli_taxonomy_dir(env: Option<&str>, bin: &Path) -> (Option<PathBuf>, bool) {
     let dumps = |c: &Path| c.join("nodes.dmp").is_file() && c.join("names.dmp").is_file();
     let pick = cands
         .iter()
-        .find(|c| c.is_dir() && dumps(c) && c.join("tax_k7.taxdb").is_file())
+        .find(|c| c.is_dir() && dumps(c) && index_in(c).is_some())
         .or_else(|| cands.iter().find(|c| c.is_dir() && dumps(c)))
         .or_else(|| cands.iter().find(|c| c.is_dir()));
     // ".." spelled out reads badly in the message: the folder as it is.
@@ -129,9 +136,10 @@ fn taxonomy_status_of(explicit: Option<&str>, env: Option<&str>, bin: &Path) -> 
         };
     }
     let (dir, from_env) = cli_taxonomy_dir(env, bin);
-    let expected = dir.as_ref().map(|d| d.join("tax_k7.taxdb"));
+    let found = dir.as_deref().and_then(index_in);
+    let expected = found.clone().or_else(|| dir.as_ref().map(|d| d.join("tax_k7.taxdb")));
     TaxonomyStatus {
-        index: expected.as_ref().filter(|p| p.is_file()).map(|p| shown(p)),
+        index: found.as_deref().map(shown),
         dir: dir.as_deref().map(shown),
         expected: expected.as_deref().map(shown),
         from_env,
@@ -231,6 +239,29 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
+    // The installers ship the packed index (tax_k7.ftz): found like the
+    // .taxdb, which still wins when both are there (it is mapped, not decoded).
+    #[test]
+    fn the_packed_index_counts_and_the_taxdb_wins() {
+        let (root, bin) = tax_tree("packed");
+        let tax = root.join("share").join("FASTag").join("taxonomy");
+        std::fs::create_dir_all(&tax).unwrap();
+        std::fs::write(tax.join("nodes.dmp"), "").unwrap();
+        std::fs::write(tax.join("names.dmp"), "").unwrap();
+        std::fs::write(tax.join("tax_k7.ftz"), "FTZ1").unwrap();
+        let want = dunce::canonicalize(&tax).unwrap();
+        let s = taxonomy_status_of(None, None, &bin);
+        assert_eq!(s.index, Some(want.join("tax_k7.ftz").display().to_string()));
+        assert_eq!(s.expected, s.index);
+        std::fs::write(tax.join("tax_k7.taxdb"), "FTX2").unwrap();
+        let s = taxonomy_status_of(None, None, &bin);
+        assert_eq!(s.index, Some(want.join("tax_k7.taxdb").display().to_string()));
+        // An empty file is no index.
+        std::fs::write(tax.join("tax_k7.taxdb"), "").unwrap();
+        assert_eq!(index_in(&tax), Some(tax.join("tax_k7.ftz")));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn a_directory_is_not_read() {
         // Only regular files are read.
@@ -241,7 +272,7 @@ mod tests {
     #[test]
     fn ftx2_and_ftxi_headers_read_k() {
         let f = tempfile_path("t.taxdb");
-        for (magic, k) in [(b"FTX2", 7u32), (b"FTXI", 6u32)] {
+        for (magic, k) in [(b"FTX2", 7u32), (b"FTXI", 6u32), (b"FTZ1", 7u32)] {
             let mut buf = Vec::new();
             buf.extend_from_slice(magic);
             buf.extend_from_slice(&2u32.to_le_bytes()); // version

@@ -15,9 +15,10 @@ bundles redistribute is under "Desktop app bundles" below.
 | [OpenMS](https://www.openms.de) | ≥ 3.7 (develop `70cebcd144`) | BSD-3-Clause | mzML, mzPeak and FASTA I/O, residue chemistry, physical constants, spectrum data structures, TOPP application framework (`OpenMS_CLI`) | dynamic |
 | [Boost.Math](https://www.boost.org) | ≥ 1.81 | BSL-1.0 | chi-squared and hypergeometric distributions | header-only |
 | [zlib](https://zlib.net) | the one OpenMS links (1.3.2 in CI) | Zlib | inflating zlib-compressed mzML peak arrays in the direct decoder | dynamic |
+| [zstd](https://facebook.github.io/zstd/) | the one OpenMS links (1.5.7 in CI) | BSD-3-Clause (dual with GPL-2.0) | the packed taxonomy index (`tax_k7.ftz`, `src/TaxIndex.cpp`, `buildtaxdb --pack`) | dynamic |
 | [mimalloc](https://github.com/microsoft/mimalloc) | 2.2.4 (source tarball pinned by SHA-256 in `CMakeLists.txt`) | MIT | Windows only (`FASTAG_MIMALLOC`, on by default with MSVC): replaces the Windows process heap for the whole process through `mimalloc-redirect.dll`, because the many small per-spectrum allocations of the mzML read scale poorly on it | dynamic (`mimalloc.dll` + `mimalloc-redirect.dll` beside the executable) |
 
-Boost and zlib arrive transitively with OpenMS; apart from mimalloc on Windows,
+Boost, zlib and zstd arrive transitively with OpenMS; apart from mimalloc on Windows,
 FASTag adds no dependency OpenMS does not already require. The only third-party source in this repository is one
 function ported from OpenMS (BSD-3-Clause, notice kept in the file): the
 averagine deisotoper in `src/AveragineDeisotoper.cpp`.

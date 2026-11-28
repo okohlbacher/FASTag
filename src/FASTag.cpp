@@ -197,8 +197,8 @@ namespace
   /// Loading the index to learn k maps a ~1 GB file, which is exactly the work
   /// we want to refuse to waste.
   ///
-  /// Both index versions put k at the same place: magic(4) | u32 version | u32 k,
-  /// so both the current "FTX2" and the legacy "FTXI" are accepted.
+  /// Every index format puts k at the same place: magic(4) | u32 version | u32 k,
+  /// so the current "FTX2", its packed form "FTZ1" and the legacy "FTXI" are accepted.
   int peekTaxdbK_(const std::string& path)
   {
     std::ifstream f(path.c_str(), std::ios::binary);
@@ -207,13 +207,14 @@ namespace
     if (!f.read(magic, 4)) return -1;
     const bool v1 = std::memcmp(magic, "FTXI", 4) == 0;
     const bool v2 = std::memcmp(magic, "FTX2", 4) == 0;
-    if (!v1 && !v2) return -1;
+    const bool z1 = std::memcmp(magic, "FTZ1", 4) == 0;
+    if (!v1 && !v2 && !z1) return -1;
     std::uint32_t ver = 0, k = 0;
     if (!f.read(reinterpret_cast<char*>(&ver), 4)) return -1;
     if (!f.read(reinterpret_cast<char*>(&k), 4)) return -1;
     // Reject a header the real loader would reject, so a corrupt/hostile file
     // does not yield a plausible k and a misleading precondition error.
-    if ((v1 && ver != 1) || (v2 && ver != 2)) return -1;
+    if ((v1 && ver != 1) || (v2 && ver != 2) || (z1 && ver != 1)) return -1;
     if (k < 1 || k > static_cast<std::uint32_t>(FASTag::TaxIndex::MAX_K)) return -1;
     return static_cast<int>(k);
   }
@@ -251,7 +252,7 @@ std::string taxonomyDir_()
     if (!File::isDirectory(c)) continue;
     if (any.empty()) any = c;
     const bool dumps = File::exists(c + "/nodes.dmp") && File::exists(c + "/names.dmp");
-    if (dumps && File::exists(c + "/tax_k7.taxdb")) return c;   // complete
+    if (dumps && !FASTag::TaxIndex::findInDir(c).empty()) return c;   // complete (.taxdb or .ftz)
     if (dumps && with_dumps.empty()) with_dumps = c;
   }
   return !with_dumps.empty() ? with_dumps : any;
@@ -514,7 +515,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     if (probe_taxdb.empty())
     {
       const std::string d = taxonomyDir_();
-      if (!d.empty()) probe_taxdb = d + "/tax_k7.taxdb";
+      if (!d.empty()) probe_taxdb = FASTag::TaxIndex::findInDir(d);
     }
     const int index_k = probe_taxdb.empty() ? -1 : peekTaxdbK_(probe_taxdb);
     if (index_k > 0)
@@ -3190,10 +3191,13 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     {
       const std::string tdir = taxonomyDir_();
       if (!tdir.empty())
-        for (const auto& tf : {std::make_pair("taxdb (bundled)", "/tax_k7.taxdb"),
-                               std::make_pair("taxonomy_nodes (bundled)", "/nodes.dmp"),
+      {
+        const std::string tdb = FASTag::TaxIndex::findInDir(tdir);
+        if (!tdb.empty()) guard.input("taxdb (bundled)", tdb);
+        for (const auto& tf : {std::make_pair("taxonomy_nodes (bundled)", "/nodes.dmp"),
                                std::make_pair("taxonomy_names (bundled)", "/names.dmp")})
           if (File::exists(tdir + tf.second)) guard.input(tf.first, tdir + tf.second);
+      }
     }
     // ---- 1.12 F: guarded inputs ----
     if (getFlag_("census")) guard.input("census_ids", getStringOption_("census_ids"));

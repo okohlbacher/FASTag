@@ -5,10 +5,13 @@
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
 
+#include "Sha256.h"
 #include "SpeciesLookup.h"
 #include "TaxIndex.h"
 
 #include <algorithm>
+#include <filesystem>
+#include <iterator>
 #include <map>
 #include <random>
 
@@ -223,6 +226,101 @@ int main()
     std::remove(good.c_str());
   }
 
+
+  // Packed form (FTZ1): pack a mapped v2 image, load the .ftz, and get the
+  // same image byte for byte, the same lookups and the same counts.
+  {
+    auto slurp = [](const std::string& p) {
+      std::ifstream i(p, std::ios::binary);
+      return std::string((std::istreambuf_iterator<char>(i)), std::istreambuf_iterator<char>());
+    };
+    auto spill = [](const std::string& p, const std::string& d) {
+      std::ofstream o(p, std::ios::binary);
+      o.write(d.data(), static_cast<std::streamsize>(d.size()));
+    };
+    // Exercise the escapes too: k-mers whose codes are far apart (key deltas
+    // >= 255 at key width 5, k=8) and one k-mer in 300 taxa (a set size
+    // >= 255, taxon indices of 2 bytes).
+    std::vector<FASTAFile::FASTAEntry> pe = e;
+    std::vector<uint32_t> pt = tax;
+    for (uint32_t t = 0; t < 300; ++t) { pe.emplace_back("w", "", "WWWWWWWWYYYYYYYY"); pt.push_back(1000 + t); }
+    pe.emplace_back("far", "", "YYYYYYYYACACACAC");
+    pt.push_back(77);
+    TaxIndex built;
+    built.build(pe, pt, 8);
+    const std::string v2 = std::string(std::tmpnam(nullptr)) + ".taxdb";
+    const std::string z1 = std::string(std::tmpnam(nullptr)) + ".ftz";
+    std::string err;
+    check(built.save(v2, &err), "packed: save v2: " + err);
+    TaxIndex mapped;
+    check(mapped.load(v2, &err), "packed: load v2: " + err);
+    check(!built.savePacked(z1, 19, &err), "packed: an in-memory (built) index is refused");
+    check(mapped.savePacked(z1, 19, &err), "packed: savePacked: " + err);
+    TaxIndex unz;
+    check(unz.load(z1, &err), "packed: load ftz: " + err);
+    check(unz.packed() && !mapped.packed(), "packed: packed() tells the forms apart");
+    check(unz.imageBytes() == mapped.imageBytes()
+              && std::equal(unz.image(), unz.image() + unz.imageBytes(), mapped.image()),
+          "packed: the decoded image is the v2 file byte for byte");
+    check(unz.packedSha256() == sha256File(v2), "packed: the recorded sha256 is the v2 file's");
+    std::vector<uint32_t> a, b;
+    for (const char* q : {"AAAAAAAA", "WWWWWWWW", "YYYYYYYY", "ACACACAC", "MNPQRSTV", "CDEFGHKL", "LLLLLLLL"})
+    {
+      mapped.lookup(q, a);
+      unz.lookup(q, b);
+      check(a == b, std::string("packed: same lookup for ") + q);
+    }
+    unz.lookup("WWWWWWWW", b);
+    check(b.size() == 300, "packed: the 300-taxon set (an escaped size) survives");
+    check(unz.taxa() == mapped.taxa() && unz.nKmers() == mapped.nKmers(), "packed: same taxa and k-mer count");
+    check(unz.pairwiseOverlap() == mapped.pairwiseOverlap(), "packed: same overlap matrix");
+    // saveImage restores the .taxdb; packing is deterministic.
+    const std::string back = std::string(std::tmpnam(nullptr)) + ".taxdb";
+    check(unz.saveImage(back, &err), "packed: saveImage: " + err);
+    check(slurp(back) == slurp(v2), "packed: saveImage restores the .taxdb byte for byte");
+    const std::string z2 = std::string(std::tmpnam(nullptr)) + ".ftz";
+    check(unz.savePacked(z2, 19, &err) && slurp(z2) == slurp(z1), "packed: re-packing gives the same bytes");
+
+    // Corruption: every damaged or truncated .ftz is refused, never crashes.
+    const std::string good = slurp(z1);
+    auto refuse = [&](const std::string& data, const std::string& what) {
+      const std::string p = std::string(std::tmpnam(nullptr)) + ".ftz";
+      spill(p, data);
+      TaxIndex bad;
+      std::string e2;
+      check(!bad.load(p, &e2), "packed: rejects " + what);
+      std::vector<uint32_t> out;
+      bad.lookup("AAAAAAAA", out);
+      check(out.empty(), "packed: no lookup after rejecting " + what);
+      std::remove(p.c_str());
+    };
+    refuse(good.substr(0, good.size() - 1), "a truncated file");
+    refuse(good + "x", "a trailing byte");
+    refuse(good.substr(0, 100), "a short header");
+    for (size_t at : {size_t(170), good.size() / 2, good.size() - 3})
+    {
+      std::string flip = good;
+      flip[at] = static_cast<char>(flip[at] ^ 0x5A);
+      refuse(flip, "a flipped byte at " + std::to_string(at));
+    }
+    std::string hk = good;
+    for (int i = 16; i < 24; ++i) hk[i] = static_cast<char>(0xFF);
+    refuse(hk, "a hostile k-mer count");
+    std::string hv = good;
+    hv[4] = 2;
+    refuse(hv, "an unknown version");
+
+    // findInDir: the .taxdb wins over the .ftz; the .ftz alone is found.
+    const std::string dir = std::string(std::tmpnam(nullptr)) + "_taxdir";
+    std::filesystem::create_directories(dir);
+    spill(dir + "/tax_k7.ftz", good);
+    check(TaxIndex::findInDir(dir) == dir + "/tax_k7.ftz", "findInDir: the packed index alone");
+    spill(dir + "/tax_k7.taxdb", slurp(v2));
+    check(TaxIndex::findInDir(dir) == dir + "/tax_k7.taxdb", "findInDir: the .taxdb wins");
+    std::filesystem::remove_all(dir);
+    check(TaxIndex::findInDir(dir).empty(), "findInDir: neither");
+    for (const std::string& p : {v2, z1, z2, back}) std::remove(p.c_str());
+  }
 
   // SpeciesLookup::tagSupport (1.12 P6) equals the 1.11 inline loop of
   // FASTag.cpp phase 10: return, taxa and both counters.

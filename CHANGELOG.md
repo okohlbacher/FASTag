@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **Packed taxonomy index (`tax_k7.ftz`).** FASTag also loads the k-mer index from a compressed file,
+  `tax_k7.ftz`: 207 MB for the 1.14 GB `tax_k7.taxdb` (the release tarball's gzip: 450 MB; LZMA, as in the
+  Windows installer and the ULMO dmg: 245 MB). It stores the key deltas and the taxon-set sizes, escape-coded to a
+  byte, and the postings, as four zstd frames with checksums, and decodes at load into the exact `.taxdb` image
+  (whose sha256 it records), so every report is the same byte for byte (tag table, `-species`, `-species_call
+  decoy` and `-census` checked on PXD000001 with the shipped index on macOS; `packed_taxdb_cli_test` checks the
+  same on every CI platform with a toy index). Load cost on an M4 Max: about
+  0.3 s, and the 1.14 GB image is anonymous memory instead of an evictable file mapping (phys footprint of a
+  species run 0.29 -> 1.45 GB, RSS 1.44 -> 1.69 GB). A `tax_k7.taxdb` in the same folder wins and is mapped as
+  before; `FTX2` and `FTXI` files load unchanged. New `buildtaxdb --pack`, `--unpack` (restores the `.taxdb` byte
+  for byte) and `--verify` (decodes, checks the sha256). The desktop app's taxonomy checks,
+  `tools/check_taxonomy_manifest.py` and `tools/windows_installed_check.ps1` accept the packed index (its header
+  must record the pinned size and sha256). The index-only release assets keep the `.taxdb`. With the release
+  workflows packing it, the installers no longer compress 1.14 GB (makensis LZMA, hdiutil, dpkg-deb,
+  mksquashfs) and get smaller (desktop dmg, ULMO, measured: 336 -> 296 MB).
 - **Census columns `tic` and `xrea` (census format 4).** `-census` writes two more columns after
   `res_cover_exact`: `tic`, the summed intensity of the spectrum's peaks as read, and `xrea`, Xrea (Na & Paek,
   J Proteome Res 2006) over the same peaks (area between the diagonal and the cumulative intensity curve of the

@@ -228,7 +228,10 @@ test('characterize: species, digest, label reports and the Overview', { timeout:
     // getting the focus back re-checks, and the run goes.
     const taxDir = join(dirname(APP), 'resources', 'fastag', 'share', 'FASTag', 'taxonomy')
     const taxdb = process.env.E2E_TAXDB
-    if (taxdb && !existsSync(join(taxDir, basename(taxdb)))) {
+    // A release installer carries the index packed (tax_k7.ftz), which the
+    // CLI loads as well as the .taxdb.
+    const hasIndex = [basename(taxdb || 'tax_k7.taxdb'), 'tax_k7.ftz'].some((n) => existsSync(join(taxDir, n)))
+    if (taxdb && !hasIndex) {
       const check = await until('the "no taxonomy index" check', () => s.exec("const c = document.querySelector('li.check[data-check=no-taxdb]'); return c ? c.innerText : ''"), 120000, 300)
       await shot(s, '05-characterize-no-taxdb')
       record.steps.characterizeNoTaxdb = check.slice(0, 1500)

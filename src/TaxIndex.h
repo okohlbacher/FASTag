@@ -21,6 +21,20 @@
 // v1 files (a serialized hash map) still load via the in-memory path, which
 // build() also fills; save() always writes v2.
 //
+// PACKED FORM ("FTZ1", tax_k7.ftz; savePacked())
+//
+// The v2 image compresses badly as it is (zstd -19: 1138 -> 366 MB; the
+// release tarball's gzip: 450 MB): its sorted keys and its offsets are
+// arithmetic progressions, which LZ matching does not see. The packed form
+// stores the key DELTAS and the set SIZES instead, escape-coded to one byte
+// each (a delta or size >= 255 is 0xFF and the full value), and the postings
+// as they are, each section one zstd frame with a content checksum: 207 MB.
+// load() decodes it back into the EXACT v2 image in memory (the sha256 of
+// that image is in the header, and buildtaxdb --verify checks it), so every
+// lookup, every count and every report is the same as from the .taxdb. The
+// cost is a decode at load (well under a second) and the image as anonymous
+// memory rather than an evictable file mapping.
+//
 // ACCEPTED LIMITATIONS (deliberate):
 //   * Little-endian, 64-bit hosts only. macOS/Windows/Linux on x86-64/arm64 are
 //     all LE; a big-endian reader would see byte-swapped numeric fields, and a
@@ -44,6 +58,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -166,6 +181,58 @@ namespace FASTag
     bool load(const std::string& path, std::string* err = nullptr);
 
     /**
+      @brief Writes the loaded v2 image in the packed form "FTZ1" (see the file comment).
+
+      Deterministic: the same image and level give the same bytes (each
+      section is compressed single-threaded, on its own thread).
+
+      @param[in] path the output file (by convention tax_k7.ftz)
+      @param[in] level the zstd level (1..22)
+      @param[out] err if not null, receives the error on failure
+      @return false for an index that is not a loaded v2 image (build() output: save() and load() it first)
+    */
+    bool savePacked(const std::string& path, int level = 19, std::string* err = nullptr) const;
+
+    /**
+      @brief Writes the v2 image verbatim, as load() mapped or decoded it.
+
+      For a packed index this restores the .taxdb it was packed from, byte for byte.
+
+      @param[in] path the output file
+      @param[out] err if not null, receives the error on failure
+      @return false for an index without a v2 image, or on a write error
+    */
+    bool saveImage(const std::string& path, std::string* err = nullptr) const;
+
+    /// @brief The v2 image (mapped or decoded), or nullptr for an in-memory index.
+    /// @return the first byte of the image
+    const uint8_t* image() const { return image_; }
+    /// @brief The length of image().
+    /// @return the byte count; 0 without an image
+    size_t imageBytes() const { return image_len_; }
+    /// @brief Whether the index came from a packed (FTZ1) file.
+    /// @return true after loading an FTZ1 file
+    bool packed() const { return !packed_sha256_.empty(); }
+    /// @brief The sha256 of the v2 image a packed file records (lowercase hex).
+    /// @return the digest; empty unless packed()
+    const std::string& packedSha256() const { return packed_sha256_; }
+
+    /// @brief File name of the bundled index.
+    static constexpr const char* BUNDLED_NAME = "tax_k7.taxdb";
+    /// @brief File name of the bundled index in the packed form.
+    static constexpr const char* BUNDLED_PACKED_NAME = "tax_k7.ftz";
+
+    /**
+      @brief The bundled index in @p dir: tax_k7.taxdb, else tax_k7.ftz.
+
+      The .taxdb wins when both are there: it is mapped, not decoded.
+
+      @param[in] dir a taxonomy directory
+      @return the path of the first that is a regular file; "" for neither
+    */
+    static std::string findInDir(const std::string& dir);
+
+    /**
       @brief Folds I to L; other characters pass through unchanged.
       @param[in] s the sequence
       @return the folded sequence
@@ -195,6 +262,8 @@ namespace FASTag
 
   private:
     void reset_();
+    bool bindImage_(std::string* err);   ///< points the v2 fields into image_
+    bool loadPacked_(const std::string& path, std::string* err);
     uint32_t postingAt_(uint32_t p) const;  ///< taxon index of mapped posting p
 
     int k_ = 0;
@@ -202,6 +271,12 @@ namespace FASTag
     // ---- v2: the mapped image (all pointers are into map_base_) -------------
     void* map_base_ = nullptr;
     size_t map_len_ = 0;
+    // The v2 image the pointers below point into: the mapping, or the heap
+    // buffer a packed file was decoded into (8-byte aligned, as mapped).
+    const uint8_t* image_ = nullptr;
+    size_t image_len_ = 0;
+    std::unique_ptr<uint64_t[]> heap_;
+    std::string packed_sha256_;
 #ifdef _WIN32
     void* map_handle_ = nullptr;
     void* file_handle_ = nullptr;

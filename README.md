@@ -2208,7 +2208,7 @@ run.
 **Get the index.** Every release bundle carries the full k-mer index, so
 `-species` works out of the box; only a source build needs the download:
 
-| bundle | NCBI dumps (`nodes.dmp`, `names.dmp`) | k-mer index `tax_k7.taxdb` (~1.06 GB) | `MANIFEST.json` |
+| bundle | NCBI dumps (`nodes.dmp`, `names.dmp`) | k-mer index `tax_k7.taxdb` (~1.06 GB), or packed `tax_k7.ftz` (207 MB) | `MANIFEST.json` |
 |---|---|---|---|
 | CLI: Linux x64/arm64 `.tar.gz`, macOS arm64/x64 `.dmg`, Windows x64 `.zip` (`share-FASTag-taxonomy/`) | yes | **yes** | yes |
 | Desktop app: macOS `.dmg`, Linux `.deb`, `.tar.gz` and `.AppImage` (x64, arm64), Windows installer (`resources/fastag/share/FASTag/taxonomy/`) | yes | **yes** | yes |
@@ -2253,7 +2253,10 @@ normal release would take GitHub's "Latest" slot, and every `releases/latest`
 link above would show the index instead of the binaries.
 
 The index is a bit-packed, memory-mapped format (`FTX2`): a 50-taxon index is
-~1 GB on disk and **under 1 GB resident**, and loads instantly. Rebuild it from
+~1 GB on disk and **under 1 GB resident**, and loads instantly. Its packed form
+`tax_k7.ftz` (207 MB, `buildtaxdb --pack`) loads too, decoded in about 0.3 s into
+the same image in memory, with the same reports; a `tax_k7.taxdb` beside it wins
+([data/taxonomy/README.md](data/taxonomy/README.md), "The packed form"). Rebuild it from
 `data/taxonomy/reference-set.tsv` with `tools/fetch_reference_set.py` +
 `buildtaxdb` (deterministic, so a checksum verifies a download).
 

@@ -16,12 +16,23 @@ that describes another one.
 an installed app) against the pinned manifest itself, writing nothing: each
 file the manifest lists must be a regular file there (no symlink) with the
 manifest's size and sha256, whatever MANIFEST.json the folder carries.
+
+The index may be there in its packed form instead (tax_k7.ftz for
+tax_k7.taxdb, what the installers ship; `buildtaxdb --pack`). Its header
+records the size and sha256 of the .taxdb it decodes to, and those must be
+the pinned ones; its sections must add up to its length (a truncated copy
+fails). That the content decodes to that .taxdb is checked where it is
+packed (`buildtaxdb --pack` decodes and compares, `buildtaxdb --verify`
+hashes the decoded image); every load checks each section's zstd checksum.
 """
 import hashlib
 import json
 import shutil
+import struct
 import sys
 from pathlib import Path
+
+FTZ_HEADER = 160
 
 
 def sha256(p: Path) -> str:
@@ -32,6 +43,20 @@ def sha256(p: Path) -> str:
     return h.hexdigest()
 
 
+def packed_claim(p: Path):
+    """(image bytes, image sha256) a packed index (FTZ1) records, or a reason it is no valid one."""
+    with open(p, "rb") as f:
+        h = f.read(FTZ_HEADER)
+    if len(h) < FTZ_HEADER or h[:4] != b"FTZ1" or struct.unpack_from("<I", h, 4)[0] != 1:
+        return None, "not a packed taxonomy index (FTZ1 v1)"
+    if struct.unpack_from("<I", h, 88)[0] != 4:
+        return None, "packed index header is malformed"
+    comp = sum(struct.unpack_from("<Q", h, 96 + 16 * i)[0] for i in range(4))
+    if FTZ_HEADER + comp != p.stat().st_size:
+        return None, f"{p.stat().st_size} bytes, its sections add up to {FTZ_HEADER + comp} (truncated?)"
+    return (struct.unpack_from("<Q", h, 40)[0], h[56:88].hex()), None
+
+
 def check(d: Path, files: dict) -> list:
     """The mismatches of @p d against @p files (the manifest's "files")."""
     index = [n for n in files if n.endswith(".taxdb")]
@@ -40,6 +65,19 @@ def check(d: Path, files: dict) -> list:
         bad.append("the manifest lists no .taxdb index")
     for name, rec in sorted(files.items()):
         p = d / name
+        z = d / (name[: -len(".taxdb")] + ".ftz") if name.endswith(".taxdb") else None
+        if z is not None and not p.exists() and not z.is_symlink() and z.is_file():
+            claim, why = packed_claim(z)
+            if claim is None:
+                bad.append(f"{z.name}: {why}")
+            elif rec.get("bytes") is not None and claim[0] != rec["bytes"]:
+                bad.append(f"{z.name}: packs a {claim[0]}-byte {name}, the manifest says {rec['bytes']}")
+            elif claim[1] != rec["sha256"]:
+                bad.append(f"{z.name}: packs {name} sha256 {claim[1]}, the manifest says {rec['sha256']}")
+            else:
+                print(f"{z.name}: packs {name} sha256 {claim[1]} as pinned ({z.stat().st_size} bytes, sha256 {sha256(z)})",
+                      file=sys.stderr)
+            continue
         if p.is_symlink() or not p.is_file():
             bad.append(f"{name}: missing or not a regular file in {d}")
             continue

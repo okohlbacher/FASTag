@@ -268,7 +268,7 @@ pub fn resolve_binary(app: &AppHandle) -> Resolved {
             let data = root.join("share").join("OpenMS");
             let data = if data.exists() { Some(data) } else { None };
             let taxonomy = root.join("share").join("FASTag").join("taxonomy");
-            let taxonomy = if taxonomy.join("tax_k7.taxdb").exists() { Some(taxonomy) } else { None };
+            let taxonomy = if crate::species::index_in(&taxonomy).is_some() { Some(taxonomy) } else { None };
             return Resolved { bin, data, taxonomy, source: "bundled" };
         }
     }
