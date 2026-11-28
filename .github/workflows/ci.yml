@@ -1193,6 +1193,8 @@ jobs:
           security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security import "$CERT_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          # The search list as words: one argument per keychain.
+          # shellcheck disable=SC2046
           security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"' | xargs)
           security default-keychain -d user -s "$KEYCHAIN_PATH"
           security find-identity -p codesigning -v "$KEYCHAIN_PATH"
@@ -1674,7 +1676,7 @@ jobs:
           mkdir -p "$MNT"
           # The image asks for the licence agreement: answered here, as a
           # user (or Homebrew) does.
-          PAGER=cat hdiutil attach "$DMG" -readonly -nobrowse -noautoopen -mountpoint "$MNT" < <(yes) > /dev/null
+          PAGER='cat' hdiutil attach "$DMG" -readonly -nobrowse -noautoopen -mountpoint "$MNT" < <(yes) > /dev/null
           trap 'hdiutil detach "$MNT" -force >/dev/null 2>&1 || true' EXIT
           apps=("$MNT"/*.app)
           [ ${#apps[@]} -eq 1 ] || { echo "::error::expected one .app in the dmg, found ${#apps[@]}"; exit 1; }
@@ -1762,7 +1764,7 @@ jobs:
           bash .github/scripts/notarize.sh wait "$DMG" cli-dmg
           CMNT="$RUNNER_TEMP/fastag-cli-dmg-mnt"
           mkdir -p "$CMNT"
-          env PAGER=cat hdiutil attach "$DMG" -readonly -nobrowse -noautoopen -mountpoint "$CMNT" < <(yes) > /dev/null
+          env PAGER='cat' hdiutil attach "$DMG" -readonly -nobrowse -noautoopen -mountpoint "$CMNT" < <(yes) > /dev/null
           pinned=yes; runs=yes
           python3 tools/check_taxonomy_manifest.py --pinned "data/taxonomy/manifests/$TAXDB_TAG.json" "$CMNT/FASTag/share-FASTag-taxonomy" || pinned=no
           want=$(sed -n 's/^project(FASTag VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
@@ -2015,9 +2017,9 @@ jobs:
           # and notice (its data part needs a peptide .raw, which CI has not).
           # gui_cli_test and shipped_data_test: the shipped data in every
           # layout and the build tree's staging (they skip without Python).
-          # The six parts of charge_cli_test (#6), which skip on a binary that
+          # The four parts of charge_cli_test (#6), which skip on a binary that
           # cannot start.
-          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test bruker_cli_test thermo_cli_test gui_cli_test shipped_data_test charge_cli_test_defaults charge_cli_test_calls charge_cli_test_threads charge_cli_test_species charge_cli_test_species_ion charge_cli_test_species_call; do
+          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test bruker_cli_test thermo_cli_test gui_cli_test shipped_data_test charge_cli_test_defaults charge_cli_test_calls charge_cli_test_threads charge_cli_test_species; do
             grep -E "Test +#[0-9]+: $t " ctest.log | grep -q 'Passed' \
               || { echo "::error::$t did not pass (skipped, not run or missing)"; grep -E "$t" ctest.log || true; exit 1; }
           done
@@ -3466,7 +3468,7 @@ jobs:
           # An AppImage only when it launched on both Ubuntu releases.
           [ "$APPIMAGE_X64" = success ] || rm -f parts/rc-part-gui-linux-x64-appimage.json
           [ "$APPIMAGE_ARM64" = success ] || rm -f parts/rc-part-gui-linux-arm64-appimage.json
-          ls parts
+          find parts -type f
           tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$GITHUB_SHA" --jq .tree.sha)
           wid=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .workflow_id)
           req=()
@@ -3531,7 +3533,7 @@ jobs:
           for p in "${pids[@]}"; do wait "$p"; done
           python3 .github/scripts/rc-manifest.py check "$M" --dir "$RUNNER_TEMP/a" --out promoted
           rm -rf "$RUNNER_TEMP/a"
-          tools/release_assets.sh check "${{ needs.version.outputs.version }}" promoted/*
+          find promoted -type f -exec basename {} \; | tools/release_assets.sh check "${{ needs.version.outputs.version }}"
       - name: Attach them to the draft release and check its digests
         env:
           DRAFT_ONLY: ${{ inputs.promote_to != '' && '1' || '0' }}
@@ -3619,9 +3621,9 @@ jobs:
             spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
           done
           MNT="$RUNNER_TEMP/gui"; mkdir -p "$MNT"
-          PAGER=cat hdiutil attach "$D/FASTag-$V-gui-macos-arm64.dmg" -readonly -nobrowse -noautoopen -mountpoint "$MNT" < <(yes) > /dev/null
+          PAGER='cat' hdiutil attach "$D/FASTag-$V-gui-macos-arm64.dmg" -readonly -nobrowse -noautoopen -mountpoint "$MNT" < <(yes) > /dev/null
           trap 'hdiutil detach "$MNT" -force >/dev/null 2>&1 || true' EXIT
-          app=$(ls -d "$MNT"/*.app | head -1)
+          apps=("$MNT"/*.app); app=${apps[0]}
           codesign --verify --deep --strict --verbose=2 "$app"
           CLI="$app/Contents/Resources/resources/fastag/bin/FASTag"
           bash tools/check_bundle_notices.sh "$(dirname "$(dirname "$CLI")")"
@@ -3629,11 +3631,13 @@ jobs:
           env -i HOME="$HOME" "$CLI" --help 2>&1 | grep -q "^Version: $want" || { echo "::error::the app's CLI does not report $want"; exit 1; }
           exe="$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")"
           st="$RUNNER_TEMP/selftest.json"
-          FASTAG_SELFTEST_OUT="$st" perl -e 'alarm 180; exec @ARGV or die "exec: $!"' "$exe" > "$RUNNER_TEMP/selftest.log" 2>&1 \
-            && grep -q '"ok": true' "$st" || { cat "$st" "$RUNNER_TEMP/selftest.log" 2>/dev/null; echo "::error::the promoted app did not run its bundled CLI"; exit 1; }
+          if ! FASTAG_SELFTEST_OUT="$st" perl -e 'alarm 180; exec @ARGV or die "exec: $!"' "$exe" > "$RUNNER_TEMP/selftest.log" 2>&1 \
+             || ! grep -q '"ok": true' "$st"; then
+            cat "$st" "$RUNNER_TEMP/selftest.log" 2>/dev/null; echo "::error::the promoted app did not run its bundled CLI"; exit 1
+          fi
           hdiutil detach "$MNT"; trap - EXIT
           CM="$RUNNER_TEMP/cli"; mkdir -p "$CM"
-          PAGER=cat hdiutil attach "$D/FASTag-$V-macos-arm64.dmg" -readonly -nobrowse -noautoopen -mountpoint "$CM" < <(yes) > /dev/null
+          PAGER='cat' hdiutil attach "$D/FASTag-$V-macos-arm64.dmg" -readonly -nobrowse -noautoopen -mountpoint "$CM" < <(yes) > /dev/null
           ok=yes
           python3 tools/check_taxonomy_manifest.py --pinned "$PIN" "$CM/FASTag/share-FASTag-taxonomy" || ok=no
           env -i HOME="$HOME" PATH=/usr/bin:/bin "$CM/FASTag/FASTag" --help 2>&1 | grep -q "^Version: $want" || ok=no

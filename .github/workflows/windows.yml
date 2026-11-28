@@ -1450,7 +1450,8 @@ jobs:
         run: |
           set -euo pipefail
           PY=$(command -v python3 || command -v python)
-          if [ "$SIGNED" = true ]; then exe=$(ls signed-gui/*.exe | head -1); else exe=$(ls fastag/gui/src-tauri/target/release/bundle/nsis/*.exe | head -1); fi
+          if [ "$SIGNED" = true ]; then exes=(signed-gui/*.exe); else exes=(fastag/gui/src-tauri/target/release/bundle/nsis/*.exe); fi
+          exe=${exes[0]}
           "$PY" fastag/.github/scripts/rc-manifest.py part --job windows-x64 --group windows-x64 \
             --artifact FASTag-gui-windows-x64-installer-check --out rc-part-windows-zip.json \
             "FASTag-${ASSET_VERSION}-windows-x64.zip=FASTag-${ASSET_VERSION}-windows-x64.zip"
@@ -1559,9 +1560,9 @@ jobs:
           # bruker_cli_test and thermo_cli_test: the vendor readers (1.15.2).
           # gui_cli_test and shipped_data_test: the shipped data in every
           # layout and the build tree's copy staging (they skip without Python).
-          # The six parts of charge_cli_test (#6), which skip on a binary that
+          # The four parts of charge_cli_test (#6), which skip on a binary that
           # cannot start.
-          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test indexed_mzml_test mimalloc_redirect_test bruker_cli_test thermo_cli_test gui_cli_test shipped_data_test charge_cli_test_defaults charge_cli_test_calls charge_cli_test_threads charge_cli_test_species charge_cli_test_species_ion charge_cli_test_species_call; do
+          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test indexed_mzml_test mimalloc_redirect_test bruker_cli_test thermo_cli_test gui_cli_test shipped_data_test charge_cli_test_defaults charge_cli_test_calls charge_cli_test_threads charge_cli_test_species; do
             grep -E "Test +#[0-9]+: $t " ctest.log | grep -q 'Passed' \
               || { echo "::error::$t did not pass (skipped, not run or missing)"; grep -E "$t" ctest.log || true; exit 1; }
           done
@@ -1923,7 +1924,7 @@ jobs:
             bash .github/scripts/fetch-artifact.sh "$RUN" "$a" "$RUNNER_TEMP/a/$a" 3 600
           done
           python3 .github/scripts/rc-manifest.py check "$M" --dir "$RUNNER_TEMP/a" --out promoted
-          tools/release_assets.sh check "${{ needs.version.outputs.version }}" promoted/*
+          find promoted -type f -exec basename {} \; | tools/release_assets.sh check "${{ needs.version.outputs.version }}"
           bash tools/check_no_appledouble.sh promoted/*.zip
           id=$(RELEASE_DRAFT_ONLY=$DRAFT_ONLY bash .github/scripts/release-draft.sh "$REL")
           gh release upload "$REL" promoted/* --clobber

@@ -22,13 +22,10 @@
 #     and enumerate (TSV prec_charge and census charge_used);
 #   - refusals: -charge_min above -charge_max, -isotope_error outside -1..3,
 #     -isotope_error 1 at a 0.5 Da fragment tolerance, the options in -stream.
-# The optional 7th argument runs one part (ctest runs the six in parallel,
+# The optional 7th argument runs one part (ctest runs the four in parallel,
 # CMakeLists.txt): defaults, calls (infer, candidates, header charges,
 # refusals), threads (with the selected-row reports that read their
-# outputs), species (-species_evidence best and all), species_ion (under
-# -ion_series) or species_call (-species_orientation, -species_call); the
-# three species parts each build the toy taxon set first. "all" (the
-# default) runs every part in order.
+# outputs) or species; "all" (the default) runs every part in order.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -38,7 +35,7 @@ DB="$4"       # test/fixtures/Ecoli_MS2_small.fasta
 DATA="$5"     # data/digest
 TAXDIR="$6"   # data/taxonomy
 PART="${7:-all}"
-case "$PART" in all|defaults|calls|threads|species|species_ion|species_call) ;; *) echo "unknown part $PART" >&2; exit 2 ;; esac
+case "$PART" in all|defaults|calls|threads|species) ;; *) echo "unknown part $PART" >&2; exit 2 ;; esac
 part() { [ "$PART" = all ] || [ "$PART" = "$1" ]; }
 
 if ! "$BIN" --help >/dev/null 2>&1; then
@@ -267,7 +264,7 @@ else
 fi
 
 fi
-if part species || part species_ion || part species_call; then
+if part species; then
 # ---- species: losing hypotheses add no taxon --------------------------------
 SPC=(-tag_length 7 -extension 1 -fragment_tolerance 600 -fragment_tolerance_unit ppm -max_evalue 0 -max_tags 200)
 "$BIN" -in "$TMP/noz.mgf" -out "$TMP/sp0.tsv" "${SPC[@]}" -unknown_charge enumerate -threads 2 > "$TMP/sp0.log" 2>&1 \
@@ -323,7 +320,6 @@ TAX=(-taxdb "$TMP/toy.taxdb" -taxonomy_nodes "$TAXDIR/nodes.dmp" -taxonomy_names
 export FASTAG_TAXONOMY_DIR="$TAXDIR"
 # Spectra a taxon is reported with (column 4, observed, of the species report), 0 when absent.
 spectra_of() { awk -F'\t' -v t="$2" 'NR > 1 && $2 == t { print $4; f = 1 } END { if (!f) print 0 }' "$1"; }
-if part species; then
 for ev in best all; do
   "$BIN" -in "$TMP/noz.mgf" -out "$TMP/sp_$ev.tsv" "${SPC[@]}" -unknown_charge enumerate -species "${TAX[@]}" \
     -species_evidence $ev -threads 2 > "$TMP/sp_$ev.log" 2>&1 || { cat "$TMP/sp_$ev.log" >&2; fail "species ($ev) failed"; }
@@ -336,8 +332,6 @@ for ev in best all; do
   n=0; for t in 1280 1279; do n=$((n + $(spectra_of "$R" $t))); done
   [ "$n" -gt 0 ] || { cat "$R" >&2; fail "-species_evidence $ev: the selected-row taxon is not reported (construct vacuous)"; }
 done
-fi
-if part species_ion; then
 # After the E #15B merge (feat/e15b-cz-ions): with -ion_series, whose column
 # follows selected, the species filter must still drop the losing rows (it
 # reads a per-row flag, not a column position). Skipped while the binary has
@@ -359,8 +353,6 @@ if grep -q -- '-ion_series' <<< "$HELPHELP"; then
 else
   echo "charge_cli_test: no -ion_series in this binary; the #15B species check is skipped"
 fi
-fi
-if part species_call; then
 # D10 (PLAN-INTEGRATION 2.3/2.4) on the binary: -species_orientation both
 # and -species_call decoy read the species evidence through the same
 # selected-row filter, so the losing-hypothesis taxon stays absent under
@@ -388,7 +380,6 @@ else
   echo "charge_cli_test: no -species_orientation or -species_call in this binary; the D10 check is skipped"
 fi
 
-fi
 fi
 if part calls; then
 # ---- refusals --------------------------------------------------------------
