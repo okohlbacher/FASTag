@@ -381,7 +381,10 @@ jobs:
           start=$(date +%s)
           if gh release download "$rel" --repo "$GITHUB_REPOSITORY" -p "$KEY.tar.gz" -p "$KEY.tar.gz.sha256" -D "$d"; then
             (cd "$d" && sha -c "$KEY.tar.gz.sha256") || { echo "::error::the prebuilt OpenMS in $rel does not match its sha256"; exit 1; }
-            rm -rf openms-install && tar -xzf "$d/$KEY.tar.gz" && rm -rf "$d"
+            # Relative archive path: GNU tar reads "D:..." as a remote host.
+            ws=$PWD; rm -rf openms-install
+            (cd "$d" && tar -xzf "$KEY.tar.gz" -C "$ws") || { echo "::error::the prebuilt OpenMS did not unpack"; exit 1; }
+            rm -rf "$d"
             echo "got=true" >> "$GITHUB_OUTPUT"
             echo "prebuilt OpenMS from $rel in $(( $(date +%s) - start )) s" | tee -a "$GITHUB_STEP_SUMMARY"
           else

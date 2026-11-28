@@ -439,7 +439,10 @@ jobs:
           start=$(date +%s)
           if gh release download "$rel" --repo "$GITHUB_REPOSITORY" -p "$KEY.tar.gz" -p "$KEY.tar.gz.sha256" -D "$d"; then
             (cd "$d" && sha -c "$KEY.tar.gz.sha256") || { echo "::error::the prebuilt OpenMS in $rel does not match its sha256"; exit 1; }
-            rm -rf openms-install && tar -xzf "$d/$KEY.tar.gz" && rm -rf "$d"
+            # Relative archive path: GNU tar reads "D:..." as a remote host.
+            ws=$PWD; rm -rf openms-install
+            (cd "$d" && tar -xzf "$KEY.tar.gz" -C "$ws") || { echo "::error::the prebuilt OpenMS did not unpack"; exit 1; }
+            rm -rf "$d"
             echo "got=true" >> "$GITHUB_OUTPUT"
             echo "prebuilt OpenMS from $rel in $(( $(date +%s) - start )) s" | tee -a "$GITHUB_STEP_SUMMARY"
           else
@@ -3895,7 +3898,8 @@ jobs:
           ID: ${{ needs.version.outputs.release_id }}
         run: |
           set -euo pipefail
-          bash .github/scripts/release-upload.sh "$ID" promoted/*
+          # Six uploads at a time (each replaces its own name, checks its digest).
+          find promoted -type f -print0 | xargs -0 -P 6 -n 1 bash .github/scripts/release-upload.sh "$ID"
           gh api "repos/$GH_REPO/releases/$ID" > "$RUNNER_TEMP/release.json"
           python3 .github/scripts/rc-manifest.py release "$MANIFEST" "$RUNNER_TEMP/release.json"
           cp "$MANIFEST" promoted-manifest.json
@@ -4113,6 +4117,7 @@ jobs:
           MSHA: ${{ needs.version.outputs.manifest_sha256 }}
         run: |
           set -euo pipefail
+          mkdir -p expect
           if [ "$PROMOTED" = true ]; then
             bash .github/scripts/fetch-artifact.sh "$RUN" release-candidate-manifest "$RUNNER_TEMP/m" 3 120
             [ "$(sha256sum "$RUNNER_TEMP/m/manifest.json" | cut -d' ' -f1)" = "$MSHA" ] || { echo "::error::not the selected manifest"; exit 1; }
