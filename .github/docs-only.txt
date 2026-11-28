@@ -1,0 +1,10 @@
+# Paths whose changes alone skip the build and test jobs of ci.yml and
+# windows.yml (job version, step "Documentation-only change?"): files no
+# build, test or packaging step reads. Shell glob patterns, one per line,
+# matched against the whole path. A doc that a test reads (README.md,
+# CHANGELOG.md, doc/SHORTLIST.md, doc/SPECIES-DETECTOR.md, ...) is NOT here.
+doc/images/*
+doc/MANUAL.md
+doc/GUI-REVIEW-*.md
+.github/ISSUE_TEMPLATE/*
+.github/pull_request_template.md

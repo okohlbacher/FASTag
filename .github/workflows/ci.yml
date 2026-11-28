@@ -181,6 +181,8 @@ jobs:
       actions: read
     outputs:
       version: ${{ steps.v.outputs.version }}
+      # 'false': a documentation-only change (step changes); build and test skip
+      code: ${{ steps.changes.outputs.code }}
       # 'true' only on a v* tag push: the one run that publishes.
       publish: ${{ steps.rc.outputs.publish }}
       # the draft's id; every writer uses it, never the tag name
@@ -206,8 +208,43 @@ jobs:
           sparse-checkout: |
             CMakeLists.txt
             tools/release_assets.sh
+            .github/docs-only.txt
             .github/scripts
           sparse-checkout-cone-mode: false
+      # A pull request or main push that changes only files of
+      # .github/docs-only.txt (screenshots, the manual, ...) skips every build
+      # and test job: they report as skipped, the run stays green. Tags,
+      # dispatches and anything else: code=true.
+      - name: Documentation-only change?
+        id: changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -uo pipefail
+          files=""
+          if [ "$EVENT" = pull_request ] && [ -n "$PR" ]; then
+            files=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files?per_page=100" --paginate --jq '.[].filename') || files=""
+          elif [ "$EVENT" = push ] && [ "$GITHUB_REF" = refs/heads/main ] && [[ "$BEFORE" =~ ^[0-9a-f]{40}$ ]] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ]; then
+            files=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$GITHUB_SHA" --jq '.files[].filename') || files=""
+          fi
+          code=true
+          if [ -n "$files" ] && [ -f .github/docs-only.txt ]; then
+            mapfile -t pats < <(grep -v '^#' .github/docs-only.txt | grep .)
+            code=false
+            while IFS= read -r f; do
+              hit=0
+              for p in "${pats[@]}"; do
+                # shellcheck disable=SC2053  # the patterns are globs
+                if [[ "$f" == $p ]]; then hit=1; break; fi
+              done
+              [ "$hit" = 1 ] || { code=true; echo "code change: $f"; break; }
+            done <<< "$files"
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          [ "$code" = true ] || echo "### Documentation only ($(wc -l <<< "$files") files): build and test jobs skipped" >> "$GITHUB_STEP_SUMMARY"
       - id: v
         env:
           TAG: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
@@ -319,7 +356,7 @@ jobs:
 
   build-linux-x64:
     name: ${{ matrix.name }} build
-    if: needs.version.outputs.promote != 'true'
+    if: (needs.version.outputs.promote != 'true') && needs.version.outputs.code != 'false'
     runs-on: ${{ matrix.runner }}
     needs: [version]
     env:
@@ -382,9 +419,37 @@ jobs:
           path: openms-install
           key: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
 
+      # A cache miss (an eviction, a new pin): the same install as a prebuilt
+      # asset of the deps release (deps-openms-<OPENMS_REF, 8>: a prerelease,
+      # never Latest, written only by main and tag pushes), sha256-checked, in
+      # seconds; only when that is missing too is OpenMS built from source.
+      - &s03b
+        name: Fetch the prebuilt OpenMS (cache miss)
+        id: openms-prebuilt
+        if: steps.openms-cache.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEY: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
+        run: |
+          set -uo pipefail
+          sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
+          rel=${OPENMS_DEPS_RELEASE:-deps-openms-${OPENMS_REF:0:8}}
+          d="$RUNNER_TEMP/openms-prebuilt"; rm -rf "$d"; mkdir -p "$d"
+          start=$(date +%s)
+          if gh release download "$rel" --repo "$GITHUB_REPOSITORY" -p "$KEY.tar.gz" -p "$KEY.tar.gz.sha256" -D "$d"; then
+            (cd "$d" && sha -c "$KEY.tar.gz.sha256") || { echo "::error::the prebuilt OpenMS in $rel does not match its sha256"; exit 1; }
+            rm -rf openms-install && tar -xzf "$d/$KEY.tar.gz" && rm -rf "$d"
+            echo "got=true" >> "$GITHUB_OUTPUT"
+            echo "prebuilt OpenMS from $rel in $(( $(date +%s) - start )) s" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "got=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::no prebuilt OpenMS $KEY in $rel: building it from source (about an hour)"
+          fi
+
       - &s04
         name: Check out OpenMS at the pinned commit
-        if: steps.openms-cache.outputs.cache-hit != 'true'
+        if: steps.openms-cache.outputs.cache-hit != 'true' && steps.openms-prebuilt.outputs.got != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -408,7 +473,7 @@ jobs:
       # every run).
       - &s05
         name: Install the .NET SDK (OpenMS Thermo bridge)
-        if: steps.openms-cache.outputs.cache-hit != 'true'
+        if: steps.openms-cache.outputs.cache-hit != 'true' && steps.openms-prebuilt.outputs.got != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -418,7 +483,7 @@ jobs:
 
       - &s06
         name: Build and install OpenMS
-        if: steps.openms-cache.outputs.cache-hit != 'true'
+        if: steps.openms-cache.outputs.cache-hit != 'true' && steps.openms-prebuilt.outputs.got != 'true'
         shell: bash -el {0}
         run: |
           set -euo pipefail
@@ -453,14 +518,6 @@ jobs:
           cmake --build openms-build --parallel "$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)"
           cmake --install openms-build
 
-      - &s07
-        name: Save OpenMS
-        if: steps.openms-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: openms-install
-          key: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
-
       - &s08
         name: Verify the OpenMS install
         shell: bash
@@ -480,6 +537,46 @@ jobs:
           test -f openms-install/include/OpenMS/FORMAT/OnDiscThermoRawExperiment.h
           find openms-install/include -name 'BrukerTimsFile.h' | grep -q .
           grep -m1 -oE 'PACKAGE_VERSION "[^"]+"' openms-install/lib/cmake/OpenMS/OpenMSConfigVersion.cmake
+
+      # Saved once verified, at once (before anything of FASTag's runs).
+      - &s07
+        name: Save OpenMS
+        if: steps.openms-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: openms-install
+          key: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
+
+      # Main and tag pushes only: the install this job has (from the cache or
+      # just built) becomes the deps release's asset when that lacks it, so a
+      # later miss downloads it instead of building (job deps-openms uploads).
+      - name: Stage the OpenMS install for the deps release (main and tag pushes)
+        id: openms-stage
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEY: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
+        run: |
+          set -euo pipefail
+          sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
+          rel=${OPENMS_DEPS_RELEASE:-deps-openms-${OPENMS_REF:0:8}}
+          if gh release view "$rel" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null | grep -qxF "$KEY.tar.gz"; then
+            echo "$rel has $KEY.tar.gz"; echo "stage=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          mkdir -p openms-prebuilt
+          tar -czf "openms-prebuilt/$KEY.tar.gz" openms-install
+          (cd openms-prebuilt && sha "$KEY.tar.gz" > "$KEY.tar.gz.sha256")
+          ls -l openms-prebuilt
+          echo "stage=true" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: steps.openms-stage.outputs.stage == 'true'
+        with:
+          name: openms-prebuilt-${{ matrix.name }}
+          path: openms-prebuilt/*
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
 
       - &s09
         name: Point the build at OpenMS
@@ -1579,11 +1676,11 @@ jobs:
           python3 tools/gui_third_party_notices.py --gui gui --target "$target" --platform macos \
             --out gui/src-tauri/resources/fastag/GUI-THIRD-PARTY-NOTICES.txt
 
-      # The release profile's compiled crates (Cargo registry, deps/, build/,
+      # The release profile's compiled DEPENDENCIES (Cargo registry, deps/, build/,
       # .fingerprint/ -- never bundle/, the staged resources or the app
       # binary), keyed on the image, the architecture, rustc and Cargo.lock,
-      # falling back to the newest of the same toolchain. Saved right after
-      # the build that filled it.
+      # falling back to the newest of the same toolchain. Restored only: job
+      # cargo-warm writes it from main pushes (cache budget: GitHub evicts at 10 GB).
       - name: Cargo cache key
         if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && runner.os == 'macOS')
         id: cargo-key
@@ -1601,6 +1698,9 @@ jobs:
             gui/src-tauri/target/release/deps
             gui/src-tauri/target/release/build
             gui/src-tauri/target/release/.fingerprint
+            !gui/src-tauri/target/release/deps/*fastag*
+            !gui/src-tauri/target/release/build/fastag-*
+            !gui/src-tauri/target/release/.fingerprint/fastag-*
           key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
           restore-keys: ${{ steps.cargo-key.outputs.key }}-
       - name: Build, sign and notarize the desktop app (macOS)
@@ -1655,18 +1755,6 @@ jobs:
             codesign --verify --strict --verbose=2 "${dmgs[0]}"
           fi
 
-      - name: Save the Cargo cache
-        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && runner.os == 'macOS') && steps.cargo-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            gui/src-tauri/target/release/deps
-            gui/src-tauri/target/release/build
-            gui/src-tauri/target/release/.fingerprint
-          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
 
       # Tauri's dmg is UDZO (zlib). Recompressed as ULMO (LZMA) it is about
       # 42% smaller (516.8 MB -> 300.4 MB measured with the full taxonomy
@@ -1925,7 +2013,7 @@ jobs:
   # gui-linux-arm64 needs only it.
   build-linux-arm64:
     name: ${{ matrix.name }} build
-    if: needs.version.outputs.promote != 'true'
+    if: (needs.version.outputs.promote != 'true') && needs.version.outputs.code != 'false'
     runs-on: ${{ matrix.runner }}
     needs: [version]
     env:
@@ -1944,7 +2032,7 @@ jobs:
   # Linux GUI jobs do not wait for them (release-complete still needs both).
   build-macos:
     name: ${{ matrix.name }} build
-    if: needs.version.outputs.promote != 'true'
+    if: (needs.version.outputs.promote != 'true') && needs.version.outputs.code != 'false'
     runs-on: ${{ matrix.runner }}
     needs: [version]
     outputs:
@@ -1971,7 +2059,7 @@ jobs:
   # step. release-complete needs these jobs.
   test:
     name: ${{ matrix.name }}
-    if: needs.version.outputs.promote != 'true'
+    if: (needs.version.outputs.promote != 'true') && needs.version.outputs.code != 'false'
     runs-on: ${{ matrix.runner }}
     needs: [version]
     permissions:
@@ -2006,11 +2094,12 @@ jobs:
 
       - *s02
       - *s03
+      - *s03b
       - *s04
       - *s05
       - *s06
-      - *s07
       - *s08
+      - *s07
       - *s09
       - *s10
       - *s11
@@ -2069,7 +2158,7 @@ jobs:
 
   test-macos:
     name: ${{ matrix.name }}
-    if: needs.version.outputs.promote != 'true'
+    if: (needs.version.outputs.promote != 'true') && needs.version.outputs.code != 'false'
     runs-on: ${{ matrix.runner }}
     needs: [version]
     permissions:
@@ -2093,7 +2182,7 @@ jobs:
   # crate links on Linux; without them cargo cannot even typecheck the backend.
   gui:
     needs: [version]
-    if: ${{ needs.version.outputs.promote != 'true' && (github.event_name != 'workflow_dispatch' || (inputs.gui_dry_run && inputs.gui_full_payload) || needs.version.outputs.release != '') }}
+    if: ${{ needs.version.outputs.promote != 'true' && (github.event_name != 'workflow_dispatch' || (inputs.gui_dry_run && inputs.gui_full_payload) || needs.version.outputs.release != '') && needs.version.outputs.code != 'false' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -2179,7 +2268,7 @@ jobs:
   # "Build the desktop app").
   gui-windows:
     needs: [version]
-    if: ${{ needs.version.outputs.promote != 'true' && (github.event_name != 'workflow_dispatch' || (inputs.gui_dry_run && inputs.gui_full_payload) || needs.version.outputs.release != '') }}
+    if: ${{ needs.version.outputs.promote != 'true' && (github.event_name != 'workflow_dispatch' || (inputs.gui_dry_run && inputs.gui_full_payload) || needs.version.outputs.release != '') && needs.version.outputs.code != 'false' }}
     runs-on: windows-2022
     timeout-minutes: 45
     steps:
@@ -2266,7 +2355,7 @@ jobs:
   # Independent of the CLI build, like the gui job.
   tauri-driver:
     needs: [version]
-    if: ${{ needs.version.outputs.promote != 'true' && (github.event_name != 'workflow_dispatch' || (inputs.gui_dry_run && inputs.gui_full_payload) || needs.version.outputs.release != '') }}
+    if: ${{ needs.version.outputs.promote != 'true' && (github.event_name != 'workflow_dispatch' || (inputs.gui_dry_run && inputs.gui_full_payload) || needs.version.outputs.release != '') && needs.version.outputs.code != 'false' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -2433,7 +2522,7 @@ jobs:
         name: Tauri build deps (apt, no conda)
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev file xdg-utils squashfs-tools
+          sudo apt-get install -y -q libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev file xdg-utils squashfs-tools pigz
           ldd --version | head -1
           pkg-config --modversion webkit2gtk-4.1
       # GUI-THIRD-PARTY-NOTICES.txt beside the CLI's notices in the app's
@@ -2450,11 +2539,11 @@ jobs:
           target=$(rustc -vV | sed -n 's/^host: //p')
           python3 ../tools/gui_third_party_notices.py --gui . --target "$target" --platform linux \
             --out src-tauri/resources/fastag/GUI-THIRD-PARTY-NOTICES.txt
-      # The release profile's compiled crates (Cargo registry, deps/, build/,
+      # The release profile's compiled DEPENDENCIES (Cargo registry, deps/, build/,
       # .fingerprint/ -- never bundle/, the staged resources or the app
       # binary), keyed on the image, the architecture, rustc and Cargo.lock,
-      # falling back to the newest of the same toolchain. Saved right after
-      # the build that filled it.
+      # falling back to the newest of the same toolchain. Restored only: job
+      # cargo-warm writes it from main pushes (cache budget: GitHub evicts at 10 GB).
       - name: Cargo cache key
         id: cargo-key
         shell: bash
@@ -2470,6 +2559,9 @@ jobs:
             gui/src-tauri/target/release/deps
             gui/src-tauri/target/release/build
             gui/src-tauri/target/release/.fingerprint
+            !gui/src-tauri/target/release/deps/*fastag*
+            !gui/src-tauri/target/release/build/fastag-*
+            !gui/src-tauri/target/release/.fingerprint/fastag-*
           key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
           restore-keys: ${{ steps.cargo-key.outputs.key }}-
       - name: Build the .deb
@@ -2478,18 +2570,6 @@ jobs:
           npx tauri build --bundles deb
           ls -la src-tauri/target/release/bundle/deb/
           df -h / | tail -1
-      - name: Save the Cargo cache
-        if: steps.cargo-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            gui/src-tauri/target/release/deps
-            gui/src-tauri/target/release/build
-            gui/src-tauri/target/release/.fingerprint
-          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
       # The Debian package is named fastag-gui, not the `fas-tag` Tauri
       # derives from productName: tauri.conf.json has no option for it, so
       # the .deb is repacked with only the Package field changed. The name
@@ -2514,12 +2594,25 @@ jobs:
           shopt -s nullglob
           debs=("$B"/deb/*.deb)
           [ ${#debs[@]} -eq 1 ] || { echo "::error::expected one .deb from tauri, found ${#debs[@]}"; exit 1; }
-          X="$RUNNER_TEMP/debx"; rm -rf "$X"
-          dpkg-deb -R "${debs[0]}" "$X"
-          echo "Tauri's package name: $(sed -n 's/^Package: //p' "$X/DEBIAN/control")"
-          sed -i "s/^Package: .*/Package: $DEB_PACKAGE/" "$X/DEBIAN/control"
-          dpkg-deb --root-owner-group -Zgzip --build "$X" "$DEB"
-          rm -f "${debs[0]}"
+          # Only the control member changes (Package), so only it is rebuilt: the
+          # .deb's ar members are taken apart and put back in their order
+          # (debian-binary, control.tar.gz, data.tar.*), Tauri's compressed
+          # data member untouched. A full dpkg-deb repack recompressed the
+          # whole ~1 GB payload single-threaded (3.4 min).
+          X="$RUNNER_TEMP/debx"; W="$RUNNER_TEMP/debar"; rm -rf "$X" "$W"; mkdir -p "$W/c"
+          deb_in=$(realpath "${debs[0]}")
+          (cd "$W" && ar x "$deb_in")
+          ls -l "$W"
+          ctrl=$(find "$W" -maxdepth 1 -name 'control.tar*'); data=$(find "$W" -maxdepth 1 -name 'data.tar*')
+          [ -n "$ctrl" ] && [ -n "$data" ] && [ "$(cat "$W/debian-binary")" = 2.0 ] || { echo "::error::Tauri's .deb is not debian-binary 2.0 + control + data"; exit 1; }
+          tar -xf "$ctrl" -C "$W/c"
+          echo "Tauri's package name: $(sed -n 's/^Package: //p' "$W/c/control")"
+          sed -i "s/^Package: .*/Package: $DEB_PACKAGE/" "$W/c/control"
+          rm -f "$ctrl"
+          (cd "$W/c" && tar --owner=0 --group=0 --numeric-owner --sort=name -czf ../control.tar.gz ./*)
+          rm -f "$DEB"
+          (cd "$W" && ar rcD "$GITHUB_WORKSPACE/$DEB" debian-binary control.tar.gz "$(basename "$data")")
+          rm -rf "$W" "${debs[0]}"
           # Every content check below reads the generated $DEB itself, not
           # the repack input: an omission or corruption introduced by the
           # repack cannot pass them.
@@ -2558,7 +2651,8 @@ jobs:
           T="$RUNNER_TEMP/guitar"; rm -rf "$T"; mkdir -p "$T"
           mv "$X/usr" "$T/FASTag-gui"
           rm -rf "$X"
-          tar -C "$T" -czf "$TGZ" FASTag-gui
+          # gzip on every core (pigz): the same .tar.gz format.
+          tar -C "$T" -cf - FASTag-gui | pigz -6 > "$TGZ"
           rm -rf "$T"
           echo "tarball=$TGZ" >> "$GITHUB_OUTPUT"
           # The names the release would attach, checked on a dry run too.
@@ -2668,11 +2762,11 @@ jobs:
           R=gui/src-tauri/resources/fastag
           python3 tools/vendor_bundle.py strip --root "$R" --exe-dir "$R/bin" --share "$R/share/OpenMS"
           python3 tools/vendor_bundle.py check --absent --root "$R" --exe-dir "$R/bin" --share "$R/share/OpenMS"
-      # The release profile's compiled crates (Cargo registry, deps/, build/,
+      # The release profile's compiled DEPENDENCIES (Cargo registry, deps/, build/,
       # .fingerprint/ -- never bundle/, the staged resources or the app
       # binary), keyed on the image, the architecture, rustc and Cargo.lock,
-      # falling back to the newest of the same toolchain. Saved right after
-      # the build that filled it.
+      # falling back to the newest of the same toolchain. Restored only: job
+      # cargo-warm writes it from main pushes (cache budget: GitHub evicts at 10 GB).
       - name: Cargo cache key
         id: cargo-key
         shell: bash
@@ -2688,6 +2782,9 @@ jobs:
             gui/src-tauri/target/release/deps
             gui/src-tauri/target/release/build
             gui/src-tauri/target/release/.fingerprint
+            !gui/src-tauri/target/release/deps/*fastag*
+            !gui/src-tauri/target/release/build/fastag-*
+            !gui/src-tauri/target/release/.fingerprint/fastag-*
           key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
           restore-keys: ${{ steps.cargo-key.outputs.key }}-
       - name: Build the AppImage
@@ -2746,18 +2843,6 @@ jobs:
           python3 ../tools/gui_third_party_notices.py --appimage-listing "$L" --check-appimage "$X/${inside#squashfs-root/}"
           bash ../tools/check_bundle_notices.sh "$X/$(dirname "${inside#squashfs-root/}")" appimage
           rm -rf "$X"
-      - name: Save the Cargo cache
-        if: steps.cargo-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            gui/src-tauri/target/release/deps
-            gui/src-tauri/target/release/build
-            gui/src-tauri/target/release/.fingerprint
-          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
       - name: Name and check the AppImage
         id: name
         shell: bash
@@ -3309,7 +3394,7 @@ jobs:
   # current GUI must work with the current CLI before merging. Both are built
   # from this checkout. release-complete also requires this job to pass.
   gui-cli-consistency:
-    if: ${{ !cancelled() && needs.version.outputs.promote != 'true' && (github.event_name == 'pull_request' || needs.version.outputs.release != '' || inputs.gui_dry_run) }}
+    if: ${{ !cancelled() && needs.version.outputs.promote != 'true' && (github.event_name == 'pull_request' || needs.version.outputs.release != '' || inputs.gui_dry_run) && needs.version.outputs.code != 'false' }}
     needs: [version, build-linux-x64]
     runs-on: ubuntu-22.04
     timeout-minutes: 45
@@ -3462,6 +3547,144 @@ jobs:
           name: rc-part-taxonomy
           path: rc-part-taxonomy.json
           if-no-files-found: error
+
+  # ------------------------------------------------- prebuilt OpenMS
+  # The OpenMS installs the build jobs staged, as immutable assets of the
+  # deps release deps-openms-<OPENMS_REF, 8> (created here as a PRERELEASE,
+  # never Latest, at this commit; existing assets are never replaced). Only
+  # main and v* tag pushes: no pull request or dispatch ever writes it.
+  deps-openms:
+    if: ${{ !cancelled() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+    needs: [build-linux-x64, build-linux-arm64, build-macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        timeout-minutes: 10
+        with:
+          pattern: openms-prebuilt-*
+          path: prebuilt
+          merge-multiple: true
+      - name: Upload what the deps release lacks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(prebuilt/*.tar.gz)
+          [ ${#files[@]} -gt 0 ] || { echo "nothing staged: the deps release has every install"; exit 0; }
+          rel=${OPENMS_DEPS_RELEASE:-deps-openms-${OPENMS_REF:0:8}}
+          if ! gh release view "$rel" > /dev/null 2>&1; then
+            gh release create "$rel" --prerelease --latest=false --target "$GITHUB_SHA" --title "$rel" \
+              --notes "OpenMS $OPENMS_REF, built for FASTag's CI (one install per platform and toolchain, the actions/cache key as the file name, with its sha256). Not a FASTag release." \
+              || gh release view "$rel" > /dev/null
+          fi
+          have=$(gh release view "$rel" --json assets,isPrerelease --jq '.assets[].name')
+          [ "$(gh release view "$rel" --json isPrerelease --jq .isPrerelease)" = true ] || { echo "::error::$rel is not a prerelease"; exit 1; }
+          for f in "${files[@]}"; do
+            n=$(basename "$f")
+            if grep -qxF "$n" <<< "$have"; then echo "$rel has $n"; continue; fi
+            gh release upload "$rel" "$f" "$f.sha256"
+            echo "- uploaded $n to $rel" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+  # ------------------------------------------------- Rust dependency cache
+  # The release profile's compiled dependencies for the Tauri builds, saved
+  # ONLY from main pushes (a branch's or a dispatch's cache would only crowd
+  # the 10 GB the OpenMS caches live in; branches and tags restore main's,
+  # GitHub's cache scoping). Dependencies only: the app crate (fastag) and
+  # everything bundle- or resource-related stay out. Nothing to do -- a
+  # lookup of about a second -- unless Cargo.lock or the toolchain changed.
+  cargo-warm:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-22.04, ubuntu-22.04-arm, macos-15]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Cargo cache key
+        id: cargo-key
+        shell: bash
+        run: echo "key=cargo-release-${{ runner.os }}-${{ runner.arch }}-${ImageOS:-img}-$(rustc -V | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+      - name: Is it there already?
+        id: exact
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          lookup-only: true
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            gui/src-tauri/target/release/deps
+            gui/src-tauri/target/release/build
+            gui/src-tauri/target/release/.fingerprint
+            !gui/src-tauri/target/release/deps/*fastag*
+            !gui/src-tauri/target/release/build/fastag-*
+            !gui/src-tauri/target/release/.fingerprint/fastag-*
+          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
+      - name: Restore the newest one of this toolchain
+        if: steps.exact.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            gui/src-tauri/target/release/deps
+            gui/src-tauri/target/release/build
+            gui/src-tauri/target/release/.fingerprint
+            !gui/src-tauri/target/release/deps/*fastag*
+            !gui/src-tauri/target/release/build/fastag-*
+            !gui/src-tauri/target/release/.fingerprint/fastag-*
+          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
+          restore-keys: ${{ steps.cargo-key.outputs.key }}-
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        if: steps.exact.outputs.cache-hit != 'true'
+        with:
+          node-version: 24
+      - name: Tauri build deps (Linux)
+        if: steps.exact.outputs.cache-hit != 'true' && runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev
+      # The release build of the app, as the packaging jobs make it (tauri
+      # build: the same profile, features and deployment target), without the
+      # bundle and with empty resources.
+      - name: Build the app's dependencies (release profile)
+        if: steps.exact.outputs.cache-hit != 'true'
+        working-directory: gui
+        env:
+          MACOSX_DEPLOYMENT_TARGET: ${{ env.MACOS_MIN_VERSION }}
+        run: |
+          set -euo pipefail
+          mkdir -p src-tauri/resources/fastag
+          npm ci --ignore-scripts
+          npx tauri build --no-bundle
+          du -sh src-tauri/target/release/deps src-tauri/target/release/build ~/.cargo/registry || true
+      - name: Save the Cargo cache
+        if: steps.exact.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            gui/src-tauri/target/release/deps
+            gui/src-tauri/target/release/build
+            gui/src-tauri/target/release/.fingerprint
+            !gui/src-tauri/target/release/deps/*fastag*
+            !gui/src-tauri/target/release/build/fastag-*
+            !gui/src-tauri/target/release/.fingerprint/fastag-*
+          key: ${{ steps.cargo-key.outputs.key }}-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
 
   # ---------------------------------------------------------- release notes
   # The release body is the CHANGELOG.md section of the tag's version
