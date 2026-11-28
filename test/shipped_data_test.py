@@ -739,7 +739,10 @@ for wf_name, wf, n_cli, n_app in (("ci.yml", ci, 2, 2), ("windows.yml", win, 1, 
                          % (wf_name, i + 1, f))
 # Codex6 finding 8: the .deb's pinned-taxonomy check reads the generated
 # package, extracted again after the repack, not the repack's input folder.
-m = re.search(r'dpkg-deb [^\n]*--build "\$X" "\$DEB"\n(.*?)check_taxonomy_manifest\.py[^\n]*\n[^\n]*the \.deb does not carry',
+# The repack is dpkg-deb --build, or (1.16.5) the ar members put back with
+# only the control member rebuilt.
+m = re.search(r'(?:dpkg-deb [^\n]*--build "\$X" "\$DEB"|ar rcD "\$GITHUB_WORKSPACE/\$DEB"[^\n]*)\n(.*?)'
+              r'check_taxonomy_manifest\.py[^\n]*\n[^\n]*the \.deb does not carry',
               ci, re.S)
 if not m:
     fail("(d) ci.yml: no pinned taxonomy check of the repacked .deb found")
