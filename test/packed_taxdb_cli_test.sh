@@ -8,6 +8,11 @@
 #   - FASTag -species -species_call decoy -census writes the same bytes with
 #     the .ftz as with the .taxdb: found in FASTAG_TAXONOMY_DIR (the bundled
 #     lookup) and given as -taxdb;
+#   - the cache: six FASTag processes started at once on an empty cache folder
+#     (FASTAG_TAXDB_CACHE) all succeed with the same reports, and leave one
+#     unpacked file and no temp file; a later run maps it ("unpacked in the
+#     cache"); an unwritable cache folder falls back to decoding in memory,
+#     says so, and writes the same reports;
 #   - a truncated .ftz is refused (INPUT_FILE_CORRUPT, "Failed to load -taxdb"),
 #     as a truncated .taxdb is.
 # Exits 77 (ctest SKIP) when the binary cannot start.
@@ -23,7 +28,9 @@ fail() { echo "packed_taxdb_cli_test: FAIL: $*" >&2; exit 1; }
 sha() { if command -v sha256sum > /dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
 
 TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
+trap 'chmod -R u+w "$TMP" 2> /dev/null; rm -rf "$TMP"' EXIT
+# Never the user's real cache folder.
+export FASTAG_TAXDB_CACHE="$TMP/cache"
 
 # Two toy taxa: E. coli (the fixture's proteins) and human (the same
 # proteins reversed, so it has k-mers of its own).
@@ -73,6 +80,39 @@ done
   || { cat "$TMP/x.log" >&2; fail "-species with -taxdb <.ftz>"; }
 cmp -s "$TMP/raw.species.tsv" "$TMP/x.species.tsv" || fail "the species report differs with -taxdb <.ftz>"
 echo "packed_taxdb_cli_test: tags, species, census and census summary identical from the .taxdb and the .ftz"
+
+# ---- the cache: concurrent first runs, a hit, an unwritable folder ----------
+export FASTAG_TAXDB_CACHE="$TMP/race-cache"
+pids=()
+for i in 1 2 3 4 5 6; do
+  FASTAG_TAXONOMY_DIR="$TMP/tax-ftz" "$BIN" "${RUN[@]}" -out "$TMP/race$i.tsv" > "$TMP/race$i.log" 2>&1 &
+  pids+=($!)
+done
+for i in 1 2 3 4 5 6; do
+  wait "${pids[$((i - 1))]}" || { cat "$TMP/race$i.log" >&2; fail "concurrent run $i failed"; }
+  for o in $outs; do cmp -s "$TMP/raw.$o" "$TMP/race$i.$o" || fail "concurrent run $i: $o differs"; done
+done
+nfiles=$(find "$FASTAG_TAXDB_CACHE" -name 'tax_k7-*.taxdb' | wc -l | tr -d ' ')
+ntemps=$(find "$FASTAG_TAXDB_CACHE" -name '*.tmp-*' | wc -l | tr -d ' ')
+[ "$nfiles" = 1 ] && [ "$ntemps" = 0 ] || fail "concurrent runs left $nfiles cache files and $ntemps temp files"
+cmp -s "$(find "$FASTAG_TAXDB_CACHE" -name 'tax_k7-*.taxdb')" "$TMP/toy.taxdb" || fail "the cache file is not the .taxdb"
+nunpack=$(cat "$TMP"/race?.log | grep -c "into the cache")
+[ "$nunpack" -ge 1 ] || fail "no concurrent run says it unpacked"
+FASTAG_TAXONOMY_DIR="$TMP/tax-ftz" "$BIN" "${RUN[@]}" -out "$TMP/hit.tsv" > "$TMP/hit.log" 2>&1 || { cat "$TMP/hit.log" >&2; fail "cache-hit run"; }
+grep -q "unpacked in the cache" "$TMP/hit.log" || { cat "$TMP/hit.log" >&2; fail "the later run does not map the cache file"; }
+cmp -s "$TMP/raw.species.tsv" "$TMP/hit.species.tsv" || fail "cache-hit run: species report differs"
+echo "packed_taxdb_cli_test: 6 concurrent first runs: same reports, one cache file ($nunpack said they unpacked), later run maps it"
+mkdir -p "$TMP/ro"
+chmod 555 "$TMP/ro"
+export FASTAG_TAXDB_CACHE="$TMP/ro/cache"
+FASTAG_TAXONOMY_DIR="$TMP/tax-ftz" "$BIN" "${RUN[@]}" -out "$TMP/ro.tsv" > "$TMP/ro.log" 2>&1 || { cat "$TMP/ro.log" >&2; fail "run with an unwritable cache"; }
+if [ ! -d "$TMP/ro/cache" ]; then   # root (or Windows) can write a 555 folder
+  grep -q "decoded in memory" "$TMP/ro.log" || { cat "$TMP/ro.log" >&2; fail "no fallback note with an unwritable cache"; }
+fi
+for o in $outs; do cmp -s "$TMP/raw.$o" "$TMP/ro.$o" || fail "unwritable cache: $o differs"; done
+chmod 755 "$TMP/ro"
+echo "packed_taxdb_cli_test: an unwritable cache folder decodes in memory, same reports"
+export FASTAG_TAXDB_CACHE="$TMP/cache"
 
 # ---- a damaged .ftz is refused -----------------------------------------------
 n=$(wc -c < "$TMP/toy.ftz")

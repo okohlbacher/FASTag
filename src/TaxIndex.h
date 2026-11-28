@@ -28,12 +28,13 @@
 // arithmetic progressions, which LZ matching does not see. The packed form
 // stores the key DELTAS and the set SIZES instead, escape-coded to one byte
 // each (a delta or size >= 255 is 0xFF and the full value), and the postings
-// as they are, each section one zstd frame with a content checksum: 207 MB.
-// load() decodes it back into the EXACT v2 image in memory (the sha256 of
-// that image is in the header, and buildtaxdb --verify checks it), so every
-// lookup, every count and every report is the same as from the .taxdb. The
-// cost is a decode at load (well under a second) and the image as anonymous
-// memory rather than an evictable file mapping.
+// as they are, each section one zstd frame with a content checksum: 219 MB
+// at level 12 (207 MB at 19). load() decodes it back into the EXACT v2 image
+// (whose sha256 is in the header), so every lookup, count and report is the
+// same as from the .taxdb. The first load writes that image ONCE into a
+// per-user cache folder (packedCacheDir()) and maps it; later loads map the
+// cached file, as cheap as a .taxdb. Without a writable cache folder it is
+// decoded into anonymous memory on every load (see loadPacked_ in the .cpp).
 //
 // ACCEPTED LIMITATIONS (deliberate):
 //   * Little-endian, 64-bit hosts only. macOS/Windows/Linux on x86-64/arm64 are
@@ -58,6 +59,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -191,7 +193,7 @@ namespace FASTag
       @param[out] err if not null, receives the error on failure
       @return false for an index that is not a loaded v2 image (build() output: save() and load() it first)
     */
-    bool savePacked(const std::string& path, int level = 19, std::string* err = nullptr) const;
+    bool savePacked(const std::string& path, int level = 12, std::string* err = nullptr) const;
 
     /**
       @brief Writes the v2 image verbatim, as load() mapped or decoded it.
@@ -216,6 +218,29 @@ namespace FASTag
     /// @brief The sha256 of the v2 image a packed file records (lowercase hex).
     /// @return the digest; empty unless packed()
     const std::string& packedSha256() const { return packed_sha256_; }
+
+    /// @brief Whether load() unpacks a packed index into the cache folder (default) or decodes it in memory.
+    /// @param[in] on false: always decode in memory (buildtaxdb --verify/--unpack, tests)
+    void usePackedCache(bool on) { use_cache_ = on; }
+    /// @brief What the last load() of a packed index did (cache hit, unpack, in-memory fallback and why).
+    /// @return one line for the log; empty for a .taxdb
+    const std::string& loadNote() const { return load_note_; }
+    /// @brief The cache file a packed index is mapped from.
+    /// @return the path; empty unless a packed index was loaded through the cache
+    const std::string& cachePath() const { return cache_path_; }
+
+    /**
+      @brief The folder packed indexes are unpacked into.
+
+      $FASTAG_TAXDB_CACHE if set ("off", "0" or "none": no cache), else
+      ~/Library/Caches/de.openms.fastag/taxdb (macOS),
+      $XDG_CACHE_HOME or ~/.cache, then de.openms.fastag/taxdb (Linux),
+      %LOCALAPPDATA%\de.openms.fastag\taxdb (Windows).
+
+      @param[out] why if not null and the result is empty, the reason
+      @return the folder (not created here); empty for none
+    */
+    static std::filesystem::path packedCacheDir(std::string* why = nullptr);
 
     /// @brief File name of the bundled index.
     static constexpr const char* BUNDLED_NAME = "tax_k7.taxdb";
@@ -264,6 +289,11 @@ namespace FASTag
     void reset_();
     bool bindImage_(std::string* err);   ///< points the v2 fields into image_
     bool loadPacked_(const std::string& path, std::string* err);
+    bool mapV2_(const std::filesystem::path& path, std::string* err);
+    /// Maps the cache file @p file if it is the image of @p sha (stamped, or
+    /// hashed now); sets @p stale when a file is there but is not.
+    bool useCached_(const std::filesystem::path& file, const std::string& sha, const uint8_t* ftz_header,
+                    uint64_t bytes, bool* stale);
     uint32_t postingAt_(uint32_t p) const;  ///< taxon index of mapped posting p
 
     int k_ = 0;
@@ -277,6 +307,9 @@ namespace FASTag
     size_t image_len_ = 0;
     std::unique_ptr<uint64_t[]> heap_;
     std::string packed_sha256_;
+    std::string cache_path_;
+    std::string load_note_;
+    bool use_cache_ = true;
 #ifdef _WIN32
     void* map_handle_ = nullptr;
     void* file_handle_ = nullptr;

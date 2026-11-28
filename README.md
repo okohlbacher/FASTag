@@ -201,6 +201,7 @@ species report (`tax_k7.taxdb`, 1.14 GB); the installed app takes about 1.5 GB.
 |---|---|---|
 | App, bundled CLI (`resources\fastag\bin\FASTag.exe` and its DLLs), OpenMS data, taxonomy dumps and index (`resources\fastag\share\FASTag\taxonomy\tax_k7.taxdb`), digest models | all users: `C:\Program Files\FASTag`; per user: `%LOCALAPPDATA%\Programs\FASTag` (a per-user install of 1.13.3 or earlier stays in `%LOCALAPPDATA%\FASTag`) | yes |
 | A taxonomy index you installed yourself (source build or custom install) | the folder `FASTAG_TAXONOMY_DIR` names, or a file you copied into the install | no: the uninstaller removes only what it installed |
+| The unpacked taxonomy index (`tax_k7-<sha256>.taxdb`, 1.14 GB), when the app carries it packed (`tax_k7.ftz`) | `%LOCALAPPDATA%\de.openms.fastag\taxdb`, or the folder `FASTAG_TAXDB_CACHE` names | only with "Delete app data" |
 | Settings (`settings.json`) | `%APPDATA%\de.openms.fastag` (Roaming: follows the user) | only with "Delete app data" |
 | History, run markers, `last-failure.log`, `leftovers-kept.json` | `%LOCALAPPDATA%\de.openms.fastag` (moved there once from `%APPDATA%` by the first start after 1.13.3) | only with "Delete app data" |
 | WebView2 profile | `%LOCALAPPDATA%\de.openms.fastag\EBWebView` | only with "Delete app data" |
@@ -2208,7 +2209,7 @@ run.
 **Get the index.** Every release bundle carries the full k-mer index, so
 `-species` works out of the box; only a source build needs the download:
 
-| bundle | NCBI dumps (`nodes.dmp`, `names.dmp`) | k-mer index `tax_k7.taxdb` (~1.06 GB), or packed `tax_k7.ftz` (207 MB) | `MANIFEST.json` |
+| bundle | NCBI dumps (`nodes.dmp`, `names.dmp`) | k-mer index `tax_k7.taxdb` (~1.06 GB), or packed `tax_k7.ftz` (219 MB) | `MANIFEST.json` |
 |---|---|---|---|
 | CLI: Linux x64/arm64 `.tar.gz`, macOS arm64/x64 `.dmg`, Windows x64 `.zip` (`share-FASTag-taxonomy/`) | yes | **yes** | yes |
 | Desktop app: macOS `.dmg`, Linux `.deb`, `.tar.gz` and `.AppImage` (x64, arm64), Windows installer (`resources/fastag/share/FASTag/taxonomy/`) | yes | **yes** | yes |
@@ -2254,8 +2255,9 @@ link above would show the index instead of the binaries.
 
 The index is a bit-packed, memory-mapped format (`FTX2`): a 50-taxon index is
 ~1 GB on disk and **under 1 GB resident**, and loads instantly. Its packed form
-`tax_k7.ftz` (207 MB, `buildtaxdb --pack`) loads too, decoded in about 0.3 s into
-the same image in memory, with the same reports; a `tax_k7.taxdb` beside it wins
+`tax_k7.ftz` (219 MB, `buildtaxdb --pack`) loads too: the first run unpacks it
+once into a per-user cache folder (`FASTAG_TAXDB_CACHE` overrides it), later runs
+map that file, with the same reports; a `tax_k7.taxdb` beside it wins
 ([data/taxonomy/README.md](data/taxonomy/README.md), "The packed form"). Rebuild it from
 `data/taxonomy/reference-set.tsv` with `tools/fetch_reference_set.py` +
 `buildtaxdb` (deterministic, so a checksum verifies a download).

@@ -81,6 +81,9 @@ std::optional<TOPPFASTag::ExitCodes> TOPPFASTag::detectSpecies_(bool want_specie
       OPENMS_LOG_ERROR << "Failed to load -taxdb '" << taxdb << "': " << ierr << std::endl;
       return INPUT_FILE_CORRUPT;
     }
+    // A packed index (tax_k7.ftz): where it was unpacked to, or why it was
+    // decoded in memory instead.
+    if (!idx.loadNote().empty()) OPENMS_LOG_INFO << idx.loadNote() << std::endl;
     FASTag::Taxonomy tax;
     std::string terr;
     if (!tax.load(nodes, names, &terr))

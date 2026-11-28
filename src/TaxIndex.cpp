@@ -11,8 +11,14 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <atomic>
+#include <cerrno>
+#include <chrono>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <iterator>
+#include <random>
 #include <fstream>
 #include <new>
 #include <thread>
@@ -21,6 +27,7 @@
 #  include <windows.h>
 #else
 #  include <fcntl.h>
+#  include <sys/file.h>
 #  include <sys/mman.h>
 #  include <sys/stat.h>
 #  include <unistd.h>
@@ -128,7 +135,7 @@ namespace FASTag
       map_base_ = nullptr;
       map_len_ = 0;
     }
-    image_ = nullptr; image_len_ = 0; heap_.reset(); packed_sha256_.clear();
+    image_ = nullptr; image_len_ = 0; heap_.reset(); packed_sha256_.clear(); cache_path_.clear(); load_note_.clear();
     keys_ = nullptr; post_ = nullptr; offsets_ = nullptr; taxa_ = nullptr; taxpost_ = nullptr;
     n_kmers_ = 0; n_taxa_ = 0; key_bytes_ = 0; tax_bytes_ = 0; k_ = 0;
     index_.clear(); postings_.clear(); legacy_ = false;
@@ -478,35 +485,40 @@ namespace FASTag
     if (std::memcmp(magic, "FTZ1", 4) == 0) return loadPacked_(path, err);
     if (std::memcmp(magic, "FTX2", 4) != 0)
     { if (err) *err = "not a FASTag taxonomy index"; return false; }
-    // ---- v2: map it and point into the image -------------------------------
+    return mapV2_(std::filesystem::path(path), err);
+  }
+
+  // ---- v2: map it and point into the image ---------------------------------
+  bool TaxIndex::mapV2_(const std::filesystem::path& path, std::string* err)
+  {
+    const std::string shown = path.string();
 #ifdef _WIN32
-    HANDLE fh = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+    HANDLE fh = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
                             OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (fh == INVALID_HANDLE_VALUE) { if (err) *err = "cannot open " + path; return false; }
+    if (fh == INVALID_HANDLE_VALUE) { if (err) *err = "cannot open " + shown; return false; }
     LARGE_INTEGER sz;
     if (GetFileSizeEx(fh, &sz) == 0)
-    { CloseHandle(fh); if (err) *err = "cannot size " + path; return false; }
-    HANDLE mh = CreateFileMappingA(fh, nullptr, PAGE_READONLY, 0, 0, nullptr);
+    { CloseHandle(fh); if (err) *err = "cannot size " + shown; return false; }
+    HANDLE mh = CreateFileMappingW(fh, nullptr, PAGE_READONLY, 0, 0, nullptr);
     if (mh == nullptr)
-    { CloseHandle(fh); if (err) *err = "cannot map " + path; return false; }
+    { CloseHandle(fh); if (err) *err = "cannot map " + shown; return false; }
     void* base = MapViewOfFile(mh, FILE_MAP_READ, 0, 0, 0);
     if (base == nullptr)
-    { CloseHandle(mh); CloseHandle(fh); if (err) *err = "cannot map " + path; return false; }
+    { CloseHandle(mh); CloseHandle(fh); if (err) *err = "cannot map " + shown; return false; }
     file_handle_ = fh;
     map_handle_ = mh;
     map_len_ = static_cast<size_t>(sz.QuadPart);
 #else
     const int fd = ::open(path.c_str(), O_RDONLY);
-    if (fd < 0) { if (err) *err = "cannot open " + path; return false; }
+    if (fd < 0) { if (err) *err = "cannot open " + shown; return false; }
     struct stat st;
-    if (fstat(fd, &st) != 0) { ::close(fd); if (err) *err = "cannot size " + path; return false; }
+    if (fstat(fd, &st) != 0) { ::close(fd); if (err) *err = "cannot size " + shown; return false; }
     void* base = mmap(nullptr, static_cast<size_t>(st.st_size), PROT_READ, MAP_PRIVATE, fd, 0);
-    if (base == MAP_FAILED) { ::close(fd); if (err) *err = "cannot map " + path; return false; }
+    if (base == MAP_FAILED) { ::close(fd); if (err) *err = "cannot map " + shown; return false; }
     map_fd_ = fd;
     map_len_ = static_cast<size_t>(st.st_size);
 #endif
     map_base_ = base;
-
     image_ = static_cast<const uint8_t*>(base);
     image_len_ = map_len_;
     return bindImage_(err);
@@ -657,14 +669,14 @@ namespace FASTag
         if (fd >= 0) ::close(fd);
 #endif
       }
-      bool open(const std::string& path)
+      bool open(const std::filesystem::path& path)
       {
 #ifdef _WIN32
-        fh = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        fh = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (fh == INVALID_HANDLE_VALUE) return false;
         LARGE_INTEGER sz;
         if (GetFileSizeEx(fh, &sz) == 0 || sz.QuadPart <= 0) return false;
-        mh = CreateFileMappingA(fh, nullptr, PAGE_READONLY, 0, 0, nullptr);
+        mh = CreateFileMappingW(fh, nullptr, PAGE_READONLY, 0, 0, nullptr);
         if (mh == nullptr) return false;
         void* b = MapViewOfFile(mh, FILE_MAP_READ, 0, 0, 0);
         if (b == nullptr) return false;
@@ -886,102 +898,415 @@ namespace FASTag
     return true;
   }
 
+  // --- Loading a packed index: the cache, else in memory -----------------------
+  //
+  // The decoded image is written ONCE into a per-user cache folder and mapped
+  // from there, so a run costs what a mapped .taxdb costs (file-backed,
+  // evictable, shared between processes) and only the first run pays for the
+  // decode. The cached file is named by the image sha256 the .ftz records, so
+  // another index unpacks afresh. Creation is atomic: decode, write a temp
+  // file in the same folder, fsync, hash it, rename it into place, under an
+  // exclusive lock on a lock file so that concurrent first runs (the harness
+  // starts 28) wait for one unpack instead of each doing it. The rename alone
+  // already keeps a partial file from being seen, where locking is not
+  // available. A stamp (<file>.ok: size and modification time, written after
+  // the hash matched) lets later runs skip the 3 s hash; without a matching
+  // stamp the file is hashed before use, and a mismatch unpacks again. A
+  // folder that cannot be written (read-only home, sandbox, full disk) falls
+  // back to the in-memory decode, with a note the caller logs.
+  namespace
+  {
+    namespace fs = std::filesystem;
+
+    struct Ftz
+    {
+      Layout L;
+      uint64_t comp[FTZ_SECTIONS] = {}, raw[FTZ_SECTIONS] = {};
+      const uint8_t* src[FTZ_SECTIONS] = {};
+      const uint8_t* h = nullptr;
+      uint64_t n_kmers = 0, n_post = 0;
+      int kb = 0;
+      std::string sha;
+    };
+
+    bool parseFtz(const ReadMap& m, Ftz& z, std::string& err)
+    {
+      const uint64_t flen = m.n;
+      if (flen < FTZ_HEADER) { err = "packed index is truncated (header)"; return false; }
+      const uint8_t* h = m.p;
+      auto u32at = [h](size_t o) { uint32_t v; std::memcpy(&v, h + o, 4); return v; };
+      auto u64at = [h](size_t o) { uint64_t v; std::memcpy(&v, h + o, 8); return v; };
+      if (std::memcmp(h, "FTZ1", 4) != 0) { err = "not a FASTag taxonomy index"; return false; }
+      if (u32at(4) != 1) { err = "unsupported packed index version"; return false; }
+      if (u32at(88) != FTZ_SECTIONS) { err = "packed index header is malformed (sections)"; return false; }
+      const uint32_t n_taxa = u32at(12);
+      z.n_kmers = u64at(16);
+      z.n_post = u64at(24);
+      z.kb = h[32];
+      const int tb = h[33];
+      const int k = static_cast<int>(u32at(8));
+      if (k < 1 || k > TaxIndex::MAX_K || z.kb != TaxIndex::keyBytes(k) || n_taxa == 0
+          || !layoutOf(n_taxa, z.n_kmers, z.n_post, z.kb, tb, z.L)
+          || u64at(40) != z.L.end || u64at(48) != z.L.head)
+      { err = "packed index header is malformed"; return false; }
+      uint64_t total = FTZ_HEADER;
+      for (int i = 0; i < FTZ_SECTIONS; ++i)
+      {
+        z.comp[i] = u64at(96 + 16 * i);
+        z.raw[i] = u64at(96 + 16 * i + 8);
+        if (z.comp[i] > flen) { err = "packed index header is malformed (section size)"; return false; }
+        total += z.comp[i];
+      }
+      if (total != flen) { err = "packed index is truncated or has trailing bytes"; return false; }
+      if (z.raw[0] != z.L.head || z.raw[3] != z.L.end - z.L.post)
+      { err = "packed index header is malformed (section size)"; return false; }
+      size_t o = FTZ_HEADER;
+      for (int i = 0; i < FTZ_SECTIONS; ++i) { z.src[i] = m.p + o; o += static_cast<size_t>(z.comp[i]); }
+      z.h = h;
+      z.sha = toHex(h + 56, 32);
+      return true;
+    }
+
+    /// Decodes @p z into @p img (z.L.end bytes, every one of them written).
+    bool decodeFtz(const Ftz& z, uint8_t* img, std::string& err)
+    {
+      const Layout& L = z.L;
+      const int kb = z.kb;
+      const uint64_t n_kmers = z.n_kmers, n_post = z.n_post;
+      std::memset(img + L.keys + size_t(n_kmers) * size_t(kb), 0, L.offs - (L.keys + size_t(n_kmers) * size_t(kb)));
+      std::memset(img + L.offs + size_t(4) * (size_t(n_kmers) + 1), 0, L.post - (L.offs + size_t(4) * (size_t(n_kmers) + 1)));
+      std::string e[FTZ_SECTIONS];
+      const uint64_t max_key = kb >= 8 ? UINT64_MAX : (uint64_t(1) << (8 * kb)) - 1;
+      auto keys = [&]() {
+        uint8_t* dst = img + L.keys;
+        uint64_t prev = 0, i = 0;
+        decodeEsc(z.src[1], static_cast<size_t>(z.comp[1]), z.raw[1], kb, n_kmers,
+                  [&](uint64_t v) {
+                    if (v > max_key - prev) return false;
+                    prev += v;
+                    wrKey(dst + (i++) * static_cast<size_t>(kb), kb, prev);
+                    return true;
+                  }, e[1]);
+      };
+      auto sizes = [&]() {
+        uint32_t* off = reinterpret_cast<uint32_t*>(img + L.offs);
+        uint64_t run = 0, i = 0;
+        off[0] = 0;
+        decodeEsc(z.src[2], static_cast<size_t>(z.comp[2]), z.raw[2], 4, n_kmers,
+                  [&](uint64_t v) {
+                    if (v > n_post - run) return false;
+                    run += v;
+                    off[++i] = static_cast<uint32_t>(run);
+                    return true;
+                  }, e[2]);
+        if (e[2].empty() && run != n_post) e[2] = "postings do not add up";
+      };
+      {
+        std::thread t1(keys), t2(sizes);
+        decodeRaw(z.src[3], static_cast<size_t>(z.comp[3]), img + L.post, z.raw[3], e[3]);
+        decodeRaw(z.src[0], static_cast<size_t>(z.comp[0]), img, z.raw[0], e[0]);
+        t1.join();
+        t2.join();
+      }
+      static const char* names[FTZ_SECTIONS] = {"head", "keys", "sizes", "postings"};
+      for (int i = 0; i < FTZ_SECTIONS; ++i)
+        if (!e[i].empty()) { err = std::string("packed index section ") + names[i] + ": " + e[i]; return false; }
+      // The decoded v2 header must say what the packed header says.
+      if (std::memcmp(img + 8, z.h + 8, 32) != 0) { err = "packed index header does not match its image"; return false; }
+      return true;
+    }
+
+    std::string hashOf(const uint8_t* p, size_t n)
+    {
+      Sha256 h;
+      h.update(p, n);
+      return h.hexDigest();
+    }
+
+    /// An environment variable as a path ("" when unset or empty).
+    fs::path envPath(const char* name)
+    {
+#ifdef _WIN32
+      std::wstring w(name, name + std::strlen(name));
+      const wchar_t* v = _wgetenv(w.c_str());
+      return (v != nullptr && *v != L'\0') ? fs::path(v) : fs::path();
+#else
+      const char* v = std::getenv(name);
+      return (v != nullptr && *v != '\0') ? fs::path(v) : fs::path();
+#endif
+    }
+
+    /// An exclusive lock on a lock file, held until destruction; best effort
+    /// (held() is false where the file system has no locks).
+    struct FileLock
+    {
+#ifdef _WIN32
+      HANDLE h = INVALID_HANDLE_VALUE;
+      explicit FileLock(const fs::path& p)
+      {
+        h = CreateFileW(p.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h == INVALID_HANDLE_VALUE) return;
+        OVERLAPPED ov{};
+        if (!LockFileEx(h, LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &ov)) { CloseHandle(h); h = INVALID_HANDLE_VALUE; }
+      }
+      ~FileLock()
+      {
+        if (h == INVALID_HANDLE_VALUE) return;
+        OVERLAPPED ov{};
+        UnlockFileEx(h, 0, 1, 0, &ov);
+        CloseHandle(h);
+      }
+      bool held() const { return h != INVALID_HANDLE_VALUE; }
+#else
+      int fd = -1;
+      explicit FileLock(const fs::path& p)
+      {
+        fd = ::open(p.c_str(), O_RDWR | O_CREAT, 0644);
+        if (fd < 0) return;
+        if (flock(fd, LOCK_EX) != 0) { ::close(fd); fd = -1; }
+      }
+      ~FileLock() { if (fd >= 0) ::close(fd); }   // closing releases the lock
+      bool held() const { return fd >= 0; }
+#endif
+      FileLock(const FileLock&) = delete;
+      FileLock& operator=(const FileLock&) = delete;
+    };
+
+    /// Writes @p n bytes to the NEW file @p p and flushes them to the disk.
+    bool writeDurable(const fs::path& p, const uint8_t* d, size_t n, std::string& err)
+    {
+#ifdef _WIN32
+      HANDLE h = CreateFileW(p.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+      if (h == INVALID_HANDLE_VALUE) { err = "cannot create " + p.string(); return false; }
+      size_t done = 0;
+      bool ok = true;
+      while (ok && done < n)
+      {
+        const DWORD want = static_cast<DWORD>((std::min)(n - done, size_t(1) << 30));
+        DWORD got = 0;
+        ok = WriteFile(h, d + done, want, &got, nullptr) && got == want;
+        done += got;
+      }
+      ok = ok && FlushFileBuffers(h);
+      CloseHandle(h);
+      if (!ok) err = "cannot write " + p.string() + " (disk full?)";
+      return ok;
+#else
+      const int fd = ::open(p.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
+      if (fd < 0) { err = "cannot create " + p.string() + ": " + std::strerror(errno); return false; }
+      size_t done = 0;
+      while (done < n)
+      {
+        const ssize_t w = ::write(fd, d + done, (std::min)(n - done, size_t(1) << 30));
+        if (w < 0 && errno == EINTR) continue;
+        if (w <= 0) { err = "cannot write " + p.string() + ": " + std::strerror(errno); ::close(fd); return false; }
+        done += static_cast<size_t>(w);
+      }
+      if (::fsync(fd) != 0) { err = "cannot sync " + p.string() + ": " + std::strerror(errno); ::close(fd); return false; }
+      ::close(fd);
+      return true;
+#endif
+    }
+
+    /// The stamp of a verified cache file: its size and modification time.
+    std::string stampOf(const fs::path& p)
+    {
+      std::error_code ec;
+      const auto n = fs::file_size(p, ec);
+      if (ec) return std::string();
+      const auto t = fs::last_write_time(p, ec);
+      if (ec) return std::string();
+      return std::to_string(n) + " " + std::to_string(static_cast<long long>(std::chrono::duration_cast<std::chrono::nanoseconds>(t.time_since_epoch()).count())) + "\n";
+    }
+    fs::path stampPath(const fs::path& p) { fs::path s = p; s += ".ok"; return s; }
+    bool stampMatches(const fs::path& p)
+    {
+      std::ifstream i(stampPath(p), std::ios::binary);
+      if (!i) return false;
+      const std::string have((std::istreambuf_iterator<char>(i)), std::istreambuf_iterator<char>());
+      const std::string want = stampOf(p);
+      return !want.empty() && have == want;
+    }
+    /// Unique per process and call, in the folder of @p p.
+    fs::path tempBeside(const fs::path& p, const char* tag)
+    {
+      static std::atomic<unsigned> seq{0};
+#ifdef _WIN32
+      const unsigned long pid = GetCurrentProcessId();
+#else
+      const unsigned long pid = static_cast<unsigned long>(getpid());
+#endif
+      std::random_device rd;
+      fs::path t = p;
+      t += std::string(".") + tag + "-" + std::to_string(pid) + "-" + std::to_string(seq++) + "-" + std::to_string(rd());
+      return t;
+    }
+    void writeStamp(const fs::path& p)
+    {
+      const std::string s = stampOf(p);
+      if (s.empty()) return;
+      const fs::path t = tempBeside(stampPath(p), "tmp");
+      {
+        std::ofstream o(t, std::ios::binary);
+        o << s;
+        if (!o) { std::error_code ec; fs::remove(t, ec); return; }
+      }
+      std::error_code ec;
+      fs::rename(t, stampPath(p), ec);
+      if (ec) fs::remove(t, ec);
+    }
+  }
+
+  std::filesystem::path TaxIndex::packedCacheDir(std::string* why)
+  {
+    const fs::path env = envPath("FASTAG_TAXDB_CACHE");
+    if (!env.empty())
+    {
+      const std::string v = env.string();
+      if (v == "off" || v == "0" || v == "none")
+      { if (why) *why = "FASTAG_TAXDB_CACHE=" + v; return fs::path(); }
+      return env;
+    }
+    const char* app = "de.openms.fastag";   // the desktop app's identifier (tauri.conf.json)
+#ifdef _WIN32
+    const fs::path base = envPath("LOCALAPPDATA");
+    if (base.empty()) { if (why) *why = "LOCALAPPDATA is not set"; return fs::path(); }
+    return base / app / "taxdb";
+#elif defined(__APPLE__)
+    const fs::path home = envPath("HOME");
+    if (home.empty()) { if (why) *why = "HOME is not set"; return fs::path(); }
+    return home / "Library" / "Caches" / app / "taxdb";
+#else
+    fs::path base = envPath("XDG_CACHE_HOME");
+    if (base.empty() || !base.is_absolute())
+    {
+      const fs::path home = envPath("HOME");
+      if (home.empty()) { if (why) *why = "neither XDG_CACHE_HOME nor HOME is set"; return fs::path(); }
+      base = home / ".cache";
+    }
+    return base / app / "taxdb";
+#endif
+  }
+
+  bool TaxIndex::useCached_(const std::filesystem::path& file, const std::string& sha, const uint8_t* ftz_header,
+                            uint64_t bytes, bool* stale)
+  {
+    *stale = false;
+    std::error_code ec;
+    if (!fs::is_regular_file(file, ec)) return false;
+    if (fs::file_size(file, ec) != bytes || ec) { *stale = true; return false; }
+    const bool stamped = stampMatches(file);
+    std::string e;
+    if (!mapV2_(file, &e)) { *stale = true; reset_(); return false; }
+    if (std::memcmp(image_ + 8, ftz_header + 8, 32) != 0) { *stale = true; reset_(); return false; }
+    if (!stamped)
+    {
+      // Unverified (just written by another process, or changed since):
+      // hash it before first use.
+      if (hashOf(image_, image_len_) != sha) { *stale = true; reset_(); return false; }
+      writeStamp(file);
+    }
+    packed_sha256_ = sha;
+    cache_path_ = file.string();
+    return true;
+  }
+
   bool TaxIndex::loadPacked_(const std::string& path, std::string* err)
   {
     auto fail = [&](const std::string& why) { reset_(); if (err) *err = why; return false; };
     ReadMap m;
-    if (!m.open(path)) return fail("cannot open " + path);
-    const uint64_t flen = m.n;
-    if (flen < FTZ_HEADER) return fail("packed index is truncated (header)");
-    const uint8_t* h = m.p;
-    auto u32at = [h](size_t o) { uint32_t v; std::memcpy(&v, h + o, 4); return v; };
-    auto u64at = [h](size_t o) { uint64_t v; std::memcpy(&v, h + o, 8); return v; };
-    if (std::memcmp(h, "FTZ1", 4) != 0) return fail("not a FASTag taxonomy index");
-    if (u32at(4) != 1) return fail("unsupported packed index version");
-    if (u32at(88) != FTZ_SECTIONS) return fail("packed index header is malformed (sections)");
+    if (!m.open(fs::path(path))) return fail("cannot open " + path);
+    Ftz z;
+    std::string e;
+    if (!parseFtz(m, z, e)) return fail(e);
 
-    const uint32_t n_taxa = u32at(12);
-    const uint64_t n_kmers = u64at(16), n_post = u64at(24);
-    const int kb = h[32], tb = h[33];
-    const int k = static_cast<int>(u32at(8));
-    Layout L;
-    if (k < 1 || k > MAX_K || kb != keyBytes(k) || n_taxa == 0
-        || !layoutOf(n_taxa, n_kmers, n_post, kb, tb, L)
-        || u64at(40) != L.end || u64at(48) != L.head)
-      return fail("packed index header is malformed");
-
-    uint64_t comp[FTZ_SECTIONS], raw[FTZ_SECTIONS];
-    uint64_t total = FTZ_HEADER;
-    for (int i = 0; i < FTZ_SECTIONS; ++i)
+    std::string why;
+    const fs::path dir = use_cache_ ? packedCacheDir(&why) : fs::path();
+    if (!use_cache_) why = "the cache is off for this load";
+    if (!dir.empty())
     {
-      comp[i] = u64at(96 + 16 * i);
-      raw[i] = u64at(96 + 16 * i + 8);
-      if (comp[i] > flen) return fail("packed index header is malformed (section size)");
-      total += comp[i];
+      const auto t0 = std::chrono::steady_clock::now();
+      const fs::path file = dir / ("tax_k7-" + z.sha + ".taxdb");
+      bool stale = false;
+      if (useCached_(file, z.sha, z.h, z.L.end, &stale))
+      {
+        load_note_ = "taxonomy index: " + path + " unpacked in the cache, " + file.string();
+        return true;
+      }
+      std::error_code ec;
+      fs::create_directories(dir, ec);
+      if (ec) why = "cannot create " + dir.string() + ": " + ec.message();
+      else
+      {
+        fs::path lockp = dir / ("tax_k7-" + z.sha + ".lock");
+        FileLock lock(lockp);
+        // Another process may have unpacked it while this one waited.
+        if (useCached_(file, z.sha, z.h, z.L.end, &stale))
+        {
+          load_note_ = "taxonomy index: " + path + " unpacked in the cache by another run, " + file.string();
+          return true;
+        }
+        if (stale) { fs::remove(file, ec); fs::remove(stampPath(file), ec); }
+        // Decode, write a temp file in the same folder, hash the file as
+        // written, then rename it into place: readers never see a partial
+        // file, and a failed unpack leaves nothing behind.
+        bool ok = false;
+        {
+          std::unique_ptr<uint64_t[]> buf(new (std::nothrow) uint64_t[(z.L.end + 7) / 8]);
+          if (!buf) return fail("out of memory for the index image");
+          uint8_t* img = reinterpret_cast<uint8_t*>(buf.get());
+          if (!decodeFtz(z, img, e)) return fail(e);
+          const fs::path tmp = tempBeside(file, "tmp");
+          if (writeDurable(tmp, img, static_cast<size_t>(z.L.end), why))
+          {
+            buf.reset();
+            bool hashed = false;
+            {
+              ReadMap back;
+              hashed = back.open(tmp) && back.n == z.L.end && hashOf(back.p, back.n) == z.sha;
+            }
+            if (!hashed)
+              why = "the unpacked " + tmp.string() + " does not hash to the recorded sha256";
+            else
+            {
+              fs::rename(tmp, file, ec);   // atomic; replaces a stale copy
+              if (!ec) { writeStamp(file); ok = true; }   // hashed above, as written
+              else if (fs::is_regular_file(file)) ok = true;   // Windows: a copy in use stays; checked below
+              else why = "cannot rename into " + file.string() + ": " + ec.message();
+            }
+          }
+          if (!ok) fs::remove(tmp, ec);
+        }
+        if (ok)
+        {
+          if (useCached_(file, z.sha, z.h, z.L.end, &stale))
+          {
+            char secs[32];
+            std::snprintf(secs, sizeof secs, "%.1f", std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
+            load_note_ = "taxonomy index: unpacked " + path + " into the cache, " + file.string() + " (" + secs
+                         + " s, once; later runs map it)";
+            return true;
+          }
+          why = "cannot map the unpacked " + file.string();
+        }
+        if (!lock.held() && why.empty()) why = "no lock on " + lockp.string();
+      }
     }
-    if (total != flen) return fail("packed index is truncated or has trailing bytes");
-    if (raw[0] != L.head || raw[3] != L.end - L.post) return fail("packed index header is malformed (section size)");
 
-    const uint8_t* src[FTZ_SECTIONS];
-    {
-      size_t o = FTZ_HEADER;
-      for (int i = 0; i < FTZ_SECTIONS; ++i) { src[i] = m.p + o; o += static_cast<size_t>(comp[i]); }
-    }
-
-    // The image, 8-byte aligned like a mapping. Only the alignment gaps need
-    // zeroing; every other byte is written by a section below.
-    heap_.reset(new (std::nothrow) uint64_t[(L.end + 7) / 8]);
+    // ---- in memory: the image as anonymous memory, decoded on every load ----
+    heap_.reset(new (std::nothrow) uint64_t[(z.L.end + 7) / 8]);
     if (!heap_) return fail("out of memory for the index image");
     uint8_t* img = reinterpret_cast<uint8_t*>(heap_.get());
-    std::memset(img + L.keys + size_t(n_kmers) * size_t(kb), 0, L.offs - (L.keys + size_t(n_kmers) * size_t(kb)));
-    std::memset(img + L.offs + size_t(4) * (size_t(n_kmers) + 1), 0, L.post - (L.offs + size_t(4) * (size_t(n_kmers) + 1)));
-    std::memset(img + L.end, 0, (L.end + 7) / 8 * 8 - L.end);
-
-    std::string e[FTZ_SECTIONS];
-    const uint64_t max_key = kb >= 8 ? UINT64_MAX : (uint64_t(1) << (8 * kb)) - 1;
-    auto keys = [&]() {
-      uint8_t* dst = img + L.keys;
-      uint64_t prev = 0, i = 0;
-      decodeEsc(src[1], static_cast<size_t>(comp[1]), raw[1], kb, n_kmers,
-                [&](uint64_t v) {
-                  if (v > max_key - prev) return false;
-                  prev += v;
-                  wrKey(dst + (i++) * static_cast<size_t>(kb), kb, prev);
-                  return true;
-                }, e[1]);
-    };
-    auto sizes = [&]() {
-      uint32_t* off = reinterpret_cast<uint32_t*>(img + L.offs);
-      uint64_t run = 0, i = 0;
-      off[0] = 0;
-      decodeEsc(src[2], static_cast<size_t>(comp[2]), raw[2], 4, n_kmers,
-                [&](uint64_t v) {
-                  if (v > n_post - run) return false;
-                  run += v;
-                  off[++i] = static_cast<uint32_t>(run);
-                  return true;
-                }, e[2]);
-      if (e[2].empty() && run != n_post) e[2] = "postings do not add up";
-    };
-    auto post = [&]() { decodeRaw(src[3], static_cast<size_t>(comp[3]), img + L.post, raw[3], e[3]); };
-    {
-      std::thread t1(keys), t2(sizes);
-      post();
-      decodeRaw(src[0], static_cast<size_t>(comp[0]), img, raw[0], e[0]);
-      t1.join();
-      t2.join();
-    }
-    static const char* names[FTZ_SECTIONS] = {"head", "keys", "sizes", "postings"};
-    for (int i = 0; i < FTZ_SECTIONS; ++i)
-      if (!e[i].empty()) return fail(std::string("packed index section ") + names[i] + ": " + e[i]);
-    // The decoded v2 header must say what the packed header says.
-    if (std::memcmp(img + 8, h + 8, 32) != 0) return fail("packed index header does not match its image");
-
-    const std::string digest = toHex(h + 56, 32);
+    std::memset(img + z.L.end, 0, (z.L.end + 7) / 8 * 8 - z.L.end);
+    if (!decodeFtz(z, img, e)) return fail(e);
     image_ = img;
-    image_len_ = L.end;
+    image_len_ = z.L.end;
     if (!bindImage_(err)) return false;   // the same checks as a mapped .taxdb
-    packed_sha256_ = digest;
+    packed_sha256_ = z.sha;
+    if (use_cache_)
+      load_note_ = "taxonomy index: no cache for " + path + " (" + (why.empty() ? "unknown reason" : why)
+                   + "); decoded in memory, 1.1 GB per run (set FASTAG_TAXDB_CACHE to a writable folder)";
     return true;
   }
 }

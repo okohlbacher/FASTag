@@ -10,7 +10,9 @@
 #include "TaxIndex.h"
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
+#include <thread>
 #include <iterator>
 #include <map>
 #include <random>
@@ -21,12 +23,23 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#ifndef _WIN32
+#  include <unistd.h>
+#endif
 
 using namespace FASTag;
 using namespace OpenMS;
 
 namespace
 {
+  void setEnv(const char* k, const std::string& v)
+  {
+#ifdef _WIN32
+    _putenv_s(k, v.c_str());
+#else
+    setenv(k, v.c_str(), 1);
+#endif
+  }
   int failures = 0;
   void check(bool ok, const std::string& what)
   {
@@ -238,6 +251,9 @@ int main()
       std::ofstream o(p, std::ios::binary);
       o.write(d.data(), static_cast<std::streamsize>(d.size()));
     };
+    // Every load of a .ftz below goes through a cache folder of its own.
+    const std::string cache = std::string(std::tmpnam(nullptr)) + "_taxcache";
+    setEnv("FASTAG_TAXDB_CACHE", cache);
     // Exercise the escapes too: k-mers whose codes are far apart (key deltas
     // >= 255 at key width 5, k=8) and one k-mer in 300 taxa (a set size
     // >= 255, taxon indices of 2 bytes).
@@ -281,12 +297,119 @@ int main()
     const std::string z2 = std::string(std::tmpnam(nullptr)) + ".ftz";
     check(unz.savePacked(z2, 19, &err) && slurp(z2) == slurp(z1), "packed: re-packing gives the same bytes");
 
+    // The cache: the first load unpacks into <cache>/tax_k7-<sha>.taxdb
+    // (stamped), the next one maps it; a changed cache file is hashed,
+    // found wrong and unpacked again.
+    {
+      namespace fs = std::filesystem;
+      const fs::path want = fs::path(cache) / ("tax_k7-" + unz.packedSha256() + ".taxdb");
+      check(unz.cachePath() == want.string(), "cache: the first load mapped " + want.string() + " (" + unz.cachePath() + ")");
+      check(unz.loadNote().find("into the cache") != std::string::npos, "cache: the first load says it unpacked: " + unz.loadNote());
+      check(fs::is_regular_file(want) && fs::file_size(want) == mapped.imageBytes(), "cache: the file has the image's size");
+      check(slurp(want.string()) == slurp(v2), "cache: the cached file is the .taxdb byte for byte");
+      check(fs::is_regular_file(fs::path(want.string() + ".ok")), "cache: the verified file is stamped");
+      TaxIndex hit;
+      check(hit.load(z1, &err) && hit.cachePath() == want.string(), "cache: the second load maps the cached file: " + err);
+      check(hit.loadNote().find("unpacked in the cache") != std::string::npos, "cache: the second load is a hit: " + hit.loadNote());
+      check(std::equal(hit.image(), hit.image() + hit.imageBytes(), mapped.image()), "cache: hit image is the .taxdb");
+      // A byte changed in place, the time moved: the stamp no longer matches.
+      {
+        std::string bad = slurp(want.string());
+        bad[bad.size() / 2] = static_cast<char>(bad[bad.size() / 2] ^ 0x21);
+        fs::remove(want);
+        spill(want.string(), bad);
+        fs::last_write_time(want, fs::last_write_time(want) + std::chrono::seconds(5));
+      }
+      TaxIndex redo;
+      check(redo.load(z1, &err), "cache: a changed cache file still loads: " + err);
+      check(redo.loadNote().find("into the cache") != std::string::npos, "cache: a changed cache file is unpacked again: " + redo.loadNote());
+      check(slurp(want.string()) == slurp(v2), "cache: the re-unpacked file is the .taxdb again");
+      // No stamp: the file is hashed before use (and stamped).
+      fs::remove(fs::path(want.string() + ".ok"));
+      TaxIndex unst;
+      check(unst.load(z1, &err) && unst.cachePath() == want.string() && fs::is_regular_file(fs::path(want.string() + ".ok")),
+            "cache: an unstamped cache file is hashed, used and stamped");
+      // A cache file of the wrong size is replaced.
+      fs::remove(want);
+      spill(want.string(), "FTX2");
+      TaxIndex shortf;
+      check(shortf.load(z1, &err) && fs::file_size(want) == mapped.imageBytes(), "cache: a short cache file is unpacked again");
+
+      // Not writable: a "folder" under a regular file. The load decodes in
+      // memory and says so.
+      const std::string blocker = std::string(std::tmpnam(nullptr)) + "_notadir";
+      spill(blocker, "x");
+      setEnv("FASTAG_TAXDB_CACHE", blocker + "/sub");
+      TaxIndex ro;
+      check(ro.load(z1, &err), "fallback: loads without a writable cache: " + err);
+      check(ro.cachePath().empty() && ro.loadNote().find("decoded in memory") != std::string::npos,
+            "fallback: decoded in memory, with a note: " + ro.loadNote());
+      check(std::equal(ro.image(), ro.image() + ro.imageBytes(), mapped.image()), "fallback: the image is the .taxdb");
+#ifndef _WIN32
+      // A read-only folder (as a read-only home); root can write anyway.
+      const fs::path rod = fs::path(std::string(std::tmpnam(nullptr)) + "_rocache");
+      fs::create_directories(rod);
+      fs::permissions(rod, fs::perms::owner_read | fs::perms::owner_exec);
+      setEnv("FASTAG_TAXDB_CACHE", rod.string());
+      TaxIndex ro2;
+      check(ro2.load(z1, &err), "fallback: loads with a read-only cache folder: " + err);
+      if (getuid() != 0)
+        check(ro2.cachePath().empty() && ro2.loadNote().find("decoded in memory") != std::string::npos,
+              "fallback: a read-only folder decodes in memory: " + ro2.loadNote());
+      std::error_code pec;
+      fs::permissions(rod, fs::perms::owner_all, pec);
+      fs::remove_all(rod, pec);
+#endif
+      std::remove(blocker.c_str());
+      setEnv("FASTAG_TAXDB_CACHE", "off");
+      TaxIndex off;
+      check(off.load(z1, &err) && off.cachePath().empty(), "cache: FASTAG_TAXDB_CACHE=off decodes in memory");
+      setEnv("FASTAG_TAXDB_CACHE", cache);
+      TaxIndex nocache;
+      nocache.usePackedCache(false);
+      check(nocache.load(z1, &err) && nocache.cachePath().empty() && nocache.loadNote().empty(),
+            "cache: usePackedCache(false) decodes in memory, silently");
+
+      // The race: 8 loads at once into an empty cache folder. Each gets the
+      // image, there is exactly one cache file and no temp file is left.
+      const std::string race = std::string(std::tmpnam(nullptr)) + "_race";
+      setEnv("FASTAG_TAXDB_CACHE", race);
+      std::vector<TaxIndex> idxs(8);
+      std::vector<int> ok(8, 0);
+      std::vector<std::thread> th;
+      for (int i = 0; i < 8; ++i)
+        th.emplace_back([&, i]() { std::string e2; ok[i] = idxs[i].load(z1, &e2) ? 1 : 0; });
+      for (auto& t : th) t.join();
+      int good = 0, viaCache = 0;
+      for (int i = 0; i < 8; ++i)
+      {
+        if (ok[i] && idxs[i].imageBytes() == mapped.imageBytes()
+            && std::equal(idxs[i].image(), idxs[i].image() + idxs[i].imageBytes(), mapped.image())) ++good;
+        if (!idxs[i].cachePath().empty()) ++viaCache;
+      }
+      check(good == 8, "race: all 8 concurrent loads give the image (" + std::to_string(good) + ")");
+      check(viaCache == 8, "race: all 8 map the cache file (" + std::to_string(viaCache) + ")");
+      int files = 0, temps = 0;
+      for (const auto& de : fs::directory_iterator(race))
+      {
+        const std::string n = de.path().filename().string();
+        if (n.find(".tmp-") != std::string::npos) ++temps;
+        else if (n.size() > 6 && n.compare(n.size() - 6, 6, ".taxdb") == 0) ++files;
+      }
+      check(files == 1 && temps == 0, "race: one cache file, no temp file (" + std::to_string(files) + ", " + std::to_string(temps) + ")");
+      idxs.clear();
+      std::error_code rec;
+      fs::remove_all(race, rec);
+      setEnv("FASTAG_TAXDB_CACHE", cache);
+    }
+
     // Corruption: every damaged or truncated .ftz is refused, never crashes.
     const std::string good = slurp(z1);
     auto refuse = [&](const std::string& data, const std::string& what) {
       const std::string p = std::string(std::tmpnam(nullptr)) + ".ftz";
       spill(p, data);
       TaxIndex bad;
+      bad.usePackedCache(false);   // the cache holds this image already; decode
       std::string e2;
       check(!bad.load(p, &e2), "packed: rejects " + what);
       std::vector<uint32_t> out;
@@ -302,6 +425,32 @@ int main()
       std::string flip = good;
       flip[at] = static_cast<char>(flip[at] ^ 0x5A);
       refuse(flip, "a flipped byte at " + std::to_string(at));
+    }
+    // Through the cache: a damaged section with its image already cached
+    // loads the cached (verified) image; with nothing cached it is refused
+    // and leaves no cache file behind.
+    {
+      std::string flip = good;
+      flip[good.size() / 2] = static_cast<char>(flip[good.size() / 2] ^ 0x5A);
+      const std::string p = std::string(std::tmpnam(nullptr)) + ".ftz";
+      spill(p, flip);
+      TaxIndex viaCache;
+      std::string e2;
+      check(viaCache.load(p, &e2) && std::equal(viaCache.image(), viaCache.image() + viaCache.imageBytes(), mapped.image()),
+            "packed: a damaged .ftz whose image is cached loads the cached image");
+      const std::string fresh = std::string(std::tmpnam(nullptr)) + "_fresh";
+      setEnv("FASTAG_TAXDB_CACHE", fresh);
+      TaxIndex nothing;
+      check(!nothing.load(p, &e2), "packed: a damaged .ftz with nothing cached is refused");
+      int left = 0;
+      std::error_code dec;
+      if (std::filesystem::is_directory(fresh))
+        for (const auto& de : std::filesystem::directory_iterator(fresh, dec))
+          if (de.path().filename().string().find(".taxdb") != std::string::npos) ++left;
+      check(left == 0, "packed: a refused .ftz leaves no cache file");
+      std::filesystem::remove_all(fresh, dec);
+      setEnv("FASTAG_TAXDB_CACHE", cache);
+      std::remove(p.c_str());
     }
     std::string hk = good;
     for (int i = 16; i < 24; ++i) hk[i] = static_cast<char>(0xFF);
@@ -320,6 +469,8 @@ int main()
     std::filesystem::remove_all(dir);
     check(TaxIndex::findInDir(dir).empty(), "findInDir: neither");
     for (const std::string& p : {v2, z1, z2, back}) std::remove(p.c_str());
+    std::error_code cec;
+    std::filesystem::remove_all(cache, cec);
   }
 
   // SpeciesLookup::tagSupport (1.12 P6) equals the 1.11 inline loop of

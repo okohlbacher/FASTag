@@ -13,13 +13,14 @@
 //
 // Also packs an index into the compressed form FASTag ships (tax_k7.ftz) and
 // back, and verifies one:
-//   buildtaxdb --pack <in.taxdb|in.ftz> <out.ftz> [level=19]
+//   buildtaxdb --pack <in.taxdb|in.ftz> <out.ftz> [level=12]
 //   buildtaxdb --unpack <in.ftz> <out.taxdb>
 //   buildtaxdb --verify <in.taxdb|in.ftz> [<sha256 of the .taxdb>]
 // --pack re-reads what it wrote and compares it with the input byte for byte;
 // --unpack restores the .taxdb the .ftz was packed from; --verify decodes,
 // hashes the v2 image and checks it against the digest the .ftz records and
-// the one given. Each exits 1 on any mismatch.
+// the one given. Each exits 1 on any mismatch. These modes decode in memory:
+// they never write the cache folder FASTag unpacks a .ftz into.
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
@@ -50,6 +51,7 @@ namespace
   {
     const auto t0 = std::chrono::steady_clock::now();
     std::string err;
+    idx.usePackedCache(false);
     if (!idx.load(path, &err)) { std::cerr << "cannot load " << path << ": " << err << "\n"; return false; }
     const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     std::cerr << path << ": " << (idx.packed() ? "packed (FTZ1)" : "v2 (FTX2)") << ", k=" << idx.k()
@@ -67,8 +69,9 @@ namespace
 
   int pack(int argc, char** argv)
   {
-    if (argc < 4 || argc > 5) { std::cerr << "usage: buildtaxdb --pack <in> <out.ftz> [level=19]\n"; return 2; }
-    int level = 19;
+    if (argc < 4 || argc > 5) { std::cerr << "usage: buildtaxdb --pack <in> <out.ftz> [level=12]\n"; return 2; }
+    // 12: 219 MB in ~10 s for the shipped index; 19 gives 207 MB in ~110 s.
+    int level = 12;
     if (argc == 5)
     {
       const char* const last = argv[4] + std::strlen(argv[4]);
@@ -136,7 +139,7 @@ int main(int argc, char** argv)
   {
     std::cerr << "usage: buildtaxdb <proteomes_dir> <out.taxdb> [k=7]\n"
                  "  <proteomes_dir> holds files named <taxid>.fasta\n"
-                 "       buildtaxdb --pack <in.taxdb|in.ftz> <out.ftz> [level=19]\n"
+                 "       buildtaxdb --pack <in.taxdb|in.ftz> <out.ftz> [level=12]\n"
                  "       buildtaxdb --unpack <in.ftz> <out.taxdb>\n"
                  "       buildtaxdb --verify <in.taxdb|in.ftz> [<sha256 of the .taxdb>]\n";
     return 2;
