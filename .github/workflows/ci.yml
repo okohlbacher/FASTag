@@ -1858,7 +1858,7 @@ jobs:
       # The desktop app's disk image as an artifact: job macos-release attaches
       # it on a release run, a dry run's is opened and checked by hand.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        if: runner.os == 'macOS' && (needs.version.outputs.release != '' || inputs.gui_dry_run)
+        if: runner.os == 'macOS' && ((steps.mac-signing.outputs.enabled == 'true' && needs.version.outputs.release != '') || inputs.gui_dry_run)
         with:
           name: FASTag-gui-${{ matrix.name }}-dmg
           path: FASTag-${{ env.ASSET_VERSION }}-gui-${{ matrix.name }}.dmg
